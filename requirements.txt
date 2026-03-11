@@ -1,0 +1,15 @@
+# InkPi 书法评测系统依赖
+# 核心依赖
+numpy>=1.24.0
+opencv-python>=4.8.0
+PyQt6>=6.6.0
+pyttsx3>=2.90
+
+# 数据库
+# SQLite3 是 Python 标准库，无需安装
+
+# 图表绘制 (用于雷达图和趋势图)
+matplotlib>=3.8.0
+
+# 打包工具 (在 RPi 上使用)
+pyinstaller>=6.0.0
