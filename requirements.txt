@@ -11,5 +11,8 @@ pyttsx3>=2.90
 # 图表绘制 (用于雷达图和趋势图)
 matplotlib>=3.8.0
 
+# 汉字识别 (ONNX Runtime - 轻量级推理)
+onnxruntime>=1.16.0
+
 # 打包工具 (在 RPi 上使用)
 pyinstaller>=6.0.0

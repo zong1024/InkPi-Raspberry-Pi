@@ -6,6 +6,7 @@ from .evaluation_service import EvaluationService
 from .database_service import DatabaseService
 from .camera_service import CameraService
 from .speech_service import SpeechService
+from .recognition_service import RecognitionService
 
 __all__ = [
     "PreprocessingService",
@@ -13,4 +14,5 @@ __all__ = [
     "DatabaseService",
     "CameraService",
     "SpeechService",
+    "RecognitionService",
 ]

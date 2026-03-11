@@ -25,6 +25,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import EVALUATION_CONFIG, FEEDBACK_TEMPLATES
 from models.evaluation_result import EvaluationResult
+from services.recognition_service import recognition_service
 
 
 class EvaluationService:
@@ -41,7 +42,8 @@ class EvaluationService:
         processed_image: np.ndarray,
         original_image_path: str = None,
         processed_image_path: str = None,
-        character_name: str = None
+        character_name: str = None,
+        enable_recognition: bool = True
     ) -> EvaluationResult:
         """
         执行评测分析
@@ -51,11 +53,27 @@ class EvaluationService:
             original_image_path: 原始图像路径
             processed_image_path: 处理后图像路径
             character_name: 字符名称
+            enable_recognition: 是否启用汉字识别
             
         Returns:
             EvaluationResult 评测结果
         """
         self.logger.info("开始毛笔字评测分析...")
+        
+        # 汉字识别（如果启用且未提供字符名称）
+        recognized_char = None
+        recognition_confidence = 0.0
+        if enable_recognition and character_name is None:
+            try:
+                recognition_result = recognition_service.recognize(processed_image)
+                recognized_char = recognition_result.character
+                recognition_confidence = recognition_result.confidence
+                self.logger.info(f"汉字识别: {recognized_char} (置信度: {recognition_confidence:.2%})")
+            except Exception as e:
+                self.logger.warning(f"汉字识别失败: {e}")
+        
+        # 使用识别结果或提供的字符名称
+        final_character = character_name or recognized_char
         
         # 计算四维评分
         detail_scores = self._calculate_scores(processed_image)
@@ -66,6 +84,10 @@ class EvaluationService:
         # 生成反馈
         feedback = self._generate_feedback(total_score, detail_scores)
         
+        # 如果识别成功，添加到反馈中
+        if final_character and recognition_confidence > 0.5:
+            feedback = f"【识别结果: {final_character}】\n{feedback}"
+        
         # 创建评测结果
         result = EvaluationResult(
             total_score=total_score,
@@ -74,7 +96,7 @@ class EvaluationService:
             timestamp=datetime.now(),
             image_path=original_image_path,
             processed_image_path=processed_image_path,
-            character_name=character_name
+            character_name=final_character
         )
         
         self.logger.info(f"评测完成: 总分={total_score}")
