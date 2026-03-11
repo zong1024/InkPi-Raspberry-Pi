@@ -156,10 +156,10 @@ class HomeView(QWidget):
         recent_header.addStretch()
         
         btn_view_all = QPushButton("查看全部 →")
-        btn_viewAll.setObjectName("textButton")
-        btn_viewAll.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_viewAll.clicked.connect(self.view_history.emit)
-        recent_header.addWidget(btn_viewAll)
+        btn_view_all.setObjectName("textButton")
+        btn_view_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_view_all.clicked.connect(self.view_history.emit)
+        recent_header.addWidget(btn_view_all)
         
         layout.addLayout(recent_header)
         

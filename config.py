@@ -42,13 +42,13 @@ IMAGE_CONFIG = {
     "capture_height": 1080,       # 拍摄分辨率高度
 }
 
-# ============ 图像预检阈值 ============
+# ============ 图像预检阈值（针对毛笔字优化） ============
 PRECHECK_CONFIG = {
-    "min_brightness": 60,         # 最低平均亮度
-    "max_brightness": 220,        # 最高平均亮度
-    "min_contrast_std": 10,       # 最低对比度（标准差）
-    "min_ink_ratio": 0.005,       # 最低墨迹占比 (0.5%)
-    "max_ink_ratio": 0.40,        # 最高墨迹占比 (40%)
+    "min_brightness": 50,         # 最低平均亮度（放宽）
+    "max_brightness": 230,        # 最高平均亮度（放宽）
+    "min_contrast_std": 8,        # 最低对比度（标准差）
+    "min_ink_ratio": 0.01,        # 最低墨迹占比 (1%)
+    "max_ink_ratio": 0.55,        # 最高墨迹占比 (55%) - 毛笔字笔画更粗
 }
 
 # ============ 评测配置 ============

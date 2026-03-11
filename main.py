@@ -43,6 +43,18 @@ def load_stylesheet(app: QApplication):
     QWidget {
         font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
         background-color: #f5f5f5;
+        color: #333333;
+    }
+    
+    /* 标签默认颜色 */
+    QLabel {
+        color: #333333;
+        background-color: transparent;
+    }
+    
+    /* 主窗口背景 */
+    QMainWindow {
+        background-color: #f5f5f5;
     }
     
     /* 导航栏 */

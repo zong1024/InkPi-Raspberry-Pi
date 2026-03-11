@@ -2,11 +2,15 @@
 InkPi 书法评测系统 - 图像预处理服务
 
 处理流程：
-原始图像 → 缩放(512px) → 灰度化 → 自适应二值化 → 中值滤波降噪 → 锐化增强 → 输出
+原始图像 → 透视校正 → 缩放(512px) → HSV米字格滤除 → 灰度化 → 自适应二值化 → 中值滤波降噪 → 锐化增强 → 输出
+
+基于 PDF 算法研究文档实现：
+1. Canny边缘检测 + 霍夫变换透视校正
+2. HSV色彩空间米字格滤除
 """
 import cv2
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from pathlib import Path
 import logging
 
@@ -46,19 +50,29 @@ class PreprocessingService:
         # 1. 图像预检
         self._precheck(image)
         
-        # 2. 缩放
-        resized = self._resize(image)
+        # 2. 透视校正（尝试检测纸张四角并校正）
+        corrected, perspective_applied = self._perspective_correction(image)
+        if perspective_applied:
+            self.logger.info("透视校正成功")
         
-        # 3. 灰度化
-        gray = self._to_grayscale(resized)
+        # 3. 缩放
+        resized = self._resize(corrected)
         
-        # 4. 自适应二值化
+        # 4. HSV米字格滤除
+        grid_removed, grid_filter_applied = self._remove_red_grid(resized)
+        if grid_filter_applied:
+            self.logger.info("米字格滤除成功")
+        
+        # 5. 灰度化
+        gray = self._to_grayscale(grid_removed)
+        
+        # 6. 自适应二值化
         binary = self._adaptive_threshold(gray)
         
-        # 5. 中值滤波降噪
+        # 7. 中值滤波降噪
         denoised = self._median_blur(binary)
         
-        # 6. 锐化增强
+        # 8. 锐化增强
         sharpened = self._sharpen(denoised)
         
         # 保存处理后的图像
@@ -72,6 +86,7 @@ class PreprocessingService:
     def _precheck(self, image: np.ndarray) -> None:
         """
         图像预检与异常拦截 (Fail-Fast 机制)
+        增强版：添加书法特征检测
         
         Args:
             image: 输入图像
@@ -130,9 +145,285 @@ class PreprocessingService:
                 "检测到遮挡或杂物，请移开后重试",
                 error_type="obstruction"
             )
-            
-        self.logger.debug("图像预检通过")
         
+        # 3. 增强版：书法特征验证
+        self._validate_calligraphy_features(otsu_binary, ink_ratio)
+        
+        self.logger.debug("图像预检通过")
+    
+    def _validate_calligraphy_features(self, binary: np.ndarray, ink_ratio: float) -> None:
+        """
+        书法特征验证 - 区分书法和杂物
+        
+        Args:
+            binary: 二值化图像
+            ink_ratio: 墨迹占比
+            
+        Raises:
+            PreprocessingError: 如果不符合书法特征
+        """
+        h, w = binary.shape
+        
+        # 1. 长宽比检查（书法通常接近正方形或适度长方形）
+        aspect_ratio = w / h
+        if aspect_ratio < 0.3 or aspect_ratio > 3.0:
+            self.logger.warning(f"长宽比异常: {aspect_ratio:.2f}")
+            # 不直接拒绝，但记录警告
+        
+        # 2. 边缘复杂度检查（书法有丰富的边缘）
+        edges = cv2.Canny(binary, 50, 150)
+        edge_ratio = np.sum(edges > 0) / binary.size
+        
+        if edge_ratio < 0.01:
+            raise PreprocessingError(
+                "内容过于简单，请确保拍摄的是书法作品",
+                error_type="not_calligraphy"
+            )
+        
+        # 3. 连通性检查（书法通常是连通的笔画）
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+            255 - binary, connectivity=8
+        )
+        num_components = num_labels - 1  # 排除背景
+        
+        # 如果碎片过多，可能是杂物
+        if num_components > 50:
+            raise PreprocessingError(
+                "检测到过多碎片，请移除杂物后重试",
+                error_type="too_fragmented"
+            )
+        
+        # 4. 分布集中度检查（书法内容通常集中在某个区域）
+        ink_mask = binary == 0
+        if np.sum(ink_mask) > 0:
+            y_coords, x_coords = np.where(ink_mask)
+            x_spread = np.std(x_coords) / w
+            y_spread = np.std(y_coords) / h
+            
+            # 如果分布过于分散，可能是杂物
+            if x_spread > 0.45 and y_spread > 0.45:
+                raise PreprocessingError(
+                    "内容分布过于分散，请对准单个汉字",
+                    error_type="scattered_content"
+                )
+        
+        self.logger.debug(f"书法特征验证通过: 边缘密度={edge_ratio:.4f}, 连通分量={num_components}")
+    
+    def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
+        """
+        透视校正 - 基于Canny边缘检测和霍夫变换
+        
+        算法流程（PDF文档）：
+        1. 灰度化 → 高斯滤波抑制噪声
+        2. Canny边缘检测（动态阈值50-150）
+        3. 概率霍夫变换检测直线
+        4. 计算线段交点定位四角
+        5. 透视变换矩阵映射到正交视角
+        
+        Args:
+            image: 输入图像
+            
+        Returns:
+            Tuple[校正后的图像, 是否应用了校正]
+        """
+        try:
+            # 转灰度
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image.copy()
+            
+            # 高斯滤波降噪
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            
+            # Canny边缘检测
+            edges = cv2.Canny(blurred, 50, 150)
+            
+            # 概率霍夫变换检测直线
+            lines = cv2.HoughLinesP(
+                edges,
+                rho=1,
+                theta=np.pi / 180,
+                threshold=100,
+                minLineLength=100,
+                maxLineGap=10
+            )
+            
+            if lines is None or len(lines) < 4:
+                self.logger.debug("未检测到足够直线，跳过透视校正")
+                return image, False
+            
+            # 寻找四边形
+            corners = self._find_quadrilateral(lines, image.shape[:2])
+            
+            if corners is None:
+                self.logger.debug("未检测到有效四边形，跳过透视校正")
+                return image, False
+            
+            # 计算透视变换矩阵
+            dst_corners = np.array([
+                [0, 0],
+                [image.shape[1] - 1, 0],
+                [image.shape[1] - 1, image.shape[0] - 1],
+                [0, image.shape[0] - 1]
+            ], dtype=np.float32)
+            
+            M = cv2.getPerspectiveTransform(corners.astype(np.float32), dst_corners)
+            
+            # 应用透视变换
+            corrected = cv2.warpPerspective(
+                image, M, 
+                (image.shape[1], image.shape[0]),
+                flags=cv2.INTER_LINEAR
+            )
+            
+            return corrected, True
+            
+        except Exception as e:
+            self.logger.warning(f"透视校正失败: {e}")
+            return image, False
+    
+    def _find_quadrilateral(self, lines: np.ndarray, image_shape: Tuple[int, int]) -> Optional[np.ndarray]:
+        """
+        从检测到的直线中寻找四边形
+        
+        Args:
+            lines: 霍夫变换检测到的直线
+            image_shape: 图像尺寸 (h, w)
+            
+        Returns:
+            四个角点的数组，或None
+        """
+        h, w = image_shape
+        
+        # 分类直线：水平和垂直
+        horizontal_lines = []
+        vertical_lines = []
+        
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            angle = np.arctan2(abs(y2 - y1), abs(x2 - x1))
+            
+            if angle < np.pi / 6:  # 接近水平
+                horizontal_lines.append(line[0])
+            elif angle > np.pi / 3:  # 接近垂直
+                vertical_lines.append(line[0])
+        
+        if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
+            return None
+        
+        # 找到最上和最下的水平线
+        horizontal_lines.sort(key=lambda l: (l[1] + l[3]) / 2)
+        top_line = horizontal_lines[0]
+        bottom_line = horizontal_lines[-1]
+        
+        # 找到最左和最右的垂直线
+        vertical_lines.sort(key=lambda l: (l[0] + l[2]) / 2)
+        left_line = vertical_lines[0]
+        right_line = vertical_lines[-1]
+        
+        # 计算四个交点
+        def line_intersection(line1, line2):
+            x1, y1, x2, y2 = line1
+            x3, y3, x4, y4 = line2
+            
+            denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+            if abs(denom) < 1e-10:
+                return None
+            
+            t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+            
+            x = x1 + t * (x2 - x1)
+            y = y1 + t * (y2 - y1)
+            
+            return (x, y)
+        
+        corners = []
+        intersections = [
+            line_intersection(top_line, left_line),
+            line_intersection(top_line, right_line),
+            line_intersection(bottom_line, right_line),
+            line_intersection(bottom_line, left_line)
+        ]
+        
+        for point in intersections:
+            if point is None:
+                return None
+            x, y = point
+            # 检查点是否在图像范围内
+            if x < -w * 0.1 or x > w * 1.1 or y < -h * 0.1 or y > h * 1.1:
+                return None
+            corners.append([x, y])
+        
+        return np.array(corners)
+    
+    def _remove_red_grid(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
+        """
+        HSV米字格滤除
+        
+        算法流程（PDF文档）：
+        1. RGB → HSV色彩空间转换
+        2. 生成两个红色掩码：
+           - 低频红色: H ∈ [0, 10]
+           - 高频红色: H ∈ [170, 180]
+        3. 合并掩码 + 形态学闭运算
+        4. 将红色区域替换为背景色
+        5. Otsu二值化提取墨迹
+        
+        Args:
+            image: 输入图像 (BGR格式)
+            
+        Returns:
+            Tuple[处理后的图像, 是否应用了滤除]
+        """
+        try:
+            # 转换到HSV色彩空间
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            
+            # 定义红色的HSV范围
+            # 低频红色 (0-10)
+            lower_red1 = np.array([0, 70, 50])
+            upper_red1 = np.array([10, 255, 255])
+            
+            # 高频红色 (170-180)
+            lower_red2 = np.array([170, 70, 50])
+            upper_red2 = np.array([180, 255, 255])
+            
+            # 创建两个掩码
+            mask1 = cv2.inRange(hsv, lower_red1, upper_red1)
+            mask2 = cv2.inRange(hsv, lower_red2, upper_red2)
+            
+            # 合并掩码
+            red_mask = cv2.bitwise_or(mask1, mask2)
+            
+            # 检查是否有足够的红色像素
+            red_ratio = np.sum(red_mask > 0) / red_mask.size
+            
+            if red_ratio < 0.005:  # 红色占比小于0.5%，跳过滤除
+                self.logger.debug(f"未检测到红色网格 (红色占比: {red_ratio*100:.2f}%)")
+                return image, False
+            
+            # 形态学闭运算，防止删除与红色交叠的墨迹
+            kernel = np.ones((3, 3), np.uint8)
+            red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+            
+            # 计算背景色（非红色区域的平均色）
+            non_red_mask = cv2.bitwise_not(red_mask)
+            background = cv2.mean(image, mask=non_red_mask)[:3]
+            background = np.array(background, dtype=np.uint8)
+            
+            # 将红色区域替换为背景色
+            result = image.copy()
+            result[red_mask > 0] = background
+            
+            self.logger.debug(f"米字格滤除: 红色占比={red_ratio*100:.2f}%")
+            
+            return result, True
+            
+        except Exception as e:
+            self.logger.warning(f"米字格滤除失败: {e}")
+            return image, False
+    
     def _resize(self, image: np.ndarray) -> np.ndarray:
         """
         缩放图像到目标尺寸
@@ -176,7 +467,7 @@ class PreprocessingService:
         """
         自适应二值化
         
-        使用局部阈值处理光照不均问题，模拟米字格滤除效果
+        使用局部阈值处理光照不均问题
         
         Args:
             gray: 灰度图像
@@ -202,9 +493,12 @@ class PreprocessingService:
     
     def _median_blur(self, image: np.ndarray) -> np.ndarray:
         """
-        中值滤波降噪
+        中值滤波降噪（毛笔字优化版）
         
-        去除椒盐噪点，保留边缘
+        毛笔字特点：
+        - 边缘有自然毛刺，不应被过度平滑
+        - 飞白效果需要保留
+        - 使用较小的核避免丢失笔锋特征
         
         Args:
             image: 输入图像
@@ -212,10 +506,11 @@ class PreprocessingService:
         Returns:
             降噪后的图像
         """
-        ksize = self.config["median_blur_size"]
+        # 毛笔字使用较小的滤波核，保留边缘特征
+        ksize = 3  # 固定使用3x3，避免过度平滑
         denoised = cv2.medianBlur(image, ksize)
         
-        self.logger.debug(f"中值滤波: ksize={ksize}")
+        self.logger.debug(f"中值滤波(毛笔优化): ksize={ksize}")
         return denoised
     
     def _sharpen(self, image: np.ndarray) -> np.ndarray:
