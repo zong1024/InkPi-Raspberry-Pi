@@ -90,10 +90,10 @@ DB_CONFIG = {
 # ============ UI 配置 ============
 UI_CONFIG = {
     "window_title": f"{APP_NAME} 书法评测系统",
-    "window_width": 1024,
-    "window_height": 768,
+    "window_width": 480,
+    "window_height": 320,
     "theme": "light",             # light / dark
-    "radar_chart_size": 300,      # 雷达图尺寸
+    "radar_chart_size": 200,      # 雷达图尺寸 (适配3.5寸)
 }
 
 # ============ 反馈文案 ============

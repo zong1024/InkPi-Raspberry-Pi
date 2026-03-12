@@ -1,7 +1,6 @@
 """
 InkPi 书法评测系统 - 结果视图
-
-显示评测结果，包括总分、雷达图、反馈文字
+适配3.5寸屏幕 (480x320)
 """
 import sys
 from pathlib import Path
@@ -30,9 +29,9 @@ from config import UI_CONFIG, CLOUD_CONFIG
 
 
 class RadarChart(FigureCanvas):
-    """雷达图组件"""
+    """雷达图组件 - 紧凑版"""
     
-    def __init__(self, parent=None, size=300):
+    def __init__(self, parent=None, size=150):
         self.fig = Figure(figsize=(size/100, size/100), dpi=100)
         self.fig.patch.set_facecolor('#f5f5f5')
         super().__init__(self.fig)
@@ -50,8 +49,8 @@ class RadarChart(FigureCanvas):
         
         # 设置刻度
         self.ax.set_ylim(0, 100)
-        self.ax.set_yticks([20, 40, 60, 80, 100])
-        self.ax.set_yticklabels(['20', '40', '60', '80', '100'], fontsize=8, color='#666')
+        self.ax.set_yticks([50, 100])
+        self.ax.set_yticklabels(['50', '100'], fontsize=6, color='#666')
         
     def plot_scores(self, scores: dict):
         """绘制评分雷达图"""
@@ -66,71 +65,21 @@ class RadarChart(FigureCanvas):
         angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
         values_closed = values + values[:1]
         angles_closed = angles + angles[:1]
-        labels_closed = labels + labels[:1]
         
         # 绘制雷达图
-        self.ax.plot(angles_closed, values_closed, 'o-', linewidth=2, color='#2196F3')
+        self.ax.plot(angles_closed, values_closed, 'o-', linewidth=1.5, color='#2196F3', markersize=4)
         self.ax.fill(angles_closed, values_closed, alpha=0.25, color='#2196F3')
         
         # 设置标签
         self.ax.set_xticks(angles)
-        self.ax.set_xticklabels(labels, fontsize=10, fontweight='bold')
+        self.ax.set_xticklabels(labels, fontsize=7, fontweight='bold')
         
-        # 显示数值
-        for angle, value in zip(angles, values):
-            self.ax.annotate(
-                str(value),
-                xy=(angle, value),
-                xytext=(angle, value + 8),
-                ha='center',
-                fontsize=9,
-                color='#333'
-            )
-        
-        self.ax.grid(True, linestyle='--', alpha=0.7)
+        self.ax.grid(True, linestyle='--', alpha=0.5)
         self.draw()
 
 
-class ScoreCard(QFrame):
-    """评分卡片"""
-    
-    def __init__(self, dimension: str, score: int, parent=None):
-        super().__init__(parent)
-        self.dimension = dimension
-        self.score = score
-        self._init_ui()
-        
-    def _init_ui(self):
-        self.setObjectName("scoreCard")
-        self.setFixedSize(100, 70)
-        
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # 维度名称
-        dim_label = QLabel(self.dimension)
-        dim_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dim_label.setStyleSheet("color: #666; font-size: 12px;")
-        layout.addWidget(dim_label)
-        
-        # 分数
-        score_label = QLabel(str(self.score))
-        score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # 根据分数设置颜色
-        if self.score >= 80:
-            color = "#4CAF50"
-        elif self.score >= 60:
-            color = "#FF9800"
-        else:
-            color = "#F44336"
-            
-        score_label.setStyleSheet(f"color: {color}; font-size: 24px; font-weight: bold;")
-        layout.addWidget(score_label)
-
-
 class ResultView(QWidget):
-    """结果视图"""
+    """结果视图 - 适配3.5寸屏幕"""
     
     # 信号
     back_requested = pyqtSignal()              # 返回首页
@@ -151,43 +100,47 @@ class ResultView(QWidget):
     def _init_ui(self):
         """初始化 UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 30, 40, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
         
-        # 顶部信息
+        # 顶部信息 - 横向布局
         top_layout = QHBoxLayout()
+        top_layout.setSpacing(10)
         
-        # 总分区域
+        # 总分区域 - 左侧
         score_frame = QFrame()
         score_frame.setObjectName("totalScoreFrame")
+        score_frame.setFixedWidth(120)
         score_layout = QVBoxLayout(score_frame)
         score_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        score_layout.setSpacing(2)
         
         total_title = QLabel("总分")
-        total_title.setFont(QFont("Microsoft YaHei", 14))
+        total_title.setFont(QFont("Microsoft YaHei", 10))
         total_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         score_layout.addWidget(total_title)
         
         self.total_score_label = QLabel("--")
-        self.total_score_label.setFont(QFont("Arial", 56, QFont.Weight.Bold))
+        self.total_score_label.setFont(QFont("Arial", 36, QFont.Weight.Bold))
         self.total_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         score_layout.addWidget(self.total_score_label)
         
         self.grade_label = QLabel("--")
-        self.grade_label.setFont(QFont("Microsoft YaHei", 16))
+        self.grade_label.setFont(QFont("Microsoft YaHei", 11))
         self.grade_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         score_layout.addWidget(self.grade_label)
         
         top_layout.addWidget(score_frame)
         
-        # 雷达图区域
+        # 雷达图区域 - 右侧
         radar_frame = QFrame()
         radar_frame.setObjectName("radarFrame")
         radar_layout = QVBoxLayout(radar_frame)
         radar_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        radar_layout.setSpacing(2)
         
         radar_title = QLabel("四维评分")
-        radar_title.setFont(QFont("Microsoft YaHei", 12))
+        radar_title.setFont(QFont("Microsoft YaHei", 9))
         radar_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         radar_layout.addWidget(radar_title)
         
@@ -198,60 +151,55 @@ class ResultView(QWidget):
         
         layout.addLayout(top_layout)
         
-        # 四维分数卡片
+        # 四维分数卡片 - 紧凑横排
         self.scores_layout = QHBoxLayout()
-        self.scores_layout.setSpacing(15)
+        self.scores_layout.setSpacing(5)
         layout.addLayout(self.scores_layout)
         
-        # 反馈区域
+        # 反馈区域 - 简化
         feedback_frame = QFrame()
         feedback_frame.setObjectName("feedbackFrame")
         feedback_layout = QVBoxLayout(feedback_frame)
+        feedback_layout.setSpacing(2)
         
         feedback_title = QLabel("评测反馈")
-        feedback_title.setFont(QFont("Microsoft YaHei", 12, QFont.Weight.Bold))
+        feedback_title.setFont(QFont("Microsoft YaHei", 9, QFont.Weight.Bold))
         feedback_layout.addWidget(feedback_title)
         
         self.feedback_label = QLabel("")
-        self.feedback_label.setFont(QFont("Microsoft YaHei", 11))
+        self.feedback_label.setFont(QFont("Microsoft YaHei", 9))
         self.feedback_label.setWordWrap(True)
-        self.feedback_label.setStyleSheet("color: #333; padding: 10px;")
+        self.feedback_label.setStyleSheet("color: #333; padding: 5px;")
         feedback_layout.addWidget(self.feedback_label)
         
         layout.addWidget(feedback_frame)
         
-        layout.addStretch()
-        
-        # 按钮区域
+        # 按钮区域 - 底部紧凑
         btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
+        btn_layout.setSpacing(8)
         
-        self.btn_home = QPushButton("返回首页")
+        self.btn_home = QPushButton("首页")
         self.btn_home.setObjectName("secondaryButton")
-        self.btn_home.setFont(QFont("Microsoft YaHei", 11))
-        self.btn_home.setFixedSize(120, 45)
+        self.btn_home.setFont(QFont("Microsoft YaHei", 9))
+        self.btn_home.setFixedSize(70, 35)
         self.btn_home.clicked.connect(self.back_requested.emit)
         btn_layout.addWidget(self.btn_home)
         
-        btn_layout.addSpacing(15)
-        
-        self.btn_speak = QPushButton("🔊 重播")
+        self.btn_speak = QPushButton("🔊")
         self.btn_speak.setObjectName("secondaryButton")
-        self.btn_speak.setFont(QFont("Microsoft YaHei", 11))
-        self.btn_speak.setFixedSize(100, 45)
+        self.btn_speak.setFont(QFont("Microsoft YaHei", 9))
+        self.btn_speak.setFixedSize(50, 35)
         self.btn_speak.clicked.connect(self._on_speak)
         btn_layout.addWidget(self.btn_speak)
         
-        btn_layout.addSpacing(15)
+        btn_layout.addStretch()
         
         self.btn_new = QPushButton("再次评测")
         self.btn_new.setObjectName("primaryButton")
-        self.btn_new.setFont(QFont("Microsoft YaHei", 11))
-        self.btn_new.setFixedSize(120, 45)
+        self.btn_new.setFont(QFont("Microsoft YaHei", 9))
+        self.btn_new.setFixedSize(80, 35)
         self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
         btn_layout.addWidget(self.btn_new)
-        
-        btn_layout.addStretch()
         
         layout.addLayout(btn_layout)
         
@@ -279,15 +227,14 @@ class ResultView(QWidget):
         self.radar_chart.plot_scores(self.result.detail_scores)
         
         # 更新四维分数卡片
-        # 清除现有卡片
         while self.scores_layout.count():
             item = self.scores_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
                 
-        # 添加新卡片
+        # 添加紧凑卡片
         for dim, score in self.result.detail_scores.items():
-            card = ScoreCard(dim, score)
+            card = self._create_score_card(dim, score)
             self.scores_layout.addWidget(card)
             
         self.scores_layout.addStretch()
@@ -300,6 +247,38 @@ class ResultView(QWidget):
         
         # 上传到云端
         self._upload_to_cloud()
+        
+    def _create_score_card(self, dimension: str, score: int) -> QFrame:
+        """创建紧凑评分卡片"""
+        card = QFrame()
+        card.setObjectName("scoreCard")
+        card.setFixedSize(70, 45)
+        
+        layout = QVBoxLayout(card)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(1)
+        
+        # 维度名称
+        dim_label = QLabel(dimension)
+        dim_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        dim_label.setStyleSheet("color: #666; font-size: 9px;")
+        layout.addWidget(dim_label)
+        
+        # 分数
+        score_label = QLabel(str(score))
+        score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        if score >= 80:
+            color = "#4CAF50"
+        elif score >= 60:
+            color = "#FF9800"
+        else:
+            color = "#F44336"
+            
+        score_label.setStyleSheet(f"color: {color}; font-size: 16px; font-weight: bold;")
+        layout.addWidget(score_label)
+        
+        return card
         
     def _upload_to_cloud(self):
         """上传评测结果到云端"""

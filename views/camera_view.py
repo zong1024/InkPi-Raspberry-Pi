@@ -1,5 +1,6 @@
 """
 InkPi 书法评测系统 - 相机视图
+适配3.5寸屏幕 (480x320)
 """
 import sys
 import time
@@ -51,7 +52,7 @@ class PreviewThread(QThread):
 
 
 class CameraView(QWidget):
-    """相机视图"""
+    """相机视图 - 适配3.5寸屏幕"""
     
     # 信号
     capture_completed = pyqtSignal(EvaluationResult)  # 拍照完成
@@ -66,64 +67,50 @@ class CameraView(QWidget):
     def _init_ui(self):
         """初始化 UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
         
-        # 提示标签
-        tip_label = QLabel("请将书法作品放置在取景框内")
-        tip_label.setFont(QFont("Microsoft YaHei", 12))
-        tip_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tip_label.setStyleSheet("color: #666;")
-        layout.addWidget(tip_label)
-        
-        # 预览区域
+        # 预览区域 - 占满大部分屏幕
         self.preview_frame = QFrame()
         self.preview_frame.setObjectName("previewFrame")
         preview_layout = QVBoxLayout(self.preview_frame)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.preview_label = QLabel("正在启动摄像头...")
+        self.preview_label = QLabel("启动中...")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumSize(640, 480)
+        self.preview_label.setMinimumSize(470, 260)
         self.preview_label.setStyleSheet("""
             QLabel {
                 background-color: #1a1a1a;
                 color: #fff;
-                font-size: 16px;
+                font-size: 12px;
             }
         """)
         preview_layout.addWidget(self.preview_label)
         
-        layout.addWidget(self.preview_frame)
+        layout.addWidget(self.preview_frame, stretch=1)
         
-        # 按钮区域
+        # 按钮区域 - 底部紧凑
         btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
+        btn_layout.setSpacing(10)
         
         self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setObjectName("secondaryButton")
-        self.btn_cancel.setFont(QFont("Microsoft YaHei", 12))
-        self.btn_cancel.setFixedSize(120, 50)
+        self.btn_cancel.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_cancel.setFixedSize(80, 40)
         self.btn_cancel.clicked.connect(self._on_cancel)
         btn_layout.addWidget(self.btn_cancel)
         
-        btn_layout.addSpacing(40)
+        btn_layout.addStretch()
         
         self.btn_capture = QPushButton("📷 拍照")
         self.btn_capture.setObjectName("captureButton")
-        self.btn_capture.setFont(QFont("Microsoft YaHei", 14))
-        self.btn_capture.setFixedSize(140, 60)
+        self.btn_capture.setFont(QFont("Microsoft YaHei", 11))
+        self.btn_capture.setFixedSize(100, 40)
         self.btn_capture.clicked.connect(self._on_capture)
         btn_layout.addWidget(self.btn_capture)
         
-        btn_layout.addStretch()
-        
         layout.addLayout(btn_layout)
-        
-        # 状态标签
-        self.status_label = QLabel("")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #999; font-size: 11px;")
-        layout.addWidget(self.status_label)
         
     def showEvent(self, event):
         """显示事件 - 启动相机"""
@@ -139,7 +126,7 @@ class CameraView(QWidget):
         """启动相机"""
         # 打开相机
         if not camera_service.open():
-            self.preview_label.setText("无法打开摄像头\n请检查摄像头连接")
+            self.preview_label.setText("无法打开摄像头")
             self.btn_capture.setEnabled(False)
             return
             
@@ -149,8 +136,6 @@ class CameraView(QWidget):
         self.preview_thread = PreviewThread(camera_service)
         self.preview_thread.frame_ready.connect(self._update_preview)
         self.preview_thread.start()
-        
-        self.status_label.setText("摄像头已就绪")
         
     def _stop_camera(self):
         """停止相机"""
@@ -228,20 +213,14 @@ class CameraView(QWidget):
         cv2.line(overlay, (x2 - corner_len, y2), (x2, y2), color, thickness)
         cv2.line(overlay, (x2, y2), (x2, y2 - corner_len), color, thickness)
         
-        # 添加提示文字
-        cv2.putText(overlay, "Align character here", (x1 + 10, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
         return overlay
         
     def _on_capture(self):
         """拍照按钮点击"""
         if self.current_frame is None:
-            QMessageBox.warning(self, "错误", "无法捕获图像")
             return
             
         self.btn_capture.setEnabled(False)
-        self.status_label.setText("正在处理...")
         
         # 保存原始图像
         timestamp = int(time.time() * 1000)
@@ -272,7 +251,6 @@ class CameraView(QWidget):
             # 释放内存
             preprocessing_service.release_memory()
             
-            self.status_label.setText("评测完成！")
             self.capture_completed.emit(result)
             
         except PreprocessingError as e:
@@ -280,12 +258,10 @@ class CameraView(QWidget):
             speech_service.speak_error(str(e))
             QMessageBox.warning(self, "图像质量问题", str(e))
             self.btn_capture.setEnabled(True)
-            self.status_label.setText("请重新拍照")
             
         except Exception as e:
             QMessageBox.critical(self, "错误", f"评测失败: {str(e)}")
             self.btn_capture.setEnabled(True)
-            self.status_label.setText("评测失败，请重试")
             
     def _on_cancel(self):
         """取消按钮点击"""

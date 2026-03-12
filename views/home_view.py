@@ -1,5 +1,6 @@
 """
 InkPi 书法评测系统 - 首页视图
+适配3.5寸屏幕 (480x320)
 """
 import sys
 from pathlib import Path
@@ -15,10 +16,11 @@ from PyQt6.QtGui import QFont
 
 from services.database_service import database_service
 from models.evaluation_result import EvaluationResult
+from config import IS_RASPBERRY_PI
 
 
 class RecentCard(QFrame):
-    """最近记录卡片"""
+    """最近记录卡片 - 紧凑版"""
     
     def __init__(self, result: EvaluationResult, parent=None):
         super().__init__(parent)
@@ -27,50 +29,50 @@ class RecentCard(QFrame):
         
     def _init_ui(self):
         self.setObjectName("recentCard")
-        self.setFixedHeight(80)
+        self.setFixedHeight(50)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 10, 15, 10)
+        layout.setContentsMargins(8, 5, 8, 5)
         
         # 分数
         score_label = QLabel(f"{self.result.total_score}")
-        score_label.setObjectName("scoreLabel")
-        score_label.setFont(QFont("Arial", 28, QFont.Weight.Bold))
+        score_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         score_label.setStyleSheet(f"color: {self.result.get_color()};")
-        score_label.setFixedWidth(60)
+        score_label.setFixedWidth(40)
         layout.addWidget(score_label)
         
         # 信息
         info_layout = QVBoxLayout()
+        info_layout.setSpacing(2)
         
         if self.result.character_name:
-            title = f"字符: {self.result.character_name}"
+            title = f"{self.result.character_name}"
         else:
             title = "书法评测"
         title_label = QLabel(title)
-        title_label.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Bold))
+        title_label.setFont(QFont("Microsoft YaHei", 9, QFont.Weight.Bold))
         info_layout.addWidget(title_label)
         
-        # 四维分数
-        scores_str = " | ".join([f"{k}: {v}" for k, v in self.result.detail_scores.items()])
-        scores_label = QLabel(scores_str)
-        scores_label.setFont(QFont("Microsoft YaHei", 9))
-        scores_label.setStyleSheet("color: #666;")
-        info_layout.addWidget(scores_label)
+        # 时间
+        time_str = self.result.timestamp.strftime("%m-%d %H:%M")
+        time_label = QLabel(time_str)
+        time_label.setFont(QFont("Microsoft YaHei", 8))
+        time_label.setStyleSheet("color: #666;")
+        info_layout.addWidget(time_label)
         
         layout.addLayout(info_layout)
         layout.addStretch()
         
         # 等级
         grade_label = QLabel(self.result.get_grade())
-        grade_label.setFont(QFont("Microsoft YaHei", 12))
+        grade_label.setFont(QFont("Microsoft YaHei", 10))
         grade_label.setStyleSheet(f"color: {self.result.get_color()};")
         layout.addWidget(grade_label)
 
 
 class HomeView(QWidget):
-    """首页视图"""
+    """首页视图 - 适配3.5寸屏幕"""
     
     # 信号
     start_evaluation = pyqtSignal()  # 开始评测
@@ -84,79 +86,48 @@ class HomeView(QWidget):
     def _init_ui(self):
         """初始化 UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 30, 40, 30)
-        layout.setSpacing(20)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
         
-        # 欢迎区域
+        # 欢迎区域 - 紧凑
         welcome_frame = QFrame()
         welcome_frame.setObjectName("welcomeFrame")
         welcome_layout = QVBoxLayout(welcome_frame)
+        welcome_layout.setSpacing(5)
         
-        title = QLabel("欢迎使用 InkPi 书法评测系统")
-        title.setFont(QFont("Microsoft YaHei", 24, QFont.Weight.Bold))
+        title = QLabel("InkPi 书法评测")
+        title.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         welcome_layout.addWidget(title)
         
-        subtitle = QLabel("拍照上传您的书法作品，获取智能评测与改进建议")
-        subtitle.setFont(QFont("Microsoft YaHei", 12))
+        subtitle = QLabel("拍照评测您的书法作品")
+        subtitle.setFont(QFont("Microsoft YaHei", 9))
         subtitle.setStyleSheet("color: #666;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         welcome_layout.addWidget(subtitle)
         
         layout.addWidget(welcome_frame)
         
-        # 开始按钮
+        # 开始按钮 - 大按钮方便触摸
         self.btn_start = QPushButton("📷 开始评测")
         self.btn_start.setObjectName("primaryButton")
-        self.btn_start.setFont(QFont("Microsoft YaHei", 16))
-        self.btn_start.setFixedHeight(60)
+        self.btn_start.setFont(QFont("Microsoft YaHei", 12))
+        self.btn_start.setFixedHeight(50)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_start.clicked.connect(self.start_evaluation.emit)
         layout.addWidget(self.btn_start)
         
-        # 功能介绍
-        features_layout = QHBoxLayout()
-        features = [
-            ("🎯", "智能评测", "四维度精准评分"),
-            ("📊", "趋势分析", "追踪学习进度"),
-            ("🔊", "语音反馈", "实时播报结果"),
-        ]
-        
-        for icon, title, desc in features:
-            card = QFrame()
-            card.setObjectName("featureCard")
-            card_layout = QVBoxLayout(card)
-            card_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            icon_label = QLabel(icon)
-            icon_label.setFont(QFont("Segoe UI Emoji", 32))
-            icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            card_layout.addWidget(icon_label)
-            
-            title_label = QLabel(title)
-            title_label.setFont(QFont("Microsoft YaHei", 12, QFont.Weight.Bold))
-            title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            card_layout.addWidget(title_label)
-            
-            desc_label = QLabel(desc)
-            desc_label.setStyleSheet("color: #666;")
-            desc_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            card_layout.addWidget(desc_label)
-            
-            features_layout.addWidget(card)
-            
-        layout.addLayout(features_layout)
-        
         # 最近记录区域
         recent_header = QHBoxLayout()
         recent_title = QLabel("最近评测")
-        recent_title.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
+        recent_title.setFont(QFont("Microsoft YaHei", 10, QFont.Weight.Bold))
         recent_header.addWidget(recent_title)
         
         recent_header.addStretch()
         
-        btn_view_all = QPushButton("查看全部 →")
+        btn_view_all = QPushButton("更多>")
         btn_view_all.setObjectName("textButton")
+        btn_view_all.setFont(QFont("Microsoft YaHei", 9))
         btn_view_all.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_view_all.clicked.connect(self.view_history.emit)
         recent_header.addWidget(btn_view_all)
@@ -166,7 +137,7 @@ class HomeView(QWidget):
         # 最近记录列表
         self.recent_container = QWidget()
         self.recent_layout = QVBoxLayout(self.recent_container)
-        self.recent_layout.setSpacing(10)
+        self.recent_layout.setSpacing(5)
         layout.addWidget(self.recent_container)
         
         layout.addStretch()
@@ -179,13 +150,14 @@ class HomeView(QWidget):
             if item.widget():
                 item.widget().deleteLater()
                 
-        # 获取最近记录
-        records = database_service.get_recent(5)
+        # 获取最近3条记录（小屏幕显示更少）
+        records = database_service.get_recent(3)
         
         if not records:
-            empty_label = QLabel("暂无评测记录，开始您的第一次评测吧！")
+            empty_label = QLabel("暂无评测记录")
             empty_label.setStyleSheet("color: #999;")
             empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty_label.setFont(QFont("Microsoft YaHei", 9))
             self.recent_layout.addWidget(empty_label)
             return
             
