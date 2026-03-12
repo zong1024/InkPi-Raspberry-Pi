@@ -1,0 +1,66 @@
+<!--pages/index/index.wxml-->
+<view class="login-container xuan-paper">
+  <!-- Logo区域 -->
+  <view class="logo-section">
+    <view class="logo-wrapper">
+      <view class="ink-splash"></view>
+      <text class="logo-text">墨</text>
+    </view>
+    
+    <text class="app-title">墨韵评测</text>
+    <view class="divider"></view>
+    <text class="app-desc">传承书法之美，品味笔墨芳华</text>
+  </view>
+
+  <!-- 登录表单 -->
+  <view class="form-section">
+    <view class="input-group">
+      <text class="input-icon">👤</text>
+      <input 
+        class="input-field" 
+        type="text" 
+        placeholder="请输入用户名" 
+        value="{{username}}" 
+        bindinput="onUsernameInput"
+        maxlength="20"
+      />
+    </view>
+    
+    <view class="input-group">
+      <text class="input-icon">🔒</text>
+      <input 
+        class="input-field" 
+        type="password" 
+        placeholder="请输入密码" 
+        value="{{password}}" 
+        bindinput="onPasswordInput"
+        maxlength="20"
+      />
+    </view>
+    
+    <button class="btn-primary" bindtap="onLogin">
+      <text>登录 / 注册</text>
+    </button>
+    
+    <text class="login-hint">未注册的用户将自动创建账号</text>
+  </view>
+
+  <!-- 协议 -->
+  <view class="agreement">
+    <checkbox-group bindchange="onAgreementChange">
+      <label class="agreement-label">
+        <checkbox value="agreed" checked="{{agreed}}" color="#e03229"/>
+        <text class="agreement-text">
+          登录即代表您已阅读并同意
+          <text class="link" bindtap="onOpenAgreement" data-type="service">《用户服务协议》</text>
+        </text>
+      </label>
+    </checkbox-group>
+  </view>
+
+  <!-- 底部装饰 -->
+  <view class="footer-decoration"></view>
+</view>
+
+<!-- 版权信息 -->
+<view class="copyright">© 2026 InkPi · By ZongRui</view>

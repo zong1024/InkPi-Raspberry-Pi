@@ -1,0 +1,85 @@
+<!--pages/profile/profile.wxml-->
+<view class="profile-container">
+  <!-- 顶部导航 -->
+  <view class="nav-header">
+    <view class="nav-left">
+      <text class="settings-icon">⚙</text>
+    </view>
+    <text class="nav-title">个人中心</text>
+    <view class="nav-right">
+      <text class="notify-icon">🔔</text>
+    </view>
+  </view>
+
+  <!-- 用户信息卡片 -->
+  <view class="user-card">
+    <view class="user-info">
+      <view class="avatar">
+        <text class="avatar-text">{{userInfo.username ? userInfo.username[0] : '墨'}}</text>
+      </view>
+      <text class="nickname">{{userInfo.username || '未登录'}}</text>
+    </view>
+  </view>
+
+  <!-- 统计区域 -->
+  <view class="stats-section">
+    <view class="stat-item">
+      <text class="stat-value">{{stats.totalCount}}</text>
+      <text class="stat-label">评测次数</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-item">
+      <text class="stat-value">{{stats.avgScore}}</text>
+      <text class="stat-label">平均分数</text>
+    </view>
+    <view class="stat-divider"></view>
+    <view class="stat-item">
+      <text class="stat-value">{{stats.highestScore}}</text>
+      <text class="stat-label">最高分数</text>
+    </view>
+  </view>
+
+  <!-- 功能列表 -->
+  <view class="function-section">
+    <text class="section-title">常用功能</text>
+    
+    <view class="function-list">
+      <view class="function-item" bindtap="onBindDevice">
+        <view class="function-left">
+          <view class="function-icon">📱</view>
+          <text class="function-name">绑定设备</text>
+        </view>
+        <text class="function-arrow">→</text>
+      </view>
+
+      <view class="function-item" bindtap="onSettings">
+        <view class="function-left">
+          <view class="function-icon">⚙</view>
+          <text class="function-name">设置</text>
+        </view>
+        <text class="function-arrow">→</text>
+      </view>
+
+      <view class="function-item" bindtap="onAbout">
+        <view class="function-left">
+          <view class="function-icon">ℹ</view>
+          <text class="function-name">关于</text>
+        </view>
+        <text class="function-arrow">→</text>
+      </view>
+
+      <view class="function-item" bindtap="onFeedback">
+        <view class="function-left">
+          <view class="function-icon">✉</view>
+          <text class="function-name">意见反馈</text>
+        </view>
+        <text class="function-arrow">→</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 退出登录 -->
+  <view class="logout-section" wx:if="{{isLoggedIn}}">
+    <button class="logout-btn" bindtap="onLogout">退出登录</button>
+  </view>
+</view>

@@ -1,0 +1,102 @@
+<!--pages/detail/detail.wxml-->
+<view class="detail-container">
+  <!-- 顶部导航 -->
+  <view class="nav-header">
+    <view class="nav-back" bindtap="onBack">
+      <text class="back-icon">←</text>
+    </view>
+    <text class="nav-title">评测报告</text>
+    <view class="nav-placeholder"></view>
+  </view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="loading">
+    <text>加载中...</text>
+  </view>
+
+  <scroll-view wx:else class="detail-content" scroll-y="true">
+    <!-- 图片区域 -->
+    <view class="image-section">
+      <image wx:if="{{detail.imageUrl}}" class="result-image" src="{{detail.imageUrl}}" mode="aspectFit"></image>
+      <view wx:else class="result-image result-placeholder">
+        <text class="placeholder-text">暂无图片</text>
+      </view>
+    </view>
+
+    <!-- 总分区域 -->
+    <view class="score-section card">
+      <text class="score-label">总分</text>
+      <text class="total-score">{{detail.totalScore}}</text>
+      <text class="score-max">/100</text>
+    </view>
+
+    <!-- 四维评分 -->
+    <view class="dimension-section card">
+      <text class="section-title">四维评分</text>
+      
+      <view class="dimension-item">
+        <view class="dimension-header">
+          <text class="dimension-name">结构</text>
+          <text class="dimension-score">{{detail.detailScores.structure}}</text>
+        </view>
+        <view class="progress-bar">
+          <view class="progress-fill" style="width: {{detail.detailScores.structure}}%"></view>
+        </view>
+      </view>
+
+      <view class="dimension-item">
+        <view class="dimension-header">
+          <text class="dimension-name">笔画</text>
+          <text class="dimension-score">{{detail.detailScores.stroke}}</text>
+        </view>
+        <view class="progress-bar">
+          <view class="progress-fill" style="width: {{detail.detailScores.stroke}}%"></view>
+        </view>
+      </view>
+
+      <view class="dimension-item">
+        <view class="dimension-header">
+          <text class="dimension-name">平衡</text>
+          <text class="dimension-score">{{detail.detailScores.balance}}</text>
+        </view>
+        <view class="progress-bar">
+          <view class="progress-fill" style="width: {{detail.detailScores.balance}}%"></view>
+        </view>
+      </view>
+
+      <view class="dimension-item">
+        <view class="dimension-header">
+          <text class="dimension-name">韵律</text>
+          <text class="dimension-score">{{detail.detailScores.rhythm}}</text>
+        </view>
+        <view class="progress-bar">
+          <view class="progress-fill" style="width: {{detail.detailScores.rhythm}}%"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 雷达图区域 -->
+    <view class="radar-section card">
+      <text class="section-title">能力分布</text>
+      <canvas type="2d" id="radarCanvas" class="radar-canvas"></canvas>
+    </view>
+
+    <!-- 评价反馈 -->
+    <view class="feedback-section card">
+      <text class="section-title">评价反馈</text>
+      <text class="feedback-text">{{detail.feedback}}</text>
+    </view>
+
+    <!-- 识别结果 -->
+    <view class="recognition-section card" wx:if="{{detail.recognizedChar}}">
+      <text class="section-title">识别结果</text>
+      <view class="char-display">
+        <text class="recognized-char">{{detail.recognizedChar}}</text>
+        <text class="confidence">置信度: {{detail.confidence}}%</text>
+      </view>
+    </view>
+
+    <!-- 底部间距 -->
+    <view class="bottom-space"></view>
+  </scroll-view>
+</view>

@@ -1,0 +1,34 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/history/history",
+    "pages/detail/detail",
+    "pages/profile/profile"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#f8f6f6",
+    "navigationBarTitleText": "墨韵评测",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f8f6f6"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#e03229",
+    "backgroundColor": "#f8f6f6",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/history/history",
+        "text": "记录"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
+  "cloud": true,
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

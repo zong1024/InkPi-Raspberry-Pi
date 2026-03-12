@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#e03229",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#211211",
+                    },
+                    fontFamily: {
+                        "display": ["Newsreader", "serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Newsreader', "Microsoft YaHei", "SimSun", serif;
+        }
+        /* Subtle Xuan paper texture simulation using CSS gradients */
+        .xuan-paper {
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0%, transparent 100%),
+                linear-gradient(to right, rgba(0,0,0,0.02) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+<div class="relative w-full max-w-md overflow-hidden bg-background-light dark:bg-background-dark rounded-xl shadow-sm border border-primary/10 xuan-paper">
+<!-- Top Navigation Area -->
+<div class="flex items-center p-4 justify-between">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center justify-center cursor-pointer hover:bg-primary/5 rounded-full transition-colors">
+<span class="material-symbols-outlined">close</span>
+</div>
+<div class="text-primary font-display text-sm tracking-widest font-semibold">书法之美</div>
+</div>
+<!-- Logo/Hero Section -->
+<div class="flex flex-col items-center pt-8 pb-4">
+<div class="relative w-32 h-32 flex items-center justify-center mb-6">
+<!-- Decorative Ink Splash Background -->
+<div class="absolute inset-0 opacity-10 bg-primary rounded-full blur-3xl"></div>
+<!-- Stylized Brush/Ink Icon -->
+<div class="relative w-24 h-24 bg-no-repeat bg-contain bg-center" data-alt="Stylized Chinese ink splash and calligraphy brush logo" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDt6g_8bhYR2JBNY2xtpmG8fZUeeo30MGqtSjUX68RxZ-eia1N7bHHcx1QKGqE1sbNghrv4ZyGfu8cMBN_vzFLICZLWxOqdNpzqcgNfkePo8bXCfPHcbvQ4nZEHPXB_gDZH8iafSxHhLqDXi6w-ncPTuaqYBkSL4LErnGL55zyua8KP4lqjdfYrl6SSbP8rackKCcqSjDHfIttWclYI63i5ITn6CdbLiZUpkOL8KXNHFWppEiUE5cD6vYEDxdwjrVzShYy9r5v7pIwE');">
+</div>
+</div>
+<h1 class="text-slate-900 dark:text-slate-100 tracking-widest text-4xl font-bold font-display px-4 text-center">
+                墨韵评测
+            </h1>
+<div class="w-12 h-1 bg-primary/30 my-4 rounded-full"></div>
+<p class="text-slate-600 dark:text-slate-400 text-base font-normal leading-relaxed px-8 text-center max-w-xs">
+                传承书法之美，品味笔墨芳华<br/>智能测评，助您笔下生花
+            </p>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-4 px-8 pt-10 pb-12">
+<!-- WeChat Login -->
+<button class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-14 px-6 bg-primary text-white gap-3 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="text-lg font-bold tracking-wide">微信一键登录</span>
+</button>
+<!-- Phone Login -->
+<button class="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg h-14 px-6 bg-primary/10 text-primary border border-primary/20 gap-3 hover:bg-primary/20 transition-all">
+<span class="material-symbols-outlined">smartphone</span>
+<span class="text-lg font-medium tracking-wide">手机号登录</span>
+</button>
+<!-- Terms and Privacy -->
+<div class="mt-8 flex items-start gap-2 px-2">
+<input class="mt-1 rounded border-slate-300 text-primary focus:ring-primary" id="terms" type="checkbox"/>
+<label class="text-xs text-slate-500 dark:text-slate-400 leading-tight" for="terms">
+                    登录即代表您已阅读并同意 <a class="text-primary hover:underline" href="#">《用户服务协议》</a> 与 <a class="text-primary hover:underline" href="#">《隐私保护政策》</a>
+</label>
+</div>
+</div>
+<!-- Footer Decoration -->
+<div class="h-1.5 w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent"></div>
+</div>
+<!-- Small sub-footer -->
+<p class="mt-8 text-slate-400 dark:text-slate-600 text-xs font-display tracking-widest">© 2026 InkPi · By ZongRui</p>
+</body></html>

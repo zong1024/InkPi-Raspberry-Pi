@@ -1,0 +1,164 @@
+/* pages/index/index.wxss */
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Logo区域 */
+.logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 0 48rpx;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 200rpx;
+  height: 200rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.ink-splash {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background-color: var(--primary);
+  border-radius: 50%;
+  opacity: 0.1;
+  filter: blur(40rpx);
+}
+
+.logo-text {
+  font-size: 100rpx;
+  font-weight: bold;
+  color: var(--primary);
+  position: relative;
+  z-index: 1;
+  font-family: "Microsoft YaHei", "SimSun", serif;
+}
+
+.app-title {
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #333;
+  letter-spacing: 12rpx;
+  text-align: center;
+}
+
+.app-desc {
+  font-size: 26rpx;
+  color: #666;
+  text-align: center;
+  margin-top: 16rpx;
+}
+
+.divider {
+  width: 80rpx;
+  height: 4rpx;
+  background-color: var(--primary);
+  margin: 24rpx 0;
+  border-radius: 2rpx;
+}
+
+/* 表单区域 */
+.form-section {
+  padding: 48rpx 48rpx 32rpx;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  background-color: var(--white);
+  border-radius: 12rpx;
+  padding: 24rpx 32rpx;
+  margin-bottom: 24rpx;
+  border: 2rpx solid rgba(224, 50, 41, 0.1);
+}
+
+.input-group:focus-within {
+  border-color: var(--primary);
+}
+
+.input-icon {
+  font-size: 36rpx;
+  margin-right: 20rpx;
+}
+
+.input-field {
+  flex: 1;
+  font-size: 30rpx;
+  color: #333;
+}
+
+.btn-primary {
+  width: 100%;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary), #c42a22);
+  color: var(--white);
+  font-size: 32rpx;
+  font-weight: bold;
+  border-radius: 12rpx;
+  margin-top: 32rpx;
+  letter-spacing: 4rpx;
+}
+
+.btn-primary:active {
+  opacity: 0.9;
+}
+
+.login-hint {
+  display: block;
+  text-align: center;
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 24rpx;
+}
+
+/* 协议区域 */
+.agreement {
+  padding: 0 48rpx;
+  margin-top: 32rpx;
+}
+
+.agreement-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.agreement-text {
+  font-size: 24rpx;
+  color: #999;
+  line-height: 1.5;
+}
+
+.link {
+  color: var(--primary);
+}
+
+/* 底部装饰 */
+.footer-decoration {
+  height: 4rpx;
+  background: linear-gradient(to right, transparent, rgba(224, 50, 41, 0.3), transparent);
+  margin-top: auto;
+}
+
+/* 版权信息 */
+.copyright {
+  text-align: center;
+  padding: 48rpx 0 32rpx;
+  font-size: 22rpx;
+  color: #ccc;
+  letter-spacing: 2rpx;
+}
