@@ -143,6 +143,14 @@ LED_EFFECTS = {
     },
 }
 
+# ============ 微信云开发配置 ============
+CLOUD_CONFIG = {
+    "enabled": True,              # 是否启用云同步
+    "env_id": "inkpi-cloud",      # 云开发环境ID（需要替换为实际值）
+    "openid": "raspberrypi_device",  # 设备标识（用于区分数据来源）
+    "collection": "evaluations",  # 数据库集合名称
+}
+
 # ============ 日志配置 ============
 LOG_CONFIG = {
     "level": "INFO",

@@ -25,7 +25,8 @@ import numpy as np
 from models.evaluation_result import EvaluationResult
 from services.speech_service import speech_service
 from services.led_service import led_service
-from config import UI_CONFIG
+from services.cloud_upload_service import CloudUploadService
+from config import UI_CONFIG, CLOUD_CONFIG
 
 
 class RadarChart(FigureCanvas):
@@ -140,6 +141,12 @@ class ResultView(QWidget):
         super().__init__(parent)
         self.result: EvaluationResult = None
         self._init_ui()
+        
+        # 初始化云上传服务
+        if CLOUD_CONFIG.get("enabled", False):
+            self.cloud_service = CloudUploadService(env_id=CLOUD_CONFIG["env_id"])
+        else:
+            self.cloud_service = None
         
     def _init_ui(self):
         """初始化 UI"""
@@ -290,6 +297,30 @@ class ResultView(QWidget):
         
         # 触发 LED 灯光效果
         led_service.show_score(self.result.total_score)
+        
+        # 上传到云端
+        self._upload_to_cloud()
+        
+    def _upload_to_cloud(self):
+        """上传评测结果到云端"""
+        if self.cloud_service and self.result:
+            try:
+                result = self.cloud_service.upload_evaluation_result(
+                    openid=CLOUD_CONFIG["openid"],
+                    total_score=self.result.total_score,
+                    detail_scores=self.result.detail_scores,
+                    feedback=self.result.feedback,
+                    image_path=self.result.image_path,
+                    processed_image_path=self.result.processed_image_path,
+                    recognized_char=self.result.character_name,
+                    title=f"书法评测 · {self.result.timestamp.strftime('%Y-%m-%d %H:%M')}"
+                )
+                if result.get("success"):
+                    print("[云同步] 上传成功")
+                else:
+                    print(f"[云同步] 上传失败: {result.get('error', '未知错误')}")
+            except Exception as e:
+                print(f"[云同步] 上传异常: {e}")
         
     def _on_speak(self):
         """语音播报"""
