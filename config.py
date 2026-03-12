@@ -116,6 +116,33 @@ FEEDBACK_TEMPLATES = {
     ],
 }
 
+# ============ LED 灯带配置 ============
+LED_CONFIG = {
+    "enabled": True,              # 是否启用 LED 功能
+    "num_leds": 8,                # LED 灯珠数量
+    "spi_bus": 0,                 # SPI 总线号
+    "spi_device": 0,              # SPI 设备号
+    "brightness": 0.3,            # 亮度 (0.0 - 1.0)
+    "gpio_pin": 10,               # SPI0 MOSI (GPIO10, Pin 19)
+}
+
+# 灯光效果配置
+LED_EFFECTS = {
+    "excellent": {
+        "color": "green",
+        "effect": "breathing",    # 呼吸灯
+    },
+    "good": {
+        "color": "yellow",
+        "effect": "steady",       # 稳定光
+    },
+    "needs_work": {
+        "color": "red",
+        "effect": "blinking",     # 闪烁
+        "interval": 0.3,
+    },
+}
+
 # ============ 日志配置 ============
 LOG_CONFIG = {
     "level": "INFO",

@@ -24,6 +24,7 @@ import numpy as np
 
 from models.evaluation_result import EvaluationResult
 from services.speech_service import speech_service
+from services.led_service import led_service
 from config import UI_CONFIG
 
 
@@ -286,6 +287,9 @@ class ResultView(QWidget):
         
         # 更新反馈
         self.feedback_label.setText(self.result.feedback)
+        
+        # 触发 LED 灯光效果
+        led_service.show_score(self.result.total_score)
         
     def _on_speak(self):
         """语音播报"""

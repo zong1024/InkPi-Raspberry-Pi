@@ -25,7 +25,15 @@ sudo apt-get install -y \
     espeak-ng \
     portaudio19-dev \
     libespeak1 \
-    libespeak-dev
+    libespeak-dev \
+    spi-tools
+
+# 启用 SPI 接口 (用于 WS2812B LED 灯带)
+echo "启用 SPI 接口..."
+sudo raspi-config nonint do_spi 0
+
+# 添加用户到 spi 组
+sudo usermod -a -G spi $USER
 
 # 创建虚拟环境
 echo "[2/5] 创建虚拟环境..."
