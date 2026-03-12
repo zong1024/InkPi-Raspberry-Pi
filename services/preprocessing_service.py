@@ -155,6 +155,11 @@ class PreprocessingService:
         """
         书法特征验证 - 区分书法和杂物
         
+        毛笔书法特点：
+        - 笔画较粗，边缘密度相对较低
+        - 可能有飞白效果（笔画内部的细小空白）
+        - 墨迹分布可能较分散（大字、行书等）
+        
         Args:
             binary: 二值化图像
             ink_ratio: 墨迹占比
@@ -166,42 +171,46 @@ class PreprocessingService:
         
         # 1. 长宽比检查（书法通常接近正方形或适度长方形）
         aspect_ratio = w / h
-        if aspect_ratio < 0.3 or aspect_ratio > 3.0:
+        if aspect_ratio < 0.2 or aspect_ratio > 5.0:
             self.logger.warning(f"长宽比异常: {aspect_ratio:.2f}")
             # 不直接拒绝，但记录警告
         
-        # 2. 边缘复杂度检查（书法有丰富的边缘）
-        edges = cv2.Canny(binary, 50, 150)
+        # 2. 边缘复杂度检查
+        # 毛笔字笔画较粗，边缘密度可能较低，放宽阈值
+        edges = cv2.Canny(binary, 30, 100)  # 降低 Canny 阈值以检测更多边缘
         edge_ratio = np.sum(edges > 0) / binary.size
         
-        if edge_ratio < 0.01:
+        # 毛笔字边缘密度阈值放宽到 0.001（原来 0.01）
+        if edge_ratio < 0.001:
             raise PreprocessingError(
                 "内容过于简单，请确保拍摄的是书法作品",
                 error_type="not_calligraphy"
             )
         
-        # 3. 连通性检查（书法通常是连通的笔画）
+        # 3. 连通性检查
+        # 毛笔字可能有较多离散笔画（如点、撇等），放宽阈值
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             255 - binary, connectivity=8
         )
         num_components = num_labels - 1  # 排除背景
         
-        # 如果碎片过多，可能是杂物
-        if num_components > 50:
+        # 放宽到 100 个连通分量（原 50）
+        if num_components > 100:
             raise PreprocessingError(
                 "检测到过多碎片，请移除杂物后重试",
                 error_type="too_fragmented"
             )
         
-        # 4. 分布集中度检查（书法内容通常集中在某个区域）
+        # 4. 分布集中度检查
+        # 毛笔书法（特别是行书、草书）笔画分布可能较分散，大幅放宽阈值
         ink_mask = binary == 0
         if np.sum(ink_mask) > 0:
             y_coords, x_coords = np.where(ink_mask)
             x_spread = np.std(x_coords) / w
             y_spread = np.std(y_coords) / h
             
-            # 如果分布过于分散，可能是杂物
-            if x_spread > 0.45 and y_spread > 0.45:
+            # 放宽到 0.7（原 0.45），允许更分散的布局
+            if x_spread > 0.7 and y_spread > 0.7:
                 raise PreprocessingError(
                     "内容分布过于分散，请对准单个汉字",
                     error_type="scattered_content"
