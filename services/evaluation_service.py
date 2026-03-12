@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import EVALUATION_CONFIG, FEEDBACK_TEMPLATES
 from models.evaluation_result import EvaluationResult
 from services.recognition_service import recognition_service
+from services.style_classification_service import style_classification_service
 
 
 class EvaluationService:
@@ -75,6 +76,16 @@ class EvaluationService:
         # 使用识别结果或提供的字符名称
         final_character = character_name or recognized_char
         
+        # 书法风格分类
+        style = None
+        style_confidence = None
+        try:
+            style, confidence, _ = style_classification_service.classify(processed_image)
+            style_confidence = confidence
+            self.logger.info(f"风格分类: {style} (置信度: {confidence:.2%})")
+        except Exception as e:
+            self.logger.warning(f"风格分类失败: {e}")
+        
         # 计算四维评分
         detail_scores = self._calculate_scores(processed_image)
         
@@ -96,7 +107,9 @@ class EvaluationService:
             timestamp=datetime.now(),
             image_path=original_image_path,
             processed_image_path=processed_image_path,
-            character_name=final_character
+            character_name=final_character,
+            style=style,
+            style_confidence=style_confidence
         )
         
         self.logger.info(f"评测完成: 总分={total_score}")

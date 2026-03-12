@@ -19,6 +19,9 @@ class EvaluationResult:
     processed_image_path: Optional[str] = None    # 预处理后图片路径
     character_name: Optional[str] = None          # 字符名称
     id: Optional[int] = None                      # 数据库ID
+    # 书法风格分类
+    style: Optional[str] = None                   # 书法风格 (楷书/行书/草书/隶书/篆书)
+    style_confidence: Optional[float] = None      # 风格置信度
     
     def to_dict(self) -> dict:
         """转换为字典格式"""

@@ -198,6 +198,30 @@ class ResultView(QWidget):
         char_layout.addStretch()
         layout.addWidget(self.char_frame)
         
+        # 风格分类显示区域
+        self.style_frame = QFrame()
+        self.style_frame.setObjectName("styleFrame")
+        style_layout = QHBoxLayout(self.style_frame)
+        style_layout.setContentsMargins(5, 2, 5, 2)
+        
+        style_title = QLabel("书体风格:")
+        style_title.setFont(QFont("Microsoft YaHei", 9))
+        style_title.setStyleSheet("color: #666;")
+        style_layout.addWidget(style_title)
+        
+        self.style_label = QLabel("--")
+        self.style_label.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
+        self.style_label.setStyleSheet("color: #9C27B0;")  # 紫色
+        style_layout.addWidget(self.style_label)
+        
+        self.style_confidence_label = QLabel("")
+        self.style_confidence_label.setFont(QFont("Microsoft YaHei", 8))
+        self.style_confidence_label.setStyleSheet("color: #999;")
+        style_layout.addWidget(self.style_confidence_label)
+        
+        style_layout.addStretch()
+        layout.addWidget(self.style_frame)
+        
         # 按钮区域 - 底部触屏优化
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
@@ -276,10 +300,18 @@ class ResultView(QWidget):
         # 更新识别字符显示
         if self.result.character_name:
             self.char_label.setText(self.result.character_name)
-            self.confidence_label.setText("(已识别)")
+            self.confidence_label.setText("")
         else:
             self.char_label.setText("--")
             self.confidence_label.setText("")
+        
+        # 更新风格分类显示
+        if self.result.style:
+            self.style_label.setText(self.result.style)
+            self.style_confidence_label.setText(f"({self.result.style_confidence:.0%})" if self.result.style_confidence else "")
+        else:
+            self.style_label.setText("--")
+            self.style_confidence_label.setText("")
         
         # 触发 LED 灯光效果
         led_service.show_score(self.result.total_score)
