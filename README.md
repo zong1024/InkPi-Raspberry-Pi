@@ -114,12 +114,69 @@ chmod +x build_rpi.sh
 - **Windows**: 使用 DirectShow 摄像头后端，SAPI5 语音
 - **Linux/RPi**: 使用 v4l2 摄像头后端，espeak-ng 语音
 
+## 📱 微信小程序
+
+项目包含微信小程序端，支持查看评测历史和详细报告。
+
+### 小程序功能
+
+- 🔐 **用户名密码登录** - 未注册自动注册
+- 📋 **历史记录** - 查看评测历史列表
+- 📊 **评测详情** - 四维评分、雷达图、反馈
+- 👤 **个人中心** - 用户信息、设备绑定
+
+### 小程序目录
+
+```
+miniprogram/
+├── pages/
+│   ├── index/             # 登录页
+│   ├── history/           # 历史记录页
+│   ├── detail/            # 评测详情页
+│   └── profile/           # 个人中心页
+├── cloudfunctions/        # 云函数
+│   ├── login/             # 登录/注册
+│   ├── getHistory/        # 获取历史
+│   ├── getDetail/         # 获取详情
+│   ├── getStats/          # 获取统计
+│   └── uploadResult/      # 上传结果
+└── README.md              # 小程序说明文档
+```
+
+### 快速开始
+
+1. 用微信开发者工具打开 `miniprogram` 目录
+2. 配置云开发环境
+3. 创建数据库集合：`users`, `evaluations`
+4. 部署云函数
+
+详细说明请查看 [miniprogram/README.md](miniprogram/README.md)
+
+## 🔗 树莓派与小程序联动
+
+树莓派评测完成后，可通过云上传服务同步到小程序：
+
+```python
+from services.cloud_upload_service import CloudUploadService
+
+service = CloudUploadService(env_id="your-env-id")
+
+service.upload_evaluation_result(
+    openid="user_openid",
+    total_score=85,
+    detail_scores={"structure": 83, "stroke": 78, "balance": 91, "rhythm": 88},
+    feedback="太棒了！您的书法水平很高！",
+    image_path="/path/to/image.jpg",
+    title="九成宫醴泉铭 · 每日评测"
+)
+```
+
 ## 后续优化
 
 - [ ] 集成真实 AI 模型 (TFLite)
 - [ ] 添加字符分割功能
 - [ ] 支持多字评测
-- [ ] 添加用户系统
+- [x] 添加用户系统（微信小程序）
 
 ## License
 
