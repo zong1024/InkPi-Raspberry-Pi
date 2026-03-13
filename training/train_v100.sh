@@ -89,6 +89,13 @@ echo -e "${YELLOW}[2/6] 安装 Python 依赖...${NC}"
 
 cd "$PROJECT_ROOT"
 
+# 安装 python3-venv（Ubuntu 24.04 需要）
+if ! python3 -m venv --help &> /dev/null; then
+    echo "安装 python3-venv..."
+    sudo apt-get update
+    sudo apt-get install -y python3-venv python3-dev python3-pip
+fi
+
 # 创建虚拟环境（如果不存在）
 if [ ! -d "venv" ]; then
     echo "创建虚拟环境..."
@@ -133,24 +140,25 @@ cd "$PROJECT_ROOT"
 EXISTING_SAMPLES=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
 
 if [ "$EXISTING_SAMPLES" -ge "$SAMPLES_PER_LEVEL" ]; then
-    echo -e "${GREEN}数据集已存在 ($EXISTING_SAMPLES 样本)，跳过生成${NC}"
+    echo -e "${GREEN}已存在 $EXISTING_SAMPLES 个样本，跳过数据集生成${NC}"
 else
-    echo "生成数据集 (每级别 $SAMPLES_PER_LEVEL 样本)..."
+    echo "生成 $SAMPLES_PER_LEVEL 个样本 per 级别..."
     python3 training/dataset_builder.py \
         --samples $SAMPLES_PER_LEVEL \
-        --seed 42
+        --output data/synthetic \
+        --quality good medium poor
 fi
 
-# 统计数据集
-GOOD_COUNT=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
-MEDIUM_COUNT=$(find data/synthetic/medium -name "*.png" 2>/dev/null | wc -l)
-POOR_COUNT=$(find data/synthetic/poor -name "*.png" 2>/dev/null | wc -l)
-TOTAL_COUNT=$((GOOD_COUNT + MEDIUM_COUNT + POOR_COUNT))
+# 统计总样本数
+TOTAL_GOOD=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
+TOTAL_MEDIUM=$(find data/synthetic/medium -name "*.png" 2>/dev/null | wc -l)
+TOTAL_POOR=$(find data/synthetic/poor -name "*.png" 2>/dev/null | wc -l)
+TOTAL_COUNT=$((TOTAL_GOOD + TOTAL_MEDIUM + TOTAL_POOR))
 
 echo -e "${GREEN}数据集统计:${NC}"
-echo "  - good: $GOOD_COUNT 张"
-echo "  - medium: $MEDIUM_COUNT 张"
-echo "  - poor: $POOR_COUNT 张"
+echo "  - good: $TOTAL_GOOD 张"
+echo "  - medium: $TOTAL_MEDIUM 张"
+echo "  - poor: $TOTAL_POOR 张"
 echo "  - 总计: $TOTAL_COUNT 张"
 
 echo ""
