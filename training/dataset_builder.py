@@ -19,6 +19,7 @@ import argparse
 import logging
 import random
 from scipy.ndimage import map_coordinates, gaussian_filter, zoom
+from PIL import Image, ImageDraw, ImageFont
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
@@ -542,26 +543,60 @@ def load_templates(templates_dir: Path) -> dict:
 def generate_sample_image(char: str = "永", size: int = 224) -> np.ndarray:
     """
     生成示例字帖图像（用于测试）
+    使用 PIL 绘制中文字符
     
     Args:
         char: 字符
         size: 图像尺寸
         
     Returns:
-        生成的图像
+        生成的图像 (numpy array, 灰度)
     """
-    # 创建白色背景
-    image = np.ones((size, size), dtype=np.uint8) * 255
+    # 使用 PIL 创建图像（支持中文）
+    pil_image = Image.new('L', (size, size), color=255)  # 白色背景
+    draw = ImageDraw.Draw(pil_image)
     
-    # 绘制字符（使用 OpenCV 默认字体）
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    text_size = cv2.getTextSize(char, font, 5, 3)[0]
-    text_x = (size - text_size[0]) // 2
-    text_y = (size + text_size[1]) // 2
+    # 尝试加载中文字体
+    font_size = int(size * 0.7)  # 字体大小约为图像的 70%
     
-    cv2.putText(image, char, (text_x, text_y), font, 5, 0, 3)
+    # Windows 系统常用中文字体路径
+    font_paths = [
+        "C:/Windows/Fonts/simhei.ttf",      # 黑体
+        "C:/Windows/Fonts/msyh.ttc",        # 微软雅黑
+        "C:/Windows/Fonts/simsun.ttc",      # 宋体
+        "C:/Windows/Fonts/simkai.ttf",      # 楷体
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",  # Linux
+        "/System/Library/Fonts/PingFang.ttc",  # macOS
+    ]
     
-    return image
+    font = None
+    for font_path in font_paths:
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+            break
+        except (IOError, OSError):
+            continue
+    
+    if font is None:
+        # 如果找不到字体，使用默认字体
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+            font_size = 40
+    
+    # 计算文字位置（居中）
+    bbox = draw.textbbox((0, 0), char, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    text_x = (size - text_width) // 2 - bbox[0]
+    text_y = (size - text_height) // 2 - bbox[1]
+    
+    # 绘制黑色文字
+    draw.text((text_x, text_y), char, font=font, fill=0)
+    
+    # 转换为 numpy array
+    return np.array(pil_image)
 
 
 def build_dataset(
@@ -607,14 +642,26 @@ def build_dataset(
         logger.warning("未找到字帖，生成示例数据...")
         templates_dir.mkdir(parents=True, exist_ok=True)
         
-        sample_chars = ["永", "山", "水", "火", "土", "木", "金", "人", "大", "小"]
-        for char in sample_chars:
+        # 使用拼音作为文件名（避免 Windows 编码问题）
+        sample_chars = {
+            "永": "yong",
+            "山": "shan", 
+            "水": "shui",
+            "火": "huo",
+            "土": "tu",
+            "木": "mu",
+            "金": "jin",
+            "人": "ren",
+            "大": "da",
+            "小": "xiao"
+        }
+        for char, pinyin in sample_chars.items():
             image = generate_sample_image(char)
             templates[char] = image
             
-            # 保存到字帖目录
-            cv2.imwrite(str(templates_dir / f"{char}_楷书_标准.png"), image)
-            logger.info(f"生成示例字帖: {char}")
+            # 保存到字帖目录（使用拼音文件名）
+            cv2.imwrite(str(templates_dir / f"{pinyin}_kaishu_standard.png"), image)
+            logger.info(f"生成示例字帖: {char} -> {pinyin}")
     
     # 创建输出目录
     for quality in quality_levels:
@@ -626,9 +673,24 @@ def build_dataset(
     # 统计
     total_generated = 0
     
+    # 字符到拼音的映射
+    char_to_pinyin = {
+        "永": "yong",
+        "山": "shan", 
+        "水": "shui",
+        "火": "huo",
+        "土": "tu",
+        "木": "mu",
+        "金": "jin",
+        "人": "ren",
+        "大": "da",
+        "小": "xiao"
+    }
+    
     # 为每个字帖生成增强样本
     for char, template in templates.items():
-        logger.info(f"\n📝 处理字符: {char}")
+        pinyin = char_to_pinyin.get(char, char)
+        logger.info(f"\n📝 处理字符: {char} ({pinyin})")
         
         for quality in quality_levels:
             quality_dir = output_dir / quality
@@ -637,8 +699,8 @@ def build_dataset(
                 # 应用变换
                 augmented = augmentor.transform(template, quality)
                 
-                # 保存
-                filename = f"{char}_{quality}_{i:04d}.png"
+                # 保存（使用拼音文件名）
+                filename = f"{pinyin}_{quality}_{i:04d}.png"
                 filepath = quality_dir / filename
                 cv2.imwrite(str(filepath), augmented)
                 
@@ -648,7 +710,8 @@ def build_dataset(
     originals_dir = output_dir / "originals"
     originals_dir.mkdir(parents=True, exist_ok=True)
     for char, template in templates.items():
-        cv2.imwrite(str(originals_dir / f"{char}.png"), template)
+        pinyin = char_to_pinyin.get(char, char)
+        cv2.imwrite(str(originals_dir / f"{pinyin}.png"), template)
     
     logger.info("\n" + "=" * 60)
     logger.info(f"✅ 数据集构建完成!")
