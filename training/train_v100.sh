@@ -89,17 +89,15 @@ echo -e "${YELLOW}[2/6] 安装 Python 依赖...${NC}"
 
 cd "$PROJECT_ROOT"
 
-# 安装 python3-venv（Ubuntu 24.04 需要）
-if ! python3 -m venv --help &> /dev/null; then
-    echo "安装 python3-venv..."
-    sudo apt-get update
-    sudo apt-get install -y python3-venv python3-dev python3-pip
-fi
-
 # 创建虚拟环境（如果不存在）
 if [ ! -d "venv" ]; then
     echo "创建虚拟环境..."
-    python3 -m venv venv
+    if ! python3 -m venv venv 2>/dev/null; then
+        echo "python3-venv 未安装，正在安装..."
+        sudo apt-get update
+        sudo apt-get install -y python3-venv python3-dev python3-pip
+        python3 -m venv venv
+    fi
 fi
 
 # 激活虚拟环境
