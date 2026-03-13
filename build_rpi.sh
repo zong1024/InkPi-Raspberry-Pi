@@ -45,13 +45,23 @@ echo "[3/5] 安装 Python 依赖..."
 pip install --upgrade pip
 pip install -r requirements.txt
 
+# 创建模型目录结构
+echo "[4/6] 准备模型文件..."
+mkdir -p models
+# 如果模型文件不存在，创建占位符（用户需要自行下载或训练）
+if [ ! -f "models/ch_recognize_mobile_int8.onnx" ]; then
+    echo "警告: 汉字识别模型不存在，请运行 python training/train_siamese.py 训练或下载预训练模型"
+fi
+
 # 打包应用
-echo "[4/5] 打包应用..."
+echo "[5/6] 打包应用..."
 pyinstaller \
     --onefile \
     --windowed \
     --name InkPi \
     --add-data "config.py:." \
+    --add-data "models:models" \
+    --add-data "models/templates:models/templates" \
     --hidden-import PyQt6 \
     --hidden-import PyQt6.QtCore \
     --hidden-import PyQt6.QtWidgets \
@@ -62,6 +72,8 @@ pyinstaller \
     --hidden-import matplotlib.backends.backend_qtagg \
     --hidden-import pyttsx3 \
     --hidden-import sqlite3 \
+    --hidden-import requests \
+    --hidden-import onnxruntime \
     --collect-all PyQt6 \
     main.py
 
