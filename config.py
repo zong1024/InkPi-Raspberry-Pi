@@ -24,11 +24,13 @@ DATA_DIR = Path.home() / f".{APP_NAME.lower()}" / "data"
 IMAGES_DIR = DATA_DIR / "images"
 PROCESSED_DIR = DATA_DIR / "processed"
 DB_PATH = DATA_DIR / "inkpi.db"
+MODELS_DIR = DATA_DIR / "models"  # 模型目录
 
 # 确保目录存在
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============ 图像处理配置 ============
 IMAGE_CONFIG = {
