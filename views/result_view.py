@@ -21,6 +21,10 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
 
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS']
+plt.rcParams['axes.unicode_minus'] = False
+
 from models.evaluation_result import EvaluationResult
 from services.speech_service import speech_service
 from services.led_service import led_service

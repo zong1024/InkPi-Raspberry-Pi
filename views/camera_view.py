@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QFrame, QMessageBox
+    QPushButton, QFrame, QMessageBox, QFileDialog
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QFont, QImage, QPixmap
@@ -109,6 +109,14 @@ class CameraView(QWidget):
         self.btn_capture.setFixedSize(100, 40)
         self.btn_capture.clicked.connect(self._on_capture)
         btn_layout.addWidget(self.btn_capture)
+        
+        # 从文件加载按钮（无摄像头时使用）
+        self.btn_load = QPushButton("📁 加载")
+        self.btn_load.setObjectName("secondaryButton")
+        self.btn_load.setFont(QFont("Microsoft YaHei", 10))
+        self.btn_load.setFixedSize(80, 40)
+        self.btn_load.clicked.connect(self._on_load_image)
+        btn_layout.addWidget(self.btn_load)
         
         layout.addLayout(btn_layout)
         
@@ -266,7 +274,97 @@ class CameraView(QWidget):
     def _on_cancel(self):
         """取消按钮点击"""
         self.cancelled.emit()
+    
+    def _on_load_image(self):
+        """从文件加载图片（无摄像头时使用）"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择书法图片",
+            str(IMAGES_DIR),
+            "图片文件 (*.jpg *.jpeg *.png *.bmp);;所有文件 (*)"
+        )
         
+        if not file_path:
+            return
+        
+        # 读取图片（支持中文路径）
+        image = self._read_image_chinese(file_path)
+        if image is None:
+            QMessageBox.warning(self, "错误", "无法读取图片文件")
+            return
+        
+        self.current_frame = image.copy()
+        
+        # 显示预览
+        display_frame = self._add_guide_overlay(image)
+        h, w, ch = display_frame.shape
+        bytes_per_line = ch * w
+        q_image = QImage(display_frame.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+        pixmap = QPixmap.fromImage(q_image)
+        scaled_pixmap = pixmap.scaled(
+            self.preview_label.size(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        self.preview_label.setPixmap(scaled_pixmap)
+        
+        # 直接进行评测
+        self._evaluate_image(image, Path(file_path))
+    
+    def _evaluate_image(self, image: np.ndarray, original_path: Path):
+        """评测图片"""
+        self.btn_load.setEnabled(False)
+        self.btn_load.setText("评测中...")
+        
+        try:
+            # 图像预处理
+            processed, processed_path = preprocessing_service.preprocess(
+                image,
+                save_processed=True
+            )
+            
+            # 评测分析
+            result = evaluation_service.evaluate(
+                processed,
+                original_image_path=str(original_path),
+                processed_image_path=processed_path
+            )
+            
+            # 保存到数据库
+            record_id = database_service.save(result)
+            result.id = record_id
+            
+            # 语音播报
+            speech_service.speak_score(result.total_score, result.feedback)
+            
+            # 释放内存
+            preprocessing_service.release_memory()
+            
+            self.capture_completed.emit(result)
+            
+        except PreprocessingError as e:
+            speech_service.speak_error(str(e))
+            QMessageBox.warning(self, "图像质量问题", str(e))
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"评测失败: {str(e)}")
+            
+        finally:
+            self.btn_load.setEnabled(True)
+            self.btn_load.setText("📁 加载")
+        
+    def _read_image_chinese(self, file_path: str) -> np.ndarray:
+        """读取支持中文路径的图片"""
+        try:
+            # 使用numpy读取文件内容，避免中文路径问题
+            with open(file_path, 'rb') as f:
+                data = np.frombuffer(f.read(), dtype=np.uint8)
+            image = cv2.imdecode(data, cv2.IMREAD_COLOR)
+            return image
+        except Exception as e:
+            print(f"读取图片失败: {e}")
+            return None
+    
     def cleanup(self):
         """清理资源"""
         self._stop_camera()

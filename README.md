@@ -186,22 +186,26 @@ inkpi/
 ├── main.py                   # 应用入口
 ├── config.py                 # 配置文件
 ├── requirements.txt          # Python依赖
+├── test_all.py              # 测试脚本
+├── build_rpi.sh             # 树莓派打包脚本
 ├── models/
 │   ├── evaluation_result.py  # 评测结果模型
 │   └── recognition_result.py # 识别结果模型
 ├── services/
 │   ├── preprocessing_service.py  # 图像预处理
-│   ├── evaluation_service.py     # 评测算法
+│   ├── evaluation_service.py     # 评测算法（毛笔字专项优化）
 │   ├── recognition_service.py    # 汉字识别
+│   ├── style_classification_service.py  # 书法风格分类 ⭐新增
 │   ├── database_service.py       # 数据库
 │   ├── camera_service.py         # 摄像头
 │   ├── speech_service.py         # 语音播报
+│   ├── led_service.py            # LED灯带控制 ⭐新增
 │   └── cloud_upload_service.py   # 云上传
 ├── views/
 │   ├── main_window.py       # 主窗口
 │   ├── home_view.py         # 首页
-│   ├── camera_view.py       # 相机页
-│   ├── result_view.py       # 结果页
+│   ├── camera_view.py       # 相机页（支持图片加载）
+│   ├── result_view.py       # 结果页（风格分类显示）
 │   └── history_view.py      # 历史页
 └── miniprogram/             # 微信小程序
 ```
@@ -236,12 +240,59 @@ chmod +x build_rpi.sh
 
 ---
 
+## 🆕 v2.0 新增功能
+
+### 书法风格分类
+
+系统集成CNN深度学习模型，支持五种书法风格的智能识别：
+
+| 风格 | 特征描述 |
+|------|----------|
+| 楷书 | 端正工整，笔画清晰 |
+| 行书 | 流畅自然，连笔顺势 |
+| 草书 | 狂放不羁，笔势连绵 |
+| 隶书 | 庄重古朴，蚕头燕尾 |
+| 篆书 | 圆润均匀，笔画婉转 |
+
+参考: [CNN-for-Chinese-Calligraphy-Styles-classification](https://github.com/MingtaoGuo/CNN-for-Chinese-Calligraphy-Styles-classification)
+
+### 毛笔字专项优化
+
+评测算法针对毛笔字特性进行了深度优化，新增以下特征提取：
+
+| 特征 | 描述 |
+|------|------|
+| 笔画粗细变化率 | 反映提按效果 |
+| 笔锋锐度 | 起收笔形态分析 |
+| 飞白密度 | 干笔效果检测 |
+| 墨色渐变 | 浓淡变化分析 |
+
+### Windows模拟模式
+
+系统支持在Windows上进行完整功能模拟开发：
+
+| 功能 | Windows支持 |
+|------|------------|
+| 摄像头捕获 | ✅ DirectShow |
+| 语音播报 | ✅ SAPI5中文语音 |
+| 图像处理 | ✅ OpenCV跨平台 |
+| 汉字识别 | ✅ ONNX Runtime |
+| 风格分类 | ✅ ONNX Runtime |
+| LED灯带 | ⚠️ 控制台模拟输出 |
+
+无摄像头时，可通过"加载图片"按钮选择本地图片进行评测测试。
+
+---
+
 ## 后续优化
 
 - [ ] 集成孪生网络（Siamese Network）深度学习模型
 - [ ] 基于NCNN/TFLite的边缘侧推理加速
 - [ ] 集成YOLOv8n-seg笔画实例分割
 - [x] 微信小程序云端协同
+- [x] 书法风格分类CNN模型
+- [x] 毛笔字专项评测优化
+- [x] Windows开发环境支持
 
 ---
 
