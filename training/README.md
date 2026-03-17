@@ -6,10 +6,39 @@
 
 ```
 training/
-├── dataset_builder.py    # 合成数据集生成器
-├── train_siamese.py      # 孪生网络训练脚本
-└── README.md             # 本文件
+├── download_real_dataset.py  # 🆕 真实数据集下载器
+├── dataset_builder.py        # 合成数据集生成器
+├── train_siamese.py          # 孪生网络训练脚本
+├── train_v100.sh             # V100 一键训练脚本
+└── README.md                 # 本文件
 ```
+
+## 🆕 真实数据集支持 (推荐)
+
+合成数据集无法完全模拟真实书法特征，建议使用真实数据集训练。
+
+### 下载真实书法数据集
+
+```bash
+# 方式1: 从 GitHub 下载 (推荐，约 200MB)
+python training/download_real_dataset.py --source github
+
+# 方式2: 从 Kaggle 下载 (需要 Kaggle API，约 1GB)
+pip install kaggle
+python training/download_real_dataset.py --source kaggle_styles
+
+# 方式3: 导入本地数据
+python training/download_real_dataset.py --source local --input /path/to/images --style kaishu
+```
+
+### 使用真实数据训练
+
+```bash
+# 使用真实数据集训练
+python training/train_siamese.py --data data/real --epochs 100 --pretrained
+```
+
+---
 
 ## 🚀 快速开始
 
