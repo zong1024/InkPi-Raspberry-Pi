@@ -18,7 +18,7 @@ SAMPLES_PER_LEVEL=${SAMPLES_PER_LEVEL:-500}  # 每级别样本数
 EPOCHS=${EPOCHS:-100}                        # 训练轮数
 BATCH_SIZE=${BATCH_SIZE:-64}                 # 批大小
 LEARNING_RATE=${LEARNING_RATE:-1e-4}         # 学习率
-WORKERS=${WORKERS:-8}                        # 数据加载线程
+DATA_SOURCE=${DATA_SOURCE:-real}             # 数据源: real (真实) 或 synthetic (合成)
 
 # 获取脚本目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -128,36 +128,58 @@ if torch.cuda.is_available():
 echo ""
 
 # ============================================================
-# 步骤 3: 生成数据集
+# 步骤 3: 准备数据集
 # ============================================================
-echo -e "${YELLOW}[3/6] 生成合成数据集...${NC}"
-
 cd "$PROJECT_ROOT"
 
-# 检查是否已有足够数据
-EXISTING_SAMPLES=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
-
-if [ "$EXISTING_SAMPLES" -ge "$SAMPLES_PER_LEVEL" ]; then
-    echo -e "${GREEN}已存在 $EXISTING_SAMPLES 个样本，跳过数据集生成${NC}"
+if [ "$DATA_SOURCE" = "real" ]; then
+    echo -e "${YELLOW}[3/6] 下载真实书法数据集...${NC}"
+    
+    # 检查是否已有真实数据
+    REAL_COUNT=$(find data/real -name "*.png" 2>/dev/null | wc -l)
+    
+    if [ "$REAL_COUNT" -ge 100 ]; then
+        echo -e "${GREEN}已存在 $REAL_COUNT 张真实数据，跳过下载${NC}"
+    else
+        echo "从 GitHub 下载真实书法数据集..."
+        python3 training/download_real_dataset.py --source github
+    fi
+    
+    # 统计真实数据
+    TOTAL_COUNT=$(find data/real -name "*.png" 2>/dev/null | wc -l)
+    DATA_DIR="data/real"
+    
+    echo -e "${GREEN}真实数据集统计:${NC}"
+    echo "  - 总计: $TOTAL_COUNT 张"
 else
-    echo "生成 $SAMPLES_PER_LEVEL 个样本 per 级别..."
-    python3 training/dataset_builder.py \
-        --samples $SAMPLES_PER_LEVEL \
-        --output data/synthetic \
-        --quality good medium poor
+    echo -e "${YELLOW}[3/6] 生成合成数据集...${NC}"
+    
+    # 检查是否已有足够数据
+    EXISTING_SAMPLES=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
+
+    if [ "$EXISTING_SAMPLES" -ge "$SAMPLES_PER_LEVEL" ]; then
+        echo -e "${GREEN}已存在 $EXISTING_SAMPLES 个样本，跳过数据集生成${NC}"
+    else
+        echo "生成 $SAMPLES_PER_LEVEL 个样本 per 级别..."
+        python3 training/dataset_builder.py \
+            --samples $SAMPLES_PER_LEVEL \
+            --output data/synthetic \
+            --quality good medium poor
+    fi
+
+    # 统计总样本数
+    TOTAL_GOOD=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_MEDIUM=$(find data/synthetic/medium -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_POOR=$(find data/synthetic/poor -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_COUNT=$((TOTAL_GOOD + TOTAL_MEDIUM + TOTAL_POOR))
+    DATA_DIR="data/synthetic"
+
+    echo -e "${GREEN}合成数据集统计:${NC}"
+    echo "  - good: $TOTAL_GOOD 张"
+    echo "  - medium: $TOTAL_MEDIUM 张"
+    echo "  - poor: $TOTAL_POOR 张"
+    echo "  - 总计: $TOTAL_COUNT 张"
 fi
-
-# 统计总样本数
-TOTAL_GOOD=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
-TOTAL_MEDIUM=$(find data/synthetic/medium -name "*.png" 2>/dev/null | wc -l)
-TOTAL_POOR=$(find data/synthetic/poor -name "*.png" 2>/dev/null | wc -l)
-TOTAL_COUNT=$((TOTAL_GOOD + TOTAL_MEDIUM + TOTAL_POOR))
-
-echo -e "${GREEN}数据集统计:${NC}"
-echo "  - good: $TOTAL_GOOD 张"
-echo "  - medium: $TOTAL_MEDIUM 张"
-echo "  - poor: $TOTAL_POOR 张"
-echo "  - 总计: $TOTAL_COUNT 张"
 
 echo ""
 
@@ -173,10 +195,10 @@ START_TIME=$(date +%s)
 
 # 运行训练
 python3 training/train_siamese.py \
+    --data $DATA_DIR \
     --epochs $EPOCHS \
     --batch-size $BATCH_SIZE \
     --lr $LEARNING_RATE \
-    --workers $WORKERS \
     --device cuda \
     --pretrained
 

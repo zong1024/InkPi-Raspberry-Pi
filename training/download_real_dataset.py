@@ -224,7 +224,7 @@ class RealDatasetDownloader:
         return True
     
     def _organize_github_data(self, extract_dir: Path):
-        """整理 GitHub 数据集目录结构"""
+        """整理 GitHub 数据集目录结构 (兼容训练脚本)"""
         logger.info("整理目录结构...")
         
         # 查找解压后的目录
@@ -235,21 +235,67 @@ class RealDatasetDownloader:
         
         source_dir = extracted_dirs[0]
         
+        # 创建训练脚本需要的目录结构
+        originals_dir = self.data_dir / "originals"
+        good_dir = self.data_dir / "good"
+        medium_dir = self.data_dir / "medium"
+        poor_dir = self.data_dir / "poor"
+        
+        for d in [originals_dir, good_dir, medium_dir, poor_dir]:
+            d.mkdir(parents=True, exist_ok=True)
+        
         # 遍历并整理
+        all_images = []
         for style_dir in source_dir.iterdir():
             if style_dir.is_dir() and style_dir.name.lower() in STYLE_NAMES:
                 style_name = style_dir.name.lower()
-                target_dir = self.data_dir / style_name
-                target_dir.mkdir(parents=True, exist_ok=True)
                 
                 # 复制图片
                 images = list(style_dir.glob("*.png")) + list(style_dir.glob("*.jpg"))
                 for img in images:
-                    target_file = target_dir / img.name
+                    # 使用风格名作为前缀
+                    target_file = self.data_dir / f"{style_name}_{img.name}"
                     if not target_file.exists():
                         shutil.copy2(img, target_file)
+                    all_images.append((target_file, style_name))
                 
                 logger.info(f"  {STYLE_NAMES[style_name]}: {len(images)} 张图片")
+        
+        # 按风格质量分配到 good/medium/poor
+        # 楷书 -> good, 行书/隶书 -> medium, 草书/篆书 -> poor
+        style_to_quality = {
+            "kaishu": "good",
+            "xingshu": "medium",
+            "lishu": "medium",
+            "caoshu": "poor",
+            "zhuanshu": "poor"
+        }
+        
+        # 按质量分类复制
+        for img_path, style in all_images:
+            quality = style_to_quality.get(style, "medium")
+            target_dir = self.data_dir / quality
+            target_file = target_dir / img_path.name
+            if not target_file.exists():
+                shutil.move(str(img_path), str(target_file))
+        
+        # 复制标准字帖作为 originals (使用楷书第一张)
+        kaishu_dir = self.data_dir / "good"
+        kaishu_images = list(kaishu_dir.glob("kaishu_*.png"))
+        if kaishu_images:
+            # 复制几张作为标准字帖
+            chars_seen = set()
+            for img in kaishu_images[:20]:
+                # 提取字符名
+                char_name = img.stem.replace("kaishu_", "").rsplit("_", 1)[0]
+                if char_name not in chars_seen:
+                    shutil.copy2(img, originals_dir / f"{char_name}.png")
+                    chars_seen.add(char_name)
+        
+        # 清理临时文件
+        for img in self.data_dir.glob("*.png"):
+            if img.parent == self.data_dir:
+                img.unlink()
     
     def _organize_kaggle_data(self, output_dir: Path, dataset_key: str):
         """整理 Kaggle 数据集目录结构"""
