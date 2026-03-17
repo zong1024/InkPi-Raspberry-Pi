@@ -13,12 +13,13 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 配置参数
+# 配置参数 (V100 优化)
 SAMPLES_PER_LEVEL=${SAMPLES_PER_LEVEL:-500}  # 每级别样本数
 EPOCHS=${EPOCHS:-100}                        # 训练轮数
-BATCH_SIZE=${BATCH_SIZE:-64}                 # 批大小
-LEARNING_RATE=${LEARNING_RATE:-1e-4}         # 学习率
+BATCH_SIZE=${BATCH_SIZE:-128}                # 批大小 (V100: 128)
+LEARNING_RATE=${LEARNING_RATE:-3e-4}         # 学习率 (大 batch: 3e-4)
 DATA_SOURCE=${DATA_SOURCE:-real}             # 数据源: real (真实) 或 synthetic (合成)
+NUM_WORKERS=${NUM_WORKERS:-8}                # 数据加载线程
 
 # 获取脚本目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -193,14 +194,16 @@ cd "$PROJECT_ROOT"
 # 记录开始时间
 START_TIME=$(date +%s)
 
-# 运行训练
+# 运行训练 (V100 优化: AMP + 大 batch + 多线程)
 python3 training/train_siamese.py \
     --data $DATA_DIR \
     --epochs $EPOCHS \
     --batch-size $BATCH_SIZE \
     --lr $LEARNING_RATE \
     --device cuda \
-    --pretrained
+    --pretrained \
+    --amp \
+    --workers $NUM_WORKERS
 
 # 记录结束时间
 END_TIME=$(date +%s)

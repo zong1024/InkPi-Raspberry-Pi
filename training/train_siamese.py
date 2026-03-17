@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import autocast, GradScaler
 from torchvision.models import mobilenet_v3_small
 from torchvision import transforms
 from pathlib import Path
@@ -252,10 +253,24 @@ def train_one_epoch(
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
-    epoch: int
+    epoch: int,
+    scaler: GradScaler = None,
+    use_amp: bool = True,
+    scheduler=None
 ) -> dict:
     """
-    训练一个 Epoch
+    训练一个 Epoch (支持 AMP 混合精度)
+    
+    Args:
+        model: 模型
+        dataloader: 数据加载器
+        criterion: 损失函数
+        optimizer: 优化器
+        device: 设备
+        epoch: 当前轮次
+        scaler: GradScaler (AMP)
+        use_amp: 是否使用混合精度
+        scheduler: 学习率调度器 (OneCycleLR)
     """
     model.train()
     total_loss = 0.0
@@ -266,20 +281,32 @@ def train_one_epoch(
     
     for batch in pbar:
         # 获取数据
-        template = batch["template"].to(device)
-        sample = batch["sample"].to(device)
-        target = batch["target"].to(device)
+        template = batch["template"].to(device, non_blocking=True)
+        sample = batch["sample"].to(device, non_blocking=True)
+        target = batch["target"].to(device, non_blocking=True)
         
-        # 前向传播
-        feat1, feat2 = model(template, sample)
-        
-        # 计算损失
-        loss = criterion(feat1, feat2, target)
-        
-        # 反向传播
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        
+        # 混合精度训练
+        if use_amp and scaler is not None:
+            with autocast():
+                feat1, feat2 = model(template, sample)
+                loss = criterion(feat1, feat2, target)
+            
+            # 反向传播 (scaled)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            # 标准 FP32 训练
+            feat1, feat2 = model(template, sample)
+            loss = criterion(feat1, feat2, target)
+            loss.backward()
+            optimizer.step()
+        
+        # OneCycleLR: 每个 batch 更新学习率
+        if scheduler is not None:
+            scheduler.step()
         
         # 统计
         total_loss += loss.item() * template.size(0)
@@ -419,10 +446,25 @@ def train(
     weight_decay: float = 1e-5,
     pretrained: bool = False,
     seed: int = 42,
-    device: str = None
+    device: str = None,
+    use_amp: bool = True,
+    num_workers: int = 8
 ):
     """
-    训练主函数
+    训练主函数 (V100 优化版)
+    
+    Args:
+        data_dir: 数据目录
+        output_dir: 输出目录
+        epochs: 训练轮数
+        batch_size: 批大小 (V100 推荐 128)
+        learning_rate: 学习率 (大 batch 需相应增加)
+        weight_decay: 权重衰减
+        pretrained: 使用预训练权重
+        seed: 随机种子
+        device: 设备
+        use_amp: 使用混合精度训练 (V100 推荐 True)
+        num_workers: 数据加载线程数
     """
     # 设置随机种子
     torch.manual_seed(seed)
@@ -434,6 +476,16 @@ def train(
         device = "cuda" if torch.cuda.is_available() else "cpu"
     device = torch.device(device)
     logger.info(f"🎯 使用设备: {device}")
+    
+    # 检查 GPU 信息
+    if device.type == "cuda":
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        logger.info(f"🎮 GPU: {gpu_name} ({gpu_memory:.1f} GB)")
+        
+        # V100 优化: 启用 cudnn benchmark
+        torch.backends.cudnn.benchmark = True
+        logger.info("⚡ cuDNN Benchmark: Enabled")
     
     # 路径
     if data_dir is None:
@@ -463,62 +515,85 @@ def train(
         seed=seed
     )
     
-    # 创建数据加载器
+    # 创建数据加载器 (V100 优化)
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
-        pin_memory=True
+        num_workers=num_workers,
+        pin_memory=True,
+        prefetch_factor=4 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True
+        num_workers=num_workers,
+        pin_memory=True,
+        prefetch_factor=4 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0
     )
     
     # 创建模型
     model = SiameseNet(pretrained=pretrained).to(device)
     logger.info(f"📦 模型参数: {sum(p.numel() for p in model.parameters()):,}")
     
+    # PyTorch 2.0+ 编译优化
+    if hasattr(torch, 'compile'):
+        try:
+            model = torch.compile(model)
+            logger.info("⚡ torch.compile: Enabled")
+        except Exception as e:
+            logger.warning(f"torch.compile 失败: {e}")
+    
     # 损失函数
     criterion = nn.CosineEmbeddingLoss(margin=0.0)
     
     # 优化器
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.AdamW(  # AdamW 更稳定
         model.parameters(),
         lr=learning_rate,
         weight_decay=weight_decay
     )
     
-    # 学习率调度器
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    # 学习率调度器 (OneCycleLR 更适合大 batch)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
-        T_max=epochs,
-        eta_min=1e-6
+        max_lr=learning_rate * 10,  # OneCycle 最高学习率
+        epochs=epochs,
+        steps_per_epoch=len(train_loader),
+        pct_start=0.1,  # 10% warmup
+        anneal_strategy='cos'
     )
+    
+    # AMP GradScaler
+    scaler = GradScaler() if use_amp and device.type == "cuda" else None
+    if scaler:
+        logger.info("⚡ Mixed Precision (AMP): Enabled")
     
     # 训练循环
     best_val_loss = float("inf")
     history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
     
     logger.info("=" * 60)
-    logger.info("🚀 开始训练")
+    logger.info("🚀 开始训练 (V100 优化)")
     logger.info("=" * 60)
     logger.info(f"训练样本: {len(train_dataset)}")
     logger.info(f"验证样本: {len(val_dataset)}")
     logger.info(f"Epochs: {epochs}")
     logger.info(f"Batch Size: {batch_size}")
     logger.info(f"Learning Rate: {learning_rate}")
+    logger.info(f"AMP: {use_amp}")
+    logger.info(f"Workers: {num_workers}")
     logger.info("=" * 60)
     
     for epoch in range(1, epochs + 1):
         # 训练
         train_metrics = train_one_epoch(
-            model, train_loader, criterion, optimizer, device, epoch
+            model, train_loader, criterion, optimizer, device, epoch,
+            scaler=scaler, use_amp=use_amp, scheduler=scheduler
         )
         
         # 验证
@@ -526,8 +601,8 @@ def train(
             model, val_loader, criterion, device, epoch
         )
         
-        # 更新学习率
-        scheduler.step()
+        # 更新学习率 (OneCycleLR step per batch, not per epoch)
+        # scheduler.step() 已在 train_one_epoch 中调用
         
         # 记录历史
         history["train_loss"].append(train_metrics["loss"])
@@ -540,7 +615,7 @@ def train(
             f"Epoch {epoch}/{epochs} - "
             f"Train Loss: {train_metrics['loss']:.4f}, Acc: {train_metrics['accuracy']:.4f} | "
             f"Val Loss: {val_metrics['loss']:.4f}, Acc: {val_metrics['accuracy']:.4f} | "
-            f"LR: {scheduler.get_last_lr()[0]:.6f}"
+            f"LR: {optimizer.param_groups[0]['lr']:.6f}"
         )
         
         # 保存最佳模型
@@ -587,16 +662,19 @@ def train(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="InkPi 孪生网络训练")
+    parser = argparse.ArgumentParser(description="InkPi 孪生网络训练 (V100 优化版)")
     parser.add_argument("--data", "-d", type=str, default=str(DATA_DIR), help="数据目录")
     parser.add_argument("--output", "-o", type=str, default=str(OUTPUT_DIR), help="输出目录")
     parser.add_argument("--epochs", "-e", type=int, default=50, help="训练轮数")
-    parser.add_argument("--batch-size", "-b", type=int, default=32, help="批大小")
-    parser.add_argument("--lr", type=float, default=1e-4, help="学习率")
+    parser.add_argument("--batch-size", "-b", type=int, default=128, help="批大小 (V100: 128)")
+    parser.add_argument("--lr", type=float, default=3e-4, help="学习率 (大 batch: 3e-4)")
     parser.add_argument("--weight-decay", type=float, default=1e-5, help="权重衰减")
     parser.add_argument("--pretrained", action="store_true", help="使用预训练权重")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     parser.add_argument("--device", type=str, default=None, help="设备 (cuda/cpu)")
+    parser.add_argument("--amp", action="store_true", default=True, help="启用混合精度训练")
+    parser.add_argument("--no-amp", action="store_false", dest="amp", help="禁用混合精度")
+    parser.add_argument("--workers", "-w", type=int, default=8, help="数据加载线程数")
     
     args = parser.parse_args()
     
@@ -609,7 +687,9 @@ def main():
         weight_decay=args.weight_decay,
         pretrained=args.pretrained,
         seed=args.seed,
-        device=args.device
+        device=args.device,
+        use_amp=args.amp,
+        num_workers=args.workers
     )
 
 
