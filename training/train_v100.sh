@@ -60,77 +60,77 @@ echo "  - 数据加载线程: $WORKERS"
 echo ""
 
 # ============================================================
-# 步骤 1: 环境检查
+# 步骤 1: 环境检查与驱动安装
 # ============================================================
 echo -e "${YELLOW}[1/6] 环境检查和驱动安装...${NC}"
 
-# ============================================================
-# 子步骤 1.0: 自动安装 NVIDIA 驱动（如果未安装）
-# ============================================================
+# 可选：自动安装 NVIDIA 驱动（默认启用）
+AUTO_INSTALL_DRIVERS=${AUTO_INSTALL_DRIVERS:-1}
 
 # 检查 NVIDIA 驱动
 if ! command -v nvidia-smi &> /dev/null; then
-    echo -e "${YELLOW}未检测到 NVIDIA 驱动，正在自动安装...${NC}"
-    
-    # 检查 Linux 发行版
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-    fi
-    
-    # 根据系统类型安装驱动
-    case "$OS" in
-        ubuntu|debian)
-            echo "检测到基于 Debian 的系统，使用 apt 安装..."
-            sudo apt-get update
-            echo "安装 NVIDIA 驱动 (版本 >= 535，支持 V100 + CUDA 11.8)..."
-            sudo apt-get install -y nvidia-driver-535
-            
-            # 重新加载驱动
-            echo "重新加载 NVIDIA 驱动模块..."
-            sudo modprobe nvidia
-            sudo modprobe nvidia-uvm
-            ;;
-            
-        rhel|centos|fedora)
-            echo "检测到基于 RedHat 的系统，使用 yum 安装..."
-            sudo yum update -y
-            echo "安装 NVIDIA 驱动 (版本 >= 535)..."
-            sudo yum install -y gcc kernel-devel
-            sudo yum groupinstall -y "Development Tools"
-            sudo yum install -y nvidia-driver-latest-dkms nvidia-utils
-            ;;
-            
-        *)
-            echo -e "${RED}未支持的 Linux 发行版: $OS${NC}"
-            echo "请手动从以下网址下载并安装 NVIDIA 驱动:"
-            echo "https://www.nvidia.com/Download/driverDetails.aspx/178898"
+    if [ "$AUTO_INSTALL_DRIVERS" -eq 1 ]; then
+        echo -e "${YELLOW}未检测到 NVIDIA 驱动，尝试自动安装（需要 sudo 权限）...${NC}"
+        
+        # 检查 Linux 发行版
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            OS=$ID
+        fi
+        
+        case "$OS" in
+            ubuntu|debian)
+                echo "检测到基于 Debian 的系统，使用 ubuntu-drivers 和 apt 安装..."
+                sudo apt-get update
+                sudo apt-get install -y ubuntu-drivers-common || true
+                
+                # 尝试自动安装推荐驱动
+                echo "安装推荐驱动版本..."
+                sudo ubuntu-drivers autoinstall || true
+                
+                # 尝试安装 CUDA toolkit 11.8（若仓库可用）
+                echo "尝试安装 CUDA toolkit 11.8..."
+                sudo apt-get install -y cuda-toolkit-11-8 || true
+                
+                # 设置环境变量
+                export PATH=/usr/local/cuda-11.8/bin:$PATH
+                export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:$LD_LIBRARY_PATH
+                ;;
+                
+            rhel|centos|fedora)
+                echo "检测到基于 RedHat 的系统，使用 yum 安装..."
+                sudo yum update -y
+                sudo yum groupinstall -y "Development Tools"
+                sudo yum install -y gcc kernel-devel
+                
+                # 安装最新驱动
+                echo "安装 NVIDIA 驱动..."
+                sudo yum install -y nvidia-driver-latest-dkms nvidia-utils || true
+                
+                # 尝试安装CUDA
+                echo "尝试安装 CUDA 11.8..."
+                sudo yum install -y cuda-11-8 || true
+                ;;
+                
+            *)
+                echo -e "${YELLOW}未识别的 Linux 发行版: $OS${NC}"
+                echo "建议手动安装，参考: https://developer.nvidia.com/cuda-downloads"
+                ;;
+        esac
+        
+        # 重新检测驱动
+        if ! command -v nvidia-smi &> /dev/null; then
+            echo -e "${YELLOW}自动安装可能需要重启系统。请运行: sudo reboot${NC}"
+            echo "重启后重新运行此脚本。"
+            echo ""
+            echo "或手动参考官方文档进行安装:"
+            echo "  https://developer.nvidia.com/cuda-downloads"
             exit 1
-            ;;
-    esac
-    
-    # 验证驱动安装
-    if ! command -v nvidia-smi &> /dev/null; then
-        echo -e "${RED}NVIDIA 驱动安装失败，请手动访问:"
-        echo "https://www.nvidia.com/Download/driverDetails.aspx/178898"
-        echo "选择 V100 并下载对应驱动"
+        fi
+    else
+        echo -e "${RED}错误: 未检测到 NVIDIA 驱动（设置 AUTO_INSTALL_DRIVERS=0 可跳过）${NC}"
         exit 1
     fi
-    
-    echo -e "${GREEN}NVIDIA 驱动安装成功!${NC}"
-    echo ""
-fi
-
-# 验证驱动版本（V100 建议驱动版本 >= 450）
-DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
-MAJOR_VERSION=$(echo $DRIVER_VERSION | cut -d. -f1)
-
-echo "检查驱动版本..."
-if [ "$MAJOR_VERSION" -lt 450 ]; then
-    echo -e "${YELLOW}警告: 驱动版本较老 (${DRIVER_VERSION})，建议升级到 >= 535 版本${NC}"
-    echo "可以运行以下命令升级:"
-    echo "  sudo apt-get install -y --only-upgrade nvidia-driver-535"
-    echo ""
 fi
 
 # 检查 GPU
@@ -143,60 +143,8 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 
 # 检查 CUDA
 if ! command -v nvcc &> /dev/null; then
-    echo -e "${YELLOW}nvcc 未找到，正在自动安装 CUDA 11.8...${NC}"
-    
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-    fi
-    
-    case "$OS" in
-        ubuntu|debian)
-            # 对于 Ubuntu 22.04 / 20.04
-            UBUNTU_VERSION=$(lsb_release -rs)
-            
-            # 添加 NVIDIA CUDA 仓库
-            ARCH=$(dpkg --print-architecture)
-            distro=$(lsb_release -is | tr '[:upper:]' '[:lower:]')
-            
-            echo "添加 NVIDIA CUDA 仓库..."
-            sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/$distro$UBUNTU_VERSION/$ARCH/3bf863cc.pub || true
-            sudo add-apt-repository "deb https://developer.download.nvidia.com/compute/cuda/repos/$distro$UBUNTU_VERSION/$ARCH /" || true
-            
-            echo "安装 CUDA 11.8..."
-            sudo apt-get update
-            sudo apt-get install -y cuda-11-8
-            
-            # 设置环境变量
-            export PATH=/usr/local/cuda-11.8/bin:$PATH
-            export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:$LD_LIBRARY_PATH
-            
-            # 写入 .bashrc（持久化）
-            if ! grep -q "CUDA_11.8" ~/.bashrc; then
-                echo '# CUDA 11.8' >> ~/.bashrc
-                echo 'export PATH=/usr/local/cuda-11.8/bin:$PATH' >> ~/.bashrc
-                echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
-            fi
-            ;;
-            
-        rhel|centos|fedora)
-            echo "安装 CUDA 11.8..."
-            sudo yum install -y cuda-11-8
-            
-            # 设置环境变量
-            export PATH=/usr/local/cuda-11.8/bin:$PATH
-            export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:$LD_LIBRARY_PATH
-            ;;
-            
-        *)
-            echo -e "${YELLOW}警告: 无法自动安装 CUDA，请手动从以下网址下载:${NC}"
-            echo "https://developer.nvidia.com/cuda-11-8-0-download-archive"
-            ;;
-    esac
-fi
-
-# 验证 CUDA 安装
-if command -v nvcc &> /dev/null; then
+    echo -e "${YELLOW}警告: nvcc 未找到，尝试使用系统 CUDA 或 PyTorch 自带的 CUDA${NC}"
+else
     CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
     echo -e "${GREEN}CUDA 版本: $CUDA_VERSION${NC}"
     
@@ -207,8 +155,6 @@ if command -v nvcc &> /dev/null; then
     if [ "$CUDA_MAJOR" -lt 11 ] || ([ "$CUDA_MAJOR" -eq 11 ] && [ "$CUDA_MINOR" -lt 8 ]); then
         echo -e "${YELLOW}警告: CUDA 版本较低 ($CUDA_VERSION)，建议升级到 11.8 或更高版本${NC}"
     fi
-else
-    echo -e "${YELLOW}警告: 无法自动安装 CUDA，PyTorch 将尝试使用自带的 CUDA${NC}"
 fi
 
 # 检查 Python
