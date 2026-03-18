@@ -2,15 +2,35 @@
 
 本目录包含 InkPi 书法评测系统的孪生网络训练代码。
 
-## 📁 文件结构
+## ⚡ 快速开始
+
+### 有 GPU（NVIDIA V100/RTX）？
+```bash
+bash training/train_v100.sh        # 约 1-2 小时
+```
+
+### 没有 GPU（CPU 只）？
+```bash
+bash training/train_cpu.sh         # 约 2-4 小时
+```
+
+� [详细对比 →](GPU_CPU_COMPARISON.md)
+
+---
+
+## �📁 文件结构
 
 ```
 training/
-├── download_real_dataset.py  # 🆕 真实数据集下载器
-├── dataset_builder.py        # 合成数据集生成器
-├── train_siamese.py          # 孪生网络训练脚本
-├── train_v100.sh             # V100 一键训练脚本
-└── README.md                 # 本文件
+├── 📜 train_v100.sh              # GPU 优化训练脚本 (V100/RTX)
+├── 📜 train_cpu.sh               # CPU 优化训练脚本 (新增 ⭐)
+├── 📚 train_siamese.py           # 训练核心代码
+├── 🎨 dataset_builder.py         # 合成数据生成
+├── 📥 download_real_dataset.py   # 真实数据下载
+├── 📖 README.md                  # 本文件
+├── 📖 CPU_TRAINING_GUIDE.md      # CPU 完整指南 (新增 ⭐)
+├── 📖 GPU_CPU_COMPARISON.md      # 版本对比分析 (新增 ⭐)
+└── 📖 TRAINING_FIX.md            # 训练问题修复记录
 ```
 
 ---
