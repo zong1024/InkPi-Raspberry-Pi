@@ -48,11 +48,37 @@ echo ""
 # 步骤 1: 环境检查
 # ============================================================
 echo -e "${YELLOW}[1/6] 环境检查...${NC}"
+# 可选：自动安装 NVIDIA 驱动（默认启用）
+AUTO_INSTALL_DRIVERS=${AUTO_INSTALL_DRIVERS:-1}
 
 # 检查 NVIDIA 驱动
 if ! command -v nvidia-smi &> /dev/null; then
-    echo -e "${RED}错误: 未检测到 NVIDIA 驱动${NC}"
-    exit 1
+    if [ "$AUTO_INSTALL_DRIVERS" -eq 1 ]; then
+        echo -e "${YELLOW}未检测到 NVIDIA 驱动，尝试自动安装（需要 sudo 权限）...${NC}"
+        echo "会执行: sudo apt-get update && sudo apt-get install -y ubuntu-drivers-common && sudo ubuntu-drivers autoinstall"
+        sudo apt-get update
+        sudo apt-get install -y ubuntu-drivers-common || true
+        # 尝试自动安装推荐驱动
+        sudo ubuntu-drivers autoinstall || true
+
+        # 尝试安装 CUDA toolkit 11.8（若仓库可用）
+        echo -e "${YELLOW}尝试安装 cuda-toolkit-11-8（如果可用）...${NC}"
+        sudo apt-get install -y cuda-toolkit-11-8 || true
+
+        # 重新检测 nvidia-smi
+        if ! command -v nvidia-smi &> /dev/null; then
+            echo -e "${RED}自动安装未能检测到 nvidia-smi，可能需要重启或手动安装驱动。${NC}"
+            echo "建议手动执行以下命令（根据系统版本调整）："
+            echo "  sudo apt-get update"
+            echo "  sudo apt-get install -y ubuntu-drivers-common"
+            echo "  sudo ubuntu-drivers autoinstall"
+            echo "或参考 NVIDIA 官方安装文档：https://developer.nvidia.com/cuda-downloads"
+            exit 1
+        fi
+    else
+        echo -e "${RED}错误: 未检测到 NVIDIA 驱动（设置 AUTO_INSTALL_DRIVERS=0 可跳过自动安装）${NC}"
+        exit 1
+    fi
 fi
 
 # 检查 GPU
@@ -61,7 +87,7 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 
 # 检查 CUDA
 if ! command -v nvcc &> /dev/null; then
-    echo -e "${YELLOW}警告: nvcc 未找到，尝试使用系统 CUDA${NC}"
+    echo -e "${YELLOW}警告: nvcc 未找到，尝试使用系统 CUDA（若需要可手动安装 CUDA 11.8）${NC}"
 else
     CUDA_VERSION=$(nvcc --version | grep "release" | awk '{print $6}' | cut -c2-)
     echo -e "${GREEN}CUDA 版本: $CUDA_VERSION${NC}"
