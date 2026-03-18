@@ -493,6 +493,10 @@ def train(
     if output_dir is None:
         output_dir = OUTPUT_DIR
     
+    # 确保 Path 对象
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir)
+    
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # 数据变换
@@ -501,7 +505,7 @@ def train(
     ])
     
     # 检查数据目录
-    logger.info(f"📁 数据目录: {data_dir}")
+    logger.info(f"📁 数据目录: {data_dir.absolute()}")
     if not data_dir.exists():
         logger.error(f"❌ 数据目录不存在: {data_dir}")
         logger.info("请先运行数据生成脚本:")
