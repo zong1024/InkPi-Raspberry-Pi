@@ -147,8 +147,8 @@ if [ "$DATA_SOURCE" = "real" ]; then
     fi
     
     # 统计真实数据
-    TOTAL_COUNT=$(find data/real -name "*.png" 2>/dev/null | wc -l)
-    DATA_DIR="data/real"
+    TOTAL_COUNT=$(find "$PROJECT_ROOT/data/real" -name "*.png" 2>/dev/null | wc -l)
+    DATA_DIR="$PROJECT_ROOT/data/real"
     
     echo -e "${GREEN}真实数据集统计:${NC}"
     echo "  - 总计: $TOTAL_COUNT 张"
@@ -156,7 +156,7 @@ else
     echo -e "${YELLOW}[3/6] 生成合成数据集...${NC}"
     
     # 检查是否已有足够数据
-    EXISTING_SAMPLES=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
+    EXISTING_SAMPLES=$(find "$PROJECT_ROOT/data/synthetic/good" -name "*.png" 2>/dev/null | wc -l)
 
     if [ "$EXISTING_SAMPLES" -ge "$SAMPLES_PER_LEVEL" ]; then
         echo -e "${GREEN}已存在 $EXISTING_SAMPLES 个样本，跳过数据集生成${NC}"
@@ -164,16 +164,16 @@ else
         echo "生成 $SAMPLES_PER_LEVEL 个样本 per 级别..."
         python3 training/dataset_builder.py \
             --samples $SAMPLES_PER_LEVEL \
-            --output data/synthetic \
+            --output "$PROJECT_ROOT/data/synthetic" \
             --quality good medium poor
     fi
 
     # 统计总样本数
-    TOTAL_GOOD=$(find data/synthetic/good -name "*.png" 2>/dev/null | wc -l)
-    TOTAL_MEDIUM=$(find data/synthetic/medium -name "*.png" 2>/dev/null | wc -l)
-    TOTAL_POOR=$(find data/synthetic/poor -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_GOOD=$(find "$PROJECT_ROOT/data/synthetic/good" -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_MEDIUM=$(find "$PROJECT_ROOT/data/synthetic/medium" -name "*.png" 2>/dev/null | wc -l)
+    TOTAL_POOR=$(find "$PROJECT_ROOT/data/synthetic/poor" -name "*.png" 2>/dev/null | wc -l)
     TOTAL_COUNT=$((TOTAL_GOOD + TOTAL_MEDIUM + TOTAL_POOR))
-    DATA_DIR="data/synthetic"
+    DATA_DIR="$PROJECT_ROOT/data/synthetic"
 
     echo -e "${GREEN}合成数据集统计:${NC}"
     echo "  - good: $TOTAL_GOOD 张"
@@ -224,19 +224,19 @@ echo -e "${YELLOW}[5/6] 导出 ONNX 模型...${NC}"
 cd "$PROJECT_ROOT"
 
 # 检查模型文件
-if [ ! -f "models/siamese_calligraphy_best.pth" ]; then
+if [ ! -f "$PROJECT_ROOT/models/siamese_calligraphy_best.pth" ]; then
     echo -e "${RED}错误: 训练后的模型文件不存在${NC}"
     exit 1
 fi
 
 # 验证 ONNX 模型
-if [ -f "models/siamese_calligraphy.onnx" ]; then
+if [ -f "$PROJECT_ROOT/models/siamese_calligraphy.onnx" ]; then
     echo -e "${GREEN}ONNX 模型已导出: models/siamese_calligraphy.onnx${NC}"
     
     # 显示模型信息
     python3 -c "
 import onnx
-model = onnx.load('models/siamese_calligraphy.onnx')
+model = onnx.load('$PROJECT_ROOT/models/siamese_calligraphy.onnx')
 print('ONNX 模型信息:')
 print(f'  - IR 版本: {model.ir_version}')
 print(f'  - 生产者: {model.producer_name}')
@@ -270,22 +270,22 @@ echo "输出文件:"
 echo ""
 
 # 模型文件
-if [ -f "models/siamese_calligraphy_best.pth" ]; then
-    BEST_SIZE=$(du -h models/siamese_calligraphy_best.pth | cut -f1)
+if [ -f "$PROJECT_ROOT/models/siamese_calligraphy_best.pth" ]; then
+    BEST_SIZE=$(du -h "$PROJECT_ROOT/models/siamese_calligraphy_best.pth" | cut -f1)
     echo -e "  ${GREEN}✓${NC} models/siamese_calligraphy_best.pth ($BEST_SIZE)"
 fi
 
-if [ -f "models/siamese_calligraphy_final.pth" ]; then
-    FINAL_SIZE=$(du -h models/siamese_calligraphy_final.pth | cut -f1)
+if [ -f "$PROJECT_ROOT/models/siamese_calligraphy_final.pth" ]; then
+    FINAL_SIZE=$(du -h "$PROJECT_ROOT/models/siamese_calligraphy_final.pth" | cut -f1)
     echo -e "  ${GREEN}✓${NC} models/siamese_calligraphy_final.pth ($FINAL_SIZE)"
 fi
 
-if [ -f "models/siamese_calligraphy.onnx" ]; then
-    ONNX_SIZE=$(du -h models/siamese_calligraphy.onnx | cut -f1)
+if [ -f "$PROJECT_ROOT/models/siamese_calligraphy.onnx" ]; then
+    ONNX_SIZE=$(du -h "$PROJECT_ROOT/models/siamese_calligraphy.onnx" | cut -f1)
     echo -e "  ${GREEN}✓${NC} models/siamese_calligraphy.onnx ($ONNX_SIZE)"
 fi
 
-if [ -f "models/training_history.json" ]; then
+if [ -f "$PROJECT_ROOT/models/training_history.json" ]; then
     echo -e "  ${GREEN}✓${NC} models/training_history.json"
 fi
 
