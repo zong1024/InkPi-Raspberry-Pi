@@ -1,121 +1,167 @@
-// pages/index/index.js
+// pages/index/index.js - 设备连接页
 const app = getApp();
 
 Page({
   data: {
-    username: '',
-    password: '',
-    agreed: false
+    isConnected: false,
+    connectionStatus: '未配置',
+    statusDetail: '请设置树莓派 IP 地址',
+    raspberryPiIP: '',
+    latency: 0,
+    isChecking: false,
+    showIPModal: false,
+    inputIP: ''
   },
 
-  onLoad: function (options) {
-    // 检查是否已登录
-    if (app.globalData.isLoggedIn) {
-      this.navigateToHistory();
-    }
-  },
-
-  // 用户名输入
-  onUsernameInput: function (e) {
-    this.setData({
-      username: e.detail.value
+  onLoad: function () {
+    // 监听连接状态变化
+    this.unregisterCallback = app.onConnectionChange((isConnected) => {
+      this.updateConnectionStatus();
     });
   },
 
-  // 密码输入
-  onPasswordInput: function (e) {
+  onShow: function () {
+    // 每次显示页面时更新状态
+    this.updateConnectionStatus();
+  },
+
+  onUnload: function () {
+    // 取消注册回调
+    if (this.unregisterCallback) {
+      this.unregisterCallback();
+    }
+  },
+
+  // 更新连接状态显示
+  updateConnectionStatus: function () {
+    const globalData = app.globalData;
+    
+    let statusDetail = '';
+    if (!globalData.raspberryPiIP) {
+      statusDetail = '请设置树莓派 IP 地址';
+    } else if (globalData.isConnected) {
+      statusDetail = '树莓派已连接，可以开始评测';
+    } else {
+      statusDetail = '无法连接到树莓派，请检查网络';
+    }
+
     this.setData({
-      password: e.detail.value
+      isConnected: globalData.isConnected,
+      connectionStatus: globalData.connectionStatus,
+      statusDetail: statusDetail,
+      raspberryPiIP: globalData.raspberryPiIP,
+      latency: globalData.latency
     });
   },
 
-  // 协议勾选
-  onAgreementChange: function (e) {
-    this.setData({
-      agreed: e.detail.value.length > 0
-    });
-  },
+  // 刷新连接状态
+  onRefreshStatus: async function () {
+    if (this.data.isChecking) return;
 
-  // 登录/注册
-  onLogin: async function () {
-    const { username, password, agreed } = this.data;
-
-    // 验证
-    if (!username.trim()) {
-      wx.showToast({ title: '请输入用户名', icon: 'none' });
-      return;
-    }
-    if (!password.trim()) {
-      wx.showToast({ title: '请输入密码', icon: 'none' });
-      return;
-    }
-    if (password.length < 4) {
-      wx.showToast({ title: '密码至少4位', icon: 'none' });
-      return;
-    }
-    if (!agreed) {
-      wx.showToast({ title: '请先同意用户协议', icon: 'none' });
-      return;
-    }
-
-    wx.showLoading({ title: '登录中...' });
+    this.setData({ isChecking: true });
 
     try {
-      const res = await wx.cloud.callFunction({
-        name: 'login',
-        data: {
-          username: username.trim(),
-          password: password.trim()
-        }
-      });
+      await app.checkRaspberryPiConnection();
+      this.updateConnectionStatus();
 
-      wx.hideLoading();
-
-      if (res.result.success) {
-        // 保存用户信息到全局
-        app.globalData.isLoggedIn = true;
-        app.globalData.userInfo = res.result.userInfo;
-        app.globalData.openid = res.result.openid;
-
-        // 保存到本地存储
-        wx.setStorageSync('userInfo', res.result.userInfo);
-        wx.setStorageSync('isLoggedIn', true);
-
+      if (this.data.isConnected) {
         wx.showToast({
-          title: res.result.isNewUser ? '注册成功' : '登录成功',
+          title: '连接成功',
           icon: 'success'
         });
-
-        setTimeout(() => {
-          this.navigateToHistory();
-        }, 1000);
       } else {
         wx.showToast({
-          title: res.result.message || '登录失败',
-          icon: 'none'
+          title: '连接失败',
+          icon: 'error'
+        });
+      }
+    } catch (err) {
+      wx.showToast({
+        title: '检测失败',
+        icon: 'error'
+      });
+    } finally {
+      this.setData({ isChecking: false });
+    }
+  },
+
+  // 显示 IP 设置弹窗
+  onShowIPSetting: function () {
+    this.setData({
+      showIPModal: true,
+      inputIP: this.data.raspberryPiIP || ''
+    });
+  },
+
+  // 隐藏 IP 设置弹窗
+  onHideIPSetting: function () {
+    this.setData({ showIPModal: false });
+  },
+
+  // 阻止事件冒泡
+  preventClose: function () {},
+
+  // IP 输入
+  onIPInput: function (e) {
+    this.setData({
+      inputIP: e.detail.value
+    });
+  },
+
+  // 确认 IP 设置
+  onConfirmIP: async function () {
+    const ip = this.data.inputIP.trim();
+
+    if (!ip) {
+      wx.showToast({
+        title: '请输入 IP 地址',
+        icon: 'none'
+      });
+      return;
+    }
+
+    // 简单验证 IP 格式
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipPattern.test(ip)) {
+      wx.showToast({
+        title: 'IP 格式不正确',
+        icon: 'none'
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '连接中...' });
+
+    try {
+      const success = await app.setRaspberryPiIP(ip);
+      
+      wx.hideLoading();
+      this.setData({ showIPModal: false });
+      this.updateConnectionStatus();
+
+      if (success) {
+        wx.showToast({
+          title: '连接成功',
+          icon: 'success'
+        });
+      } else {
+        wx.showToast({
+          title: '连接失败，请检查 IP',
+          icon: 'none',
+          duration: 2000
         });
       }
     } catch (err) {
       wx.hideLoading();
       wx.showToast({
-        title: '网络错误',
+        title: '设置失败',
         icon: 'error'
       });
-      console.error('登录失败', err);
     }
   },
 
-  // 打开协议
-  onOpenAgreement: function (e) {
-    wx.showModal({
-      title: '用户服务协议',
-      content: '欢迎使用墨韵评测小程序。本应用为书法评测工具，用户信息仅用于数据同步。',
-      showCancel: false
-    });
-  },
-
-  // 跳转到历史记录页
-  navigateToHistory: function () {
+  // 跳转到历史页
+  goToHistory: function () {
     wx.switchTab({
       url: '/pages/history/history'
     });

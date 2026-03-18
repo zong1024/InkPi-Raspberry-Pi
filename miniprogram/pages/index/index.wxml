@@ -1,5 +1,5 @@
-<!--pages/index/index.wxml-->
-<view class="login-container xuan-paper">
+<!--pages/index/index.wxml - 设备连接页-->
+<view class="container xuan-paper">
   <!-- Logo区域 -->
   <view class="logo-section">
     <view class="logo-wrapper">
@@ -12,54 +12,105 @@
     <text class="app-desc">传承书法之美，品味笔墨芳华</text>
   </view>
 
-  <!-- 登录表单 -->
-  <view class="form-section">
-    <view class="input-group">
-      <text class="input-icon">👤</text>
-      <input 
-        class="input-field" 
-        type="text" 
-        placeholder="请输入用户名" 
-        value="{{username}}" 
-        bindinput="onUsernameInput"
-        maxlength="20"
-      />
+  <!-- 连接状态卡片 -->
+  <view class="connection-card {{isConnected ? 'connected' : 'disconnected'}}">
+    <view class="status-header">
+    <view class="status-icon {{isConnected ? 'connected' : 'disconnected'}}">
+      <text>{{isConnected ? '✓' : '✗'}}</text>
+    </view>
+      <view class="status-text">
+        <text class="status-title">{{connectionStatus}}</text>
+        <text class="status-subtitle">{{statusDetail}}</text>
+      </view>
     </view>
     
-    <view class="input-group">
-      <text class="input-icon">🔒</text>
-      <input 
-        class="input-field" 
-        type="password" 
-        placeholder="请输入密码" 
-        value="{{password}}" 
-        bindinput="onPasswordInput"
-        maxlength="20"
-      />
+    <!-- 连接详情 -->
+    <view class="connection-details" wx:if="{{isConnected}}">
+      <view class="detail-row">
+        <view class="detail-item">
+          <text class="detail-label">设备 IP</text>
+          <text class="detail-value">{{raspberryPiIP}}</text>
+        </view>
+        <view class="detail-item">
+          <text class="detail-label">延迟</text>
+          <text class="detail-value">{{latency}}ms</text>
+        </view>
+      </view>
     </view>
-    
-    <button class="btn-primary" bindtap="onLogin">
-      <text>登录 / 注册</text>
-    </button>
-    
-    <text class="login-hint">未注册的用户将自动创建账号</text>
   </view>
 
-  <!-- 协议 -->
-  <view class="agreement">
-    <checkbox-group bindchange="onAgreementChange">
-      <label class="agreement-label">
-        <checkbox value="agreed" checked="{{agreed}}" color="#e03229"/>
-        <text class="agreement-text">
-          登录即代表您已阅读并同意
-          <text class="link" bindtap="onOpenAgreement" data-type="service">《用户服务协议》</text>
-        </text>
-      </label>
-    </checkbox-group>
+  <!-- 操作按钮 -->
+  <view class="action-buttons">
+    <button class="btn-primary" bindtap="onRefreshStatus" loading="{{isChecking}}">
+      <text>{{isChecking ? '检测中...' : '刷新状态'}}</text>
+    </button>
+    
+    <view class="btn-row">
+      <button class="btn-secondary" bindtap="onShowIPSetting">
+        <text>设置 IP</text>
+      </button>
+      
+      <button class="btn-secondary {{isConnected ? '' : 'disabled'}}" 
+              bindtap="goToHistory" 
+              disabled="{{!isConnected}}">
+        <text>开始评测</text>
+      </button>
+    </view>
+  </view>
+
+  <!-- 使用说明 -->
+  <view class="guide-section">
+    <text class="guide-title">使用说明</text>
+    <view class="guide-steps">
+      <view class="guide-step">
+        <view class="step-number">1</view>
+        <text class="step-text">确保树莓派已启动并连接局域网</text>
+      </view>
+      <view class="guide-step">
+        <view class="step-number">2</view>
+        <text class="step-text">点击"设置 IP"输入树莓派地址</text>
+      </view>
+      <view class="guide-step">
+        <view class="step-number">3</view>
+        <text class="step-text">连接成功后点击"开始评测"</text>
+      </view>
+    </view>
   </view>
 
   <!-- 底部装饰 -->
   <view class="footer-decoration"></view>
+</view>
+
+<!-- IP 设置弹窗 -->
+<view class="modal-mask" wx:if="{{showIPModal}}" bindtap="onHideIPSetting">
+  <view class="modal-content" catchtap="preventClose">
+    <view class="modal-header">
+      <text class="modal-title">设置树莓派 IP</text>
+      <text class="modal-close" bindtap="onHideIPSetting">×</text>
+    </view>
+    
+    <view class="modal-body">
+      <view class="input-group">
+        <text class="input-label">IP 地址</text>
+        <input 
+          class="input-field" 
+          type="text" 
+          placeholder="例如: 192.168.1.100" 
+          value="{{inputIP}}" 
+          bindinput="onIPInput"
+        />
+      </view>
+      
+      <view class="input-hint">
+        <text>请确保手机与树莓派在同一局域网内</text>
+      </view>
+    </view>
+    
+    <view class="modal-footer">
+      <button class="btn-cancel" bindtap="onHideIPSetting">取消</button>
+      <button class="btn-confirm" bindtap="onConfirmIP">确认</button>
+    </view>
+  </view>
 </view>
 
 <!-- 版权信息 -->
