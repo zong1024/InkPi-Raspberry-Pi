@@ -500,6 +500,40 @@ def train(
         transforms.ToTensor(),  # 自动归一化到 [0, 1]
     ])
     
+    # 检查数据目录
+    logger.info(f"📁 数据目录: {data_dir}")
+    if not data_dir.exists():
+        logger.error(f"❌ 数据目录不存在: {data_dir}")
+        logger.info("请先运行数据生成脚本:")
+        logger.info("  python3 training/dataset_builder.py --samples 500")
+        raise FileNotFoundError(f"数据目录不存在: {data_dir}")
+    
+    # 检查子目录
+    originals_dir = data_dir / "originals"
+    good_dir = data_dir / "good"
+    
+    originals_count = len(list(originals_dir.glob("*.png"))) if originals_dir.exists() else 0
+    good_count = len(list(good_dir.glob("*.png"))) if good_dir.exists() else 0
+    medium_count = len(list((data_dir / "medium").glob("*.png"))) if (data_dir / "medium").exists() else 0
+    poor_count = len(list((data_dir / "poor").glob("*.png"))) if (data_dir / "poor").exists() else 0
+    
+    logger.info(f"  originals/: {originals_count} 张")
+    logger.info(f"  good/: {good_count} 张")
+    logger.info(f"  medium/: {medium_count} 张")
+    logger.info(f"  poor/: {poor_count} 张")
+    
+    if originals_count == 0:
+        logger.error("❌ originals/ 目录为空，缺少字帖模板")
+        raise ValueError("缺少字帖模板，请检查 originals/ 目录")
+    
+    if good_count + medium_count + poor_count == 0:
+        logger.error("❌ 没有找到训练样本")
+        logger.info("请先运行数据生成脚本:")
+        logger.info("  python3 training/dataset_builder.py --samples 500")
+        logger.info("或下载真实数据集:")
+        logger.info("  python3 training/download_real_dataset.py --source github")
+        raise ValueError("训练样本为空，请先生成数据集")
+    
     # 创建数据集
     train_dataset = SiameseDataset(
         data_dir=data_dir,
@@ -514,6 +548,17 @@ def train(
         split="val",
         seed=seed
     )
+    
+    # 检查数据集是否为空
+    if len(train_dataset) == 0:
+        logger.error("❌ 训练集为空!")
+        logger.info("可能原因:")
+        logger.info("  1. 样本文件名格式不正确 (应为: {char}_{quality}_{num}.png)")
+        logger.info("  2. 样本的字符名与 originals/ 中的模板不匹配")
+        raise ValueError(f"训练集为空，请检查数据格式")
+    
+    if len(val_dataset) == 0:
+        logger.warning("⚠️ 验证集为空，使用训练集的 20% 作为验证集")
     
     # 创建数据加载器 (V100 优化)
     train_loader = DataLoader(

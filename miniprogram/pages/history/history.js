@@ -4,25 +4,45 @@ const app = getApp();
 Page({
   data: {
     loading: true,
-    historyList: []
+    historyList: [],
+    isConnected: false,
+    connectionStatus: '未配置'
   },
 
   onLoad: function (options) {
-    // 检查登录状态
-    if (!app.globalData.isLoggedIn) {
-      wx.redirectTo({
-        url: '/pages/index/index'
-      });
-      return;
-    }
+    // 监听连接状态变化
+    this.unregisterCallback = app.onConnectionChange((isConnected) => {
+      this.updateConnectionStatus();
+    });
+    
     this.loadHistory();
   },
 
   onShow: function () {
-    // 每次显示页面时刷新数据
-    if (app.globalData.isLoggedIn) {
-      this.loadHistory();
+    // 每次显示页面时更新状态和数据
+    this.updateConnectionStatus();
+    this.loadHistory();
+  },
+
+  onUnload: function () {
+    if (this.unregisterCallback) {
+      this.unregisterCallback();
     }
+  },
+
+  // 更新连接状态
+  updateConnectionStatus: function () {
+    this.setData({
+      isConnected: app.globalData.isConnected,
+      connectionStatus: app.globalData.connectionStatus
+    });
+  },
+
+  // 跳转到首页连接
+  goToIndex: function () {
+    wx.switchTab({
+      url: '/pages/index/index'
+    });
   },
 
   // 加载历史记录
@@ -30,6 +50,22 @@ Page({
     this.setData({ loading: true });
 
     try {
+      // 优先从树莓派获取数据
+      if (app.globalData.isConnected) {
+        const historyData = await app.getEvaluationHistory();
+        const formattedList = historyData.map(item => ({
+          ...item,
+          date: this.formatDate(item.timestamp)
+        }));
+        
+        this.setData({
+          loading: false,
+          historyList: formattedList
+        });
+        return;
+      }
+
+      // 如果未连接，尝试从云端获取
       const res = await wx.cloud.callFunction({
         name: 'getHistory',
         data: {
@@ -54,7 +90,7 @@ Page({
       console.error('获取历史记录失败', err);
       this.setData({ loading: false });
       
-      // 如果云函数失败，显示模拟数据
+      // 如果获取失败，显示模拟数据
       this.setData({
         historyList: [
           {
@@ -93,10 +129,11 @@ Page({
     });
   },
 
-  // 返回
+  // 返回首页
   onBack: function () {
-    // 在tabBar页面，返回无效
-    console.log('onBack');
+    wx.switchTab({
+      url: '/pages/index/index'
+    });
   },
 
   // 下拉刷新

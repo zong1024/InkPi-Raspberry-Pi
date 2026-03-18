@@ -9,6 +9,13 @@
     <view class="nav-placeholder"></view>
   </view>
 
+  <!-- 连接状态栏 -->
+  <view class="connection-bar {{isConnected ? 'connected' : 'disconnected'}}" bindtap="goToIndex">
+    <view class="connection-dot"></view>
+    <text class="connection-text">{{connectionStatus}}</text>
+    <text class="connection-action">{{isConnected ? '已连接' : '点击连接'}}</text>
+  </view>
+
   <!-- 加载状态 -->
   <view wx:if="{{loading}}" class="loading">
     <text>加载中...</text>
