@@ -2,6 +2,8 @@
 
 ## 📊 快速对比表
 
+### Linux/macOS
+
 | 维度 | V100 GPU 版本 | CPU 版本 |
 |------|-------------|---------|
 | **脚本文件** | `train_v100.sh` | `train_cpu.sh` |
@@ -14,6 +16,23 @@
 | **训练轮数** | 100 | 30 |
 | **学习率** | 3e-4 | 1e-3 |
 | **数据线程** | 8 | 1 |
+| **预计时间** | 1-2 小时 | 2-4 小时 |
+| **推荐数据源** | 真实/合成 | 合成 |
+
+### Windows
+
+| 维度 | GPU 版本 | CPU 版本 |
+|------|---------|---------|
+| **脚本文件** | `train_windows_gpu.bat` | `train_windows_cpu.bat` |
+| **硬件要求** | NVIDIA V100/RTX 显卡 | 任何 CPU |
+| **适用场景** | Windows 开发、大规模数据 | Windows 开发、快速测试 |
+| **PyTorch** | CUDA 11.8 版本 | CPU 只版本 |
+| **混合精度 (AMP)** | 启用 ✓ | 禁用 ✗ |
+| **批大小** | 64 | 16 |
+| **样本数** | 500×3 级别 | 100×3 级别 |
+| **训练轮数** | 100 | 30 |
+| **学习率** | 3e-4 | 1e-3 |
+| **数据线程** | 4 | 0 |
 | **预计时间** | 1-2 小时 | 2-4 小时 |
 | **推荐数据源** | 真实/合成 | 合成 |
 
@@ -280,7 +299,7 @@ torch.onnx.export(model, dummy_input, 'model.onnx')
 
 ## 📝 示例脚本集合
 
-### 快速启动
+### Linux/macOS 快速启动
 
 ```bash
 # 最快验证（3 分钟）
@@ -297,6 +316,41 @@ SAMPLES_PER_LEVEL=100 EPOCHS=5 bash training/train_v100.sh
 
 # GPU 完整训练（1.5 小时）
 bash training/train_v100.sh
+```
+
+### Windows 快速启动
+
+```cmd
+REM 最快验证（3 分钟）
+set SAMPLES_PER_LEVEL=10
+set EPOCHS=1
+training\train_windows_cpu.bat
+
+REM 快速测试（30 分钟）
+set SAMPLES_PER_LEVEL=50
+set EPOCHS=10
+training\train_windows_cpu.bat
+
+REM 标准 CPU 训练（3 小时）
+training\train_windows_cpu.bat
+
+REM GPU 快速测试（5 分钟）
+set SAMPLES_PER_LEVEL=100
+set EPOCHS=5
+training\train_windows_gpu.bat
+
+REM GPU 完整训练（1.5 小时）
+training\train_windows_gpu.bat
+```
+
+### Windows PowerShell 快速启动
+
+```powershell
+# 最快验证（3 分钟）
+$env:SAMPLES_PER_LEVEL=10; $env:EPOCHS=1; .\training\train_windows_cpu.bat
+
+# GPU 完整训练（1.5 小时）
+.\training\train_windows_gpu.bat
 ```
 
 ### 后台训练

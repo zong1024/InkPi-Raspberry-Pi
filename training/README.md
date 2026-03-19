@@ -4,14 +4,28 @@
 
 ## ⚡ 快速开始
 
-### 有 GPU（NVIDIA V100/RTX）？
+### Linux/macOS
+
+**有 GPU（NVIDIA V100/RTX）？**
 ```bash
 bash training/train_v100.sh        # 约 1-2 小时
 ```
 
-### 没有 GPU（CPU 只）？
+**没有 GPU（CPU 只）？**
 ```bash
 bash training/train_cpu.sh         # 约 2-4 小时
+```
+
+### Windows
+
+**有 GPU（NVIDIA V100/RTX）？**
+```cmd
+training\train_windows_gpu.bat     # 约 1-2 小时
+```
+
+**没有 GPU（CPU 只）？**
+```cmd
+training\train_windows_cpu.bat     # 约 2-4 小时
 ```
 
 � [详细对比 →](GPU_CPU_COMPARISON.md)
@@ -22,8 +36,10 @@ bash training/train_cpu.sh         # 约 2-4 小时
 
 ```
 training/
-├── 📜 train_v100.sh              # GPU 优化训练脚本 (V100/RTX)
-├── 📜 train_cpu.sh               # CPU 优化训练脚本 (新增 ⭐)
+├── 📜 train_v100.sh              # Linux GPU 训练脚本 (V100/RTX)
+├── 📜 train_cpu.sh               # Linux CPU 训练脚本
+├── 🪟 train_windows_gpu.bat      # Windows GPU 训练脚本 (新增 ⭐)
+├── 🪟 train_windows_cpu.bat      # Windows CPU 训练脚本 (新增 ⭐)
 ├── 📚 train_siamese.py           # 训练核心代码
 ├── 🎨 dataset_builder.py         # 合成数据生成
 ├── 📥 download_real_dataset.py   # 真实数据下载
