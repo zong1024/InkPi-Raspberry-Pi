@@ -289,7 +289,11 @@ class RealDatasetDownloader:
         return "kaishu"  # 默认楷书
     
     def _organize_github_data(self, source_dir: Path):
-        """整理 GitHub 数据集目录结构 (兼容训练脚本)"""
+        """整理 GitHub 数据集目录结构 (兼容训练脚本)
+        
+        训练脚本期望的文件名格式: {char}_{quality}_{idx}.png
+        例如: 大_good_0001.png, 永_medium_0002.png
+        """
         logger.info(f"整理目录结构: {source_dir}")
         
         # 列出所有子目录
@@ -333,6 +337,10 @@ class RealDatasetDownloader:
             logger.error("未找到任何图片文件!")
             return
         
+        # 用于生成唯一文件名
+        quality_counters = {"good": 0, "medium": 0, "poor": 0}
+        char_counters = {}  # 每个字符的计数器
+        
         # 按风格分类复制
         style_counts = {"kaishu": 0, "xingshu": 0, "caoshu": 0, "lishu": 0, "zhuanshu": 0, "unknown": 0}
         originals_count = 0
@@ -342,19 +350,34 @@ class RealDatasetDownloader:
             style = self._detect_style_from_path(img_path)
             quality = style_to_quality.get(style, "medium")
             
-            # 生成目标文件名
-            char_name = img_path.stem
-            style_prefix = style
+            # 从文件名提取字符名（去掉风格前缀和序号）
+            original_name = img_path.stem
+            
+            # 尝试提取字符名（假设格式可能是 style_char 或 char）
+            parts = original_name.split("_")
+            if len(parts) >= 2:
+                # 如果第一部分是风格名，取第二部分
+                if parts[0] in STYLE_NAMES or parts[0] in ["kaishu", "xingshu", "caoshu", "lishu", "zhuanshu"]:
+                    char_name = parts[1]
+                else:
+                    char_name = parts[0]
+            else:
+                char_name = original_name
+            
+            # 清理字符名（移除数字后缀等）
+            import re
+            char_name = re.sub(r'\d+$', '', char_name)  # 移除末尾数字
+            if not char_name:
+                char_name = f"char_{i}"
+            
+            # 生成符合训练脚本格式的文件名: {char}_{quality}_{idx}.png
+            quality_counters[quality] += 1
+            idx = quality_counters[quality]
+            new_filename = f"{char_name}_{quality}_{idx:04d}.png"
             
             # 复制到对应质量目录
             target_dir = self.data_dir / quality
-            target_file = target_dir / f"{style_prefix}_{char_name}.png"
-            
-            # 避免重名
-            counter = 0
-            while target_file.exists():
-                counter += 1
-                target_file = target_dir / f"{style_prefix}_{char_name}_{counter}.png"
+            target_file = target_dir / new_filename
             
             try:
                 shutil.copy2(img_path, target_file)
@@ -363,15 +386,22 @@ class RealDatasetDownloader:
                 logger.warning(f"复制失败 {img_path}: {e}")
                 continue
             
-            # 收集楷书的前 20 张作为 originals
-            if style == "kaishu" and originals_count < 20:
-                orig_target = originals_dir / f"{char_name}.png"
-                if not orig_target.exists():
-                    try:
-                        shutil.copy2(img_path, orig_target)
-                        originals_count += 1
-                    except:
-                        pass
+            # 收集楷书作为 originals（模板）
+            if style == "kaishu":
+                char_key = char_name
+                if char_key not in char_counters:
+                    char_counters[char_key] = 0
+                char_counters[char_key] += 1
+                
+                # 每个字符只保留一张作为模板
+                if char_counters[char_key] == 1:
+                    orig_target = originals_dir / f"{char_name}.png"
+                    if not orig_target.exists() and originals_count < 50:
+                        try:
+                            shutil.copy2(img_path, orig_target)
+                            originals_count += 1
+                        except:
+                            pass
             
             if (i + 1) % 500 == 0:
                 logger.info(f"已处理 {i + 1}/{len(all_images)} 张图片...")
