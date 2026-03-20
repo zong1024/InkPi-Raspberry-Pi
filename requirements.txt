@@ -15,6 +15,9 @@ matplotlib>=3.8.0
 # 汉字识别 (ONNX Runtime - 轻量级推理)
 onnxruntime>=1.16.0
 
+# 科学计算 (用于数据增强和图像处理)
+scipy>=1.10.0
+
 # LED 灯带控制 (仅树莓派需要)
 # spidev 用于 WS2812B SPI 驱动
 # 安装方式: pip install spidev (仅 Linux/RPi)

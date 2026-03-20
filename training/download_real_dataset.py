@@ -43,6 +43,30 @@ STYLE_NAMES = {
     "zhuanshu": "篆书"
 }
 
+# 风格映射（英文/拼音 -> 标准名）
+STYLE_ALIASES = {
+    "kaishu": "kaishu",
+    "kai": "kaishu",
+    "楷书": "kaishu",
+    "xingshu": "xingshu",
+    "xing": "xingshu",
+    "行书": "xingshu",
+    "caoshu": "caoshu",
+    "cao": "caoshu",
+    "草书": "caoshu",
+    "lishu": "lishu",
+    "li": "lishu",
+    "隶书": "lishu",
+    "zhuanshu": "zhuanshu",
+    "zhuan": "zhuanshu",
+    "篆书": "zhuanshu",
+    "seal": "zhuanshu",
+    "clerical": "lishu",
+    "cursive": "caoshu",
+    "regular": "kaishu",
+    "running": "xingshu"
+}
+
 # 数据集配置
 DATASETS = {
     "github": {
@@ -104,8 +128,14 @@ class RealDatasetDownloader:
                 logger.error(f"下载失败: {result.stderr}")
                 return False
             
+            # 检查文件大小
+            if not zip_path.exists() or zip_path.stat().st_size < 1000:
+                logger.error("下载的文件太小，可能下载失败")
+                return False
+            
             # 解压
             logger.info("解压中...")
+            extract_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
@@ -113,14 +143,16 @@ class RealDatasetDownloader:
             self._organize_github_data(extract_dir)
             
             # 清理
-            zip_path.unlink()
-            shutil.rmtree(extract_dir)
+            zip_path.unlink(missing_ok=True)
+            shutil.rmtree(extract_dir, ignore_errors=True)
             
             logger.info("✅ GitHub 数据集下载完成!")
             return True
             
         except Exception as e:
             logger.error(f"下载失败: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def download_kaggle_dataset(self, dataset_key: str = "kaggle_styles") -> bool:
@@ -223,6 +255,14 @@ class RealDatasetDownloader:
         logger.info(f"✅ 导入完成: {len(images)} 张图片 -> {target_dir}")
         return True
     
+    def _detect_style_from_path(self, path: Path) -> str:
+        """从路径检测书法风格"""
+        path_str = str(path).lower()
+        for alias, style in STYLE_ALIASES.items():
+            if alias in path_str:
+                return style
+        return "kaishu"  # 默认楷书
+    
     def _organize_github_data(self, extract_dir: Path):
         """整理 GitHub 数据集目录结构 (兼容训练脚本)"""
         logger.info("整理目录结构...")
@@ -230,10 +270,23 @@ class RealDatasetDownloader:
         # 查找解压后的目录
         extracted_dirs = list(extract_dir.glob("CNN-for-Chinese-Calligraphy-Styles-classification*"))
         if not extracted_dirs:
-            logger.warning("未找到解压目录")
+            logger.warning("未找到解压目录，尝试搜索其他目录...")
+            extracted_dirs = [d for d in extract_dir.iterdir() if d.is_dir()]
+        
+        if not extracted_dirs:
+            logger.error("无法找到解压的数据目录")
             return
         
         source_dir = extracted_dirs[0]
+        logger.info(f"源数据目录: {source_dir}")
+        
+        # 列出所有子目录
+        logger.info("扫描目录结构...")
+        all_subdirs = []
+        for item in source_dir.rglob("*"):
+            if item.is_dir():
+                all_subdirs.append(item)
+                logger.info(f"  发现目录: {item.relative_to(source_dir)}")
         
         # 创建训练脚本需要的目录结构
         originals_dir = self.data_dir / "originals"
@@ -244,25 +297,7 @@ class RealDatasetDownloader:
         for d in [originals_dir, good_dir, medium_dir, poor_dir]:
             d.mkdir(parents=True, exist_ok=True)
         
-        # 遍历并整理
-        all_images = []
-        for style_dir in source_dir.iterdir():
-            if style_dir.is_dir() and style_dir.name.lower() in STYLE_NAMES:
-                style_name = style_dir.name.lower()
-                
-                # 复制图片
-                images = list(style_dir.glob("*.png")) + list(style_dir.glob("*.jpg"))
-                for img in images:
-                    # 使用风格名作为前缀
-                    target_file = self.data_dir / f"{style_name}_{img.name}"
-                    if not target_file.exists():
-                        shutil.copy2(img, target_file)
-                    all_images.append((target_file, style_name))
-                
-                logger.info(f"  {STYLE_NAMES[style_name]}: {len(images)} 张图片")
-        
-        # 按风格质量分配到 good/medium/poor
-        # 楷书 -> good, 行书/隶书 -> medium, 草书/篆书 -> poor
+        # 风格到质量的映射
         style_to_quality = {
             "kaishu": "good",
             "xingshu": "medium",
@@ -271,31 +306,73 @@ class RealDatasetDownloader:
             "zhuanshu": "poor"
         }
         
-        # 按质量分类复制
-        for img_path, style in all_images:
+        # 收集所有图片
+        all_images = []
+        image_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.gif'}
+        
+        for ext in image_extensions:
+            all_images.extend(source_dir.rglob(f"*{ext}"))
+            all_images.extend(source_dir.rglob(f"*{ext.upper()}"))
+        
+        logger.info(f"找到 {len(all_images)} 张图片")
+        
+        if not all_images:
+            logger.error("未找到任何图片文件!")
+            return
+        
+        # 按风格分类复制
+        style_counts = {"kaishu": 0, "xingshu": 0, "caoshu": 0, "lishu": 0, "zhuanshu": 0}
+        chars_for_originals = set()
+        
+        for i, img_path in enumerate(all_images):
+            # 检测风格
+            style = self._detect_style_from_path(img_path)
             quality = style_to_quality.get(style, "medium")
+            
+            # 生成目标文件名
+            char_name = img_path.stem
+            style_prefix = style
+            
+            # 复制到对应质量目录
             target_dir = self.data_dir / quality
-            target_file = target_dir / img_path.name
-            if not target_file.exists():
-                shutil.move(str(img_path), str(target_file))
+            target_file = target_dir / f"{style_prefix}_{char_name}.png"
+            
+            # 避免重名
+            counter = 0
+            while target_file.exists():
+                counter += 1
+                target_file = target_dir / f"{style_prefix}_{char_name}_{counter}.png"
+            
+            shutil.copy2(img_path, target_file)
+            style_counts[style] += 1
+            
+            # 收集楷书的前几张作为 originals
+            if style == "kaishu" and len(chars_for_originals) < 20:
+                chars_for_originals.add(char_name)
+                orig_target = originals_dir / f"{char_name}.png"
+                if not orig_target.exists():
+                    shutil.copy2(img_path, orig_target)
+            
+            if (i + 1) % 500 == 0:
+                logger.info(f"已处理 {i + 1}/{len(all_images)} 张图片...")
         
-        # 复制标准字帖作为 originals (使用楷书第一张)
-        kaishu_dir = self.data_dir / "good"
-        kaishu_images = list(kaishu_dir.glob("kaishu_*.png"))
-        if kaishu_images:
-            # 复制几张作为标准字帖
-            chars_seen = set()
-            for img in kaishu_images[:20]:
-                # 提取字符名
-                char_name = img.stem.replace("kaishu_", "").rsplit("_", 1)[0]
-                if char_name not in chars_seen:
-                    shutil.copy2(img, originals_dir / f"{char_name}.png")
-                    chars_seen.add(char_name)
+        # 打印统计
+        logger.info("="*50)
+        logger.info("数据集处理完成:")
+        for style, count in style_counts.items():
+            if count > 0:
+                quality = style_to_quality.get(style, "medium")
+                logger.info(f"  {STYLE_NAMES[style]} ({style}): {count} 张 -> {quality}/")
         
-        # 清理临时文件
-        for img in self.data_dir.glob("*.png"):
-            if img.parent == self.data_dir:
-                img.unlink()
+        # 统计各目录
+        for quality in ["good", "medium", "poor"]:
+            q_dir = self.data_dir / quality
+            count = len(list(q_dir.glob("*.png"))) + len(list(q_dir.glob("*.jpg")))
+            logger.info(f"  {quality}/ 目录: {count} 张")
+        
+        originals_count = len(list(originals_dir.glob("*.png")))
+        logger.info(f"  originals/ 目录: {originals_count} 张")
+        logger.info("="*50)
     
     def _organize_kaggle_data(self, output_dir: Path, dataset_key: str):
         """整理 Kaggle 数据集目录结构"""
