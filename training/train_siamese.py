@@ -110,11 +110,28 @@ class SiameseDataset(Dataset):
                 continue
             for p in q_dir.glob("*.png"):
                 # 文件名约定: {char}_{quality}_{idx}.png
-                char = p.stem.split("_")[0]
-                if char in self.templates:
+                # 例如: 大_good_0001.png, char_0_good_0001.png
+                parts = p.stem.split("_")
+                
+                # 尝试找到匹配的模板
+                char = None
+                template_path = None
+                
+                # 方式1: 尝试第一部分作为字符名 (大_good_0001.png -> 大)
+                if parts[0] in self.templates:
+                    char = parts[0]
+                    template_path = self.templates[char]
+                # 方式2: 尝试前两部分作为字符名 (char_0_good_0001.png -> char_0)
+                elif len(parts) >= 2:
+                    potential_char = f"{parts[0]}_{parts[1]}"
+                    if potential_char in self.templates:
+                        char = potential_char
+                        template_path = self.templates[char]
+                
+                if char and template_path:
                     all_samples.append(
                         SampleItem(
-                            template_path=self.templates[char],
+                            template_path=template_path,
                             sample_path=p,
                             quality=quality,
                             target=target,
