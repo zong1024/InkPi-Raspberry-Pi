@@ -133,16 +133,41 @@ class RealDatasetDownloader:
                 logger.error("下载的文件太小，可能下载失败")
                 return False
             
-            # 解压
-            logger.info("解压中...")
+            logger.info(f"下载完成: {zip_path.stat().st_size / 1024 / 1024:.1f} MB")
+            
+            # 解压外层 zip
+            logger.info("解压外层 zip...")
             extract_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
             
-            # 整理目录结构
-            self._organize_github_data(extract_dir)
+            # 查找内层 dataset.zip
+            inner_zip = extract_dir / "CNN-for-Chinese-Calligraphy-Styles-classification-master" / "dataset.zip"
             
-            # 清理
+            if inner_zip.exists():
+                logger.info(f"发现内层数据集: {inner_zip}")
+                logger.info("解压内层 dataset.zip...")
+                
+                inner_extract_dir = extract_dir / "dataset"
+                inner_extract_dir.mkdir(parents=True, exist_ok=True)
+                
+                with zipfile.ZipFile(inner_zip, 'r') as zip_ref:
+                    zip_ref.extractall(inner_extract_dir)
+                
+                # 整理内层数据
+                self._organize_github_data(inner_extract_dir)
+            else:
+                # 尝试从 IMGS 目录整理
+                imgs_dir = extract_dir / "CNN-for-Chinese-Calligraphy-Styles-classification-master" / "IMGS"
+                if imgs_dir.exists():
+                    logger.warning("未找到内层 dataset.zip，尝试使用 IMGS 目录")
+                    self._organize_github_data(imgs_dir)
+                else:
+                    logger.error("未找到有效的图片数据")
+                    return False
+            
+            # 清理临时文件
+            logger.info("清理临时文件...")
             zip_path.unlink(missing_ok=True)
             shutil.rmtree(extract_dir, ignore_errors=True)
             
@@ -263,30 +288,18 @@ class RealDatasetDownloader:
                 return style
         return "kaishu"  # 默认楷书
     
-    def _organize_github_data(self, extract_dir: Path):
+    def _organize_github_data(self, source_dir: Path):
         """整理 GitHub 数据集目录结构 (兼容训练脚本)"""
-        logger.info("整理目录结构...")
-        
-        # 查找解压后的目录
-        extracted_dirs = list(extract_dir.glob("CNN-for-Chinese-Calligraphy-Styles-classification*"))
-        if not extracted_dirs:
-            logger.warning("未找到解压目录，尝试搜索其他目录...")
-            extracted_dirs = [d for d in extract_dir.iterdir() if d.is_dir()]
-        
-        if not extracted_dirs:
-            logger.error("无法找到解压的数据目录")
-            return
-        
-        source_dir = extracted_dirs[0]
-        logger.info(f"源数据目录: {source_dir}")
+        logger.info(f"整理目录结构: {source_dir}")
         
         # 列出所有子目录
         logger.info("扫描目录结构...")
-        all_subdirs = []
-        for item in source_dir.rglob("*"):
+        all_items = list(source_dir.iterdir())
+        for item in all_items:
             if item.is_dir():
-                all_subdirs.append(item)
-                logger.info(f"  发现目录: {item.relative_to(source_dir)}")
+                logger.info(f"  目录: {item.name}/")
+            else:
+                logger.info(f"  文件: {item.name}")
         
         # 创建训练脚本需要的目录结构
         originals_dir = self.data_dir / "originals"
@@ -321,8 +334,8 @@ class RealDatasetDownloader:
             return
         
         # 按风格分类复制
-        style_counts = {"kaishu": 0, "xingshu": 0, "caoshu": 0, "lishu": 0, "zhuanshu": 0}
-        chars_for_originals = set()
+        style_counts = {"kaishu": 0, "xingshu": 0, "caoshu": 0, "lishu": 0, "zhuanshu": 0, "unknown": 0}
+        originals_count = 0
         
         for i, img_path in enumerate(all_images):
             # 检测风格
@@ -343,15 +356,22 @@ class RealDatasetDownloader:
                 counter += 1
                 target_file = target_dir / f"{style_prefix}_{char_name}_{counter}.png"
             
-            shutil.copy2(img_path, target_file)
-            style_counts[style] += 1
+            try:
+                shutil.copy2(img_path, target_file)
+                style_counts[style] = style_counts.get(style, 0) + 1
+            except Exception as e:
+                logger.warning(f"复制失败 {img_path}: {e}")
+                continue
             
-            # 收集楷书的前几张作为 originals
-            if style == "kaishu" and len(chars_for_originals) < 20:
-                chars_for_originals.add(char_name)
+            # 收集楷书的前 20 张作为 originals
+            if style == "kaishu" and originals_count < 20:
                 orig_target = originals_dir / f"{char_name}.png"
                 if not orig_target.exists():
-                    shutil.copy2(img_path, orig_target)
+                    try:
+                        shutil.copy2(img_path, orig_target)
+                        originals_count += 1
+                    except:
+                        pass
             
             if (i + 1) % 500 == 0:
                 logger.info(f"已处理 {i + 1}/{len(all_images)} 张图片...")
@@ -362,16 +382,15 @@ class RealDatasetDownloader:
         for style, count in style_counts.items():
             if count > 0:
                 quality = style_to_quality.get(style, "medium")
-                logger.info(f"  {STYLE_NAMES[style]} ({style}): {count} 张 -> {quality}/")
+                style_cn = STYLE_NAMES.get(style, "未知")
+                logger.info(f"  {style_cn} ({style}): {count} 张 -> {quality}/")
         
         # 统计各目录
-        for quality in ["good", "medium", "poor"]:
+        for quality in ["originals", "good", "medium", "poor"]:
             q_dir = self.data_dir / quality
             count = len(list(q_dir.glob("*.png"))) + len(list(q_dir.glob("*.jpg")))
             logger.info(f"  {quality}/ 目录: {count} 张")
         
-        originals_count = len(list(originals_dir.glob("*.png")))
-        logger.info(f"  originals/ 目录: {originals_count} 张")
         logger.info("="*50)
     
     def _organize_kaggle_data(self, output_dir: Path, dataset_key: str):
@@ -400,30 +419,25 @@ class RealDatasetDownloader:
         
         labels = []
         
-        for style_name in STYLE_NAMES.keys():
-            style_dir = self.data_dir / style_name
-            if style_dir.exists():
-                for img_path in style_dir.glob("*.png"):
+        # 扫描 quality 目录
+        for quality in ["good", "medium", "poor"]:
+            quality_dir = self.data_dir / quality
+            if quality_dir.exists():
+                for img_path in quality_dir.glob("*.png"):
+                    # 从文件名解析风格
+                    filename = img_path.stem
+                    style = "kaishu"
+                    for s in STYLE_NAMES.keys():
+                        if filename.startswith(s + "_"):
+                            style = s
+                            break
+                    
                     labels.append({
                         "path": str(img_path.relative_to(self.data_dir)),
-                        "style": style_name,
-                        "style_cn": STYLE_NAMES[style_name],
-                        "quality": "unknown"
+                        "style": style,
+                        "style_cn": STYLE_NAMES.get(style, "未知"),
+                        "quality": quality
                     })
-        
-        # 混合风格
-        mixed_dir = self.data_dir / "mixed"
-        if mixed_dir.exists():
-            for quality in ["good", "medium", "poor"]:
-                quality_dir = mixed_dir / quality
-                if quality_dir.exists():
-                    for img_path in quality_dir.glob("*.png"):
-                        labels.append({
-                            "path": str(img_path.relative_to(self.data_dir)),
-                            "style": "mixed",
-                            "style_cn": "混合",
-                            "quality": quality
-                        })
         
         # 保存 CSV
         import csv
@@ -445,20 +459,14 @@ class RealDatasetDownloader:
         print("="*50)
         
         total = 0
-        for style_name, style_cn in STYLE_NAMES.items():
-            style_dir = self.data_dir / style_name
-            count = len(list(style_dir.glob("*.png"))) + len(list(style_dir.glob("*.jpg")))
-            if count > 0:
-                print(f"  {style_cn} ({style_name}): {count} 张")
-                total += count
         
-        mixed_dir = self.data_dir / "mixed"
-        if mixed_dir.exists():
-            for quality in ["good", "medium", "poor"]:
-                quality_dir = mixed_dir / quality
-                count = len(list(quality_dir.glob("*.png"))) + len(list(quality_dir.glob("*.jpg")))
+        # 统计 quality 目录
+        for quality in ["originals", "good", "medium", "poor"]:
+            q_dir = self.data_dir / quality
+            if q_dir.exists():
+                count = len(list(q_dir.glob("*.png"))) + len(list(q_dir.glob("*.jpg")))
                 if count > 0:
-                    print(f"  混合/{quality}: {count} 张")
+                    print(f"  {quality}/: {count} 张")
                     total += count
         
         print(f"\n  📁 总计: {total} 张图片")
@@ -501,8 +509,8 @@ def main():
     if success:
         downloader.generate_labels_csv()
         print("\n✅ 数据集准备完成!")
-        print("\n下一步: 更新训练脚本使用真实数据")
-        print("  python training/train_siamese.py --data data/real")
+        print("\n下一步: 开始训练")
+        print("  python training/train_siamese.py --data data/real --epochs 100 --device cuda --pretrained --amp")
     else:
         print("\n❌ 数据集下载失败")
         sys.exit(1)
