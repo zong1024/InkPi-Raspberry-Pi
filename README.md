@@ -285,14 +285,13 @@ InkPi-Raspberry-Pi/
 │   ├── camera/              # 相机服务 (PiCamera/OpenCV)
 │   └── preprocessing/       # 图像预处理
 ├── config/                  # 配置管理
-├── services/                # 业务服务 (TTS/LED/Cloud)
+├── services/                # 业务服务 (TTS/LED)
 ├── tools/                   # 工具集
 │   └── conversion/          # 模型转换
 ├── training/                # 训练脚本
 ├── models/                  # 模型权重
 │   └── templates/           # 标准字模板
 ├── views/                   # UI层 (PyQt6)
-├── miniprogram/             # 微信小程序
 └── docs/                    # 文档
 ```
 
@@ -306,7 +305,6 @@ InkPi-Raspberry-Pi/
 | GUI | PyQt6 |
 | 硬件 | Raspberry Pi 5, PiCamera |
 | 语音 | pyttsx3 TTS |
-| 云端 | 微信云开发 |
 
 ## 参考文献
 
