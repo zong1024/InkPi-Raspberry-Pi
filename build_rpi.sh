@@ -60,8 +60,13 @@ pyinstaller \
     --windowed \
     --name InkPi \
     --add-data "config.py:." \
+    --add-data "config:config" \
     --add-data "models:models" \
     --add-data "models/templates:models/templates" \
+    --add-data "services:services" \
+    --add-data "views:views" \
+    --add-data "core:core" \
+    --add-data "data:data" \
     --hidden-import PyQt6 \
     --hidden-import PyQt6.QtCore \
     --hidden-import PyQt6.QtWidgets \
@@ -74,7 +79,12 @@ pyinstaller \
     --hidden-import sqlite3 \
     --hidden-import requests \
     --hidden-import onnxruntime \
+    --hidden-import torch \
+    --hidden-import torchvision \
+    --hidden-import PIL \
+    --hidden-import scipy \
     --collect-all PyQt6 \
+    --exclude-module tkinter \
     main.py
 
 # 完成
