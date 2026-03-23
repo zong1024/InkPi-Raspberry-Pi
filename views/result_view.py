@@ -28,8 +28,7 @@ plt.rcParams['axes.unicode_minus'] = False
 from models.evaluation_result import EvaluationResult
 from services.speech_service import speech_service
 from services.led_service import led_service
-from services.cloud_upload_service import CloudUploadService
-from config import UI_CONFIG, CLOUD_CONFIG
+from config import UI_CONFIG
 
 
 class RadarChart(FigureCanvas):
@@ -94,12 +93,6 @@ class ResultView(QWidget):
         super().__init__(parent)
         self.result: EvaluationResult = None
         self._init_ui()
-        
-        # 初始化云上传服务
-        if CLOUD_CONFIG.get("enabled", False):
-            self.cloud_service = CloudUploadService(env_id=CLOUD_CONFIG["env_id"])
-        else:
-            self.cloud_service = None
         
     def _init_ui(self):
         """初始化 UI"""
@@ -246,13 +239,6 @@ class ResultView(QWidget):
         
         btn_layout.addStretch()
         
-        self.btn_upload = QPushButton("📤上传")
-        self.btn_upload.setObjectName("uploadButton")
-        self.btn_upload.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_upload.setFixedSize(70, 45)
-        self.btn_upload.clicked.connect(self._on_upload)
-        btn_layout.addWidget(self.btn_upload)
-        
         self.btn_new = QPushButton("📷再次评测")
         self.btn_new.setObjectName("primaryButton")
         self.btn_new.setFont(QFont("Microsoft YaHei", 10))
@@ -320,9 +306,6 @@ class ResultView(QWidget):
         # 触发 LED 灯光效果
         led_service.show_score(self.result.total_score)
         
-        # 上传到云端
-        self._upload_to_cloud()
-        
     def _create_score_card(self, dimension: str, score: int) -> QFrame:
         """创建紧凑评分卡片"""
         card = QFrame()
@@ -355,27 +338,6 @@ class ResultView(QWidget):
         
         return card
         
-    def _upload_to_cloud(self):
-        """上传评测结果到云端"""
-        if self.cloud_service and self.result:
-            try:
-                result = self.cloud_service.upload_evaluation_result(
-                    openid=CLOUD_CONFIG["openid"],
-                    total_score=self.result.total_score,
-                    detail_scores=self.result.detail_scores,
-                    feedback=self.result.feedback,
-                    image_path=self.result.image_path,
-                    processed_image_path=self.result.processed_image_path,
-                    recognized_char=self.result.character_name,
-                    title=f"书法评测 · {self.result.timestamp.strftime('%Y-%m-%d %H:%M')}"
-                )
-                if result.get("success"):
-                    print("[云同步] 上传成功")
-                else:
-                    print(f"[云同步] 上传失败: {result.get('error', '未知错误')}")
-            except Exception as e:
-                print(f"[云同步] 上传异常: {e}")
-        
     def _on_speak(self):
         """语音播报"""
         if self.result:
@@ -383,41 +345,3 @@ class ResultView(QWidget):
                 self.result.total_score, 
                 self.result.feedback
             )
-    
-    def _on_upload(self):
-        """手动上传到小程序"""
-        if not self.cloud_service:
-            print("[云同步] 云服务未启用")
-            return
-            
-        if not self.result:
-            return
-            
-        try:
-            # 显示上传中状态
-            self.btn_upload.setText("上传中...")
-            self.btn_upload.setEnabled(False)
-            
-            result = self.cloud_service.upload_evaluation_result(
-                openid=CLOUD_CONFIG["openid"],
-                total_score=self.result.total_score,
-                detail_scores=self.result.detail_scores,
-                feedback=self.result.feedback,
-                image_path=self.result.image_path,
-                processed_image_path=self.result.processed_image_path,
-                recognized_char=self.result.character_name,
-                title=f"书法评测 · {self.result.timestamp.strftime('%Y-%m-%d %H:%M')}"
-            )
-            
-            if result.get("success"):
-                self.btn_upload.setText("✓已上传")
-                print("[云同步] 手动上传成功")
-            else:
-                self.btn_upload.setText("📤上传")
-                print(f"[云同步] 手动上传失败: {result.get('error', '未知错误')}")
-                
-        except Exception as e:
-            self.btn_upload.setText("📤上传")
-            print(f"[云同步] 手动上传异常: {e}")
-        finally:
-            self.btn_upload.setEnabled(True)
