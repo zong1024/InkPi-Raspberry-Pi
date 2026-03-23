@@ -43,23 +43,22 @@ source venv/bin/activate
 # 安装 Python 依赖
 echo "[3/5] 安装 Python 依赖..."
 pip install --upgrade pip
+pip install pyinstaller
 pip install -r requirements.txt
 
 # 创建模型目录结构
-echo "[4/6] 准备模型文件..."
+echo "[4/5] 准备模型文件..."
 mkdir -p models
-# 如果模型文件不存在，创建占位符（用户需要自行下载或训练）
-if [ ! -f "models/ch_recognize_mobile_int8.onnx" ]; then
-    echo "警告: 汉字识别模型不存在，请运行 python training/train_siamese.py 训练或下载预训练模型"
+if [ ! -f "models/siamese_calligraphy.onnx" ]; then
+    echo "警告: 汉字识别模型不存在，请先训练或下载预训练模型"
 fi
 
 # 打包应用
-echo "[5/6] 打包应用..."
+echo "[5/5] 打包应用..."
 pyinstaller \
     --onefile \
     --windowed \
     --name InkPi \
-    --add-data "config.py:." \
     --add-data "config:config" \
     --add-data "models:models" \
     --add-data "models/templates:models/templates" \
@@ -88,7 +87,10 @@ pyinstaller \
     main.py
 
 # 完成
-echo "[5/5] 打包完成！"
+echo ""
+echo "=========================================="
+echo "  打包完成！"
+echo "=========================================="
 echo ""
 echo "可执行文件位置: dist/InkPi"
 echo "文件大小: $(du -h dist/InkPi | cut -f1)"

@@ -228,6 +228,71 @@ DEV_CONFIG = {
 }
 
 
+# =========================
+# UI 配置（兼容 PyInstaller）
+# =========================
+UI_CONFIG = {
+    "window_title": f"{APP_CONFIG['app_name']} 书法评测系统",
+    "window_width": APP_CONFIG["window"]["width"],
+    "window_height": APP_CONFIG["window"]["height"],
+    "theme": "light",
+    "radar_chart_size": 200,
+}
+
+# =========================
+# 日志配置
+# =========================
+LOG_CONFIG = {
+    "level": APP_CONFIG["log_level"],
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "log_file": PATHS["logs_dir"] / "inkpi.log",
+}
+
+# =========================
+# 数据目录（简化版）
+# =========================
+DATA_DIR = PATHS["data_dir"]
+
+# =========================
+# 图像配置
+# =========================
+IMAGE_CONFIG = {
+    "target_size": 512,
+    "adaptive_block_size": 11,
+    "adaptive_c": 2,
+    "median_blur_size": 3,
+    "preview_width": CAMERA_CONFIG["preview_width"],
+    "preview_height": CAMERA_CONFIG["preview_height"],
+    "capture_width": CAMERA_CONFIG["capture_width"],
+    "capture_height": CAMERA_CONFIG["capture_height"],
+}
+
+# =========================
+# 反馈模板
+# =========================
+FEEDBACK_TEMPLATES = EVALUATION_CONFIG["feedback_templates"]
+
+# =========================
+# LED 配置
+# =========================
+LED_CONFIG = {
+    "enabled": HARDWARE_CONFIG["led"]["enabled"],
+    "num_leds": 8,
+    "spi_bus": 0,
+    "spi_device": 0,
+    "brightness": 0.3,
+    "gpio_pin": 10,
+}
+
+# =========================
+# TTS 语音配置
+# =========================
+TTS_CONFIG = {
+    "rate": HARDWARE_CONFIG["speech"]["rate"],
+    "volume": 0.9,
+}
+
+
 def get_config(key: str, default=None):
     """
     获取配置值
@@ -248,6 +313,11 @@ def get_config(key: str, default=None):
         "cloud": CLOUD_CONFIG,
         "dev": DEV_CONFIG,
         "paths": PATHS,
+        "ui": UI_CONFIG,
+        "log": LOG_CONFIG,
+        "image": IMAGE_CONFIG,
+        "led": LED_CONFIG,
+        "tts": TTS_CONFIG,
     }
     
     keys = key.split(".")

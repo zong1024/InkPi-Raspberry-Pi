@@ -16,26 +16,8 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
-# 从根目录的 config.py 导入配置
-_root_config = _PROJECT_ROOT / "config.py"
-if _root_config.exists():
-    from config import UI_CONFIG, LOG_CONFIG, DATA_DIR
-else:
-    # 备用：从 config/ 目录导入
-    from config.settings import PATHS
-    DATA_DIR = PATHS["data_dir"]
-    UI_CONFIG = {
-        "window_title": "InkPi 书法评测系统",
-        "window_width": 480,
-        "window_height": 320,
-        "theme": "light",
-        "radar_chart_size": 200,
-    }
-    LOG_CONFIG = {
-        "level": "INFO",
-        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        "log_file": DATA_DIR / "inkpi.log",
-    }
+# 从 config 模块导入配置（兼容 PyInstaller 打包）
+from config import UI_CONFIG, LOG_CONFIG, DATA_DIR
 from views.main_window import MainWindow
 
 
