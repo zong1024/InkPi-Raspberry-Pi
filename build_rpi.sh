@@ -1,71 +1,79 @@
 #!/bin/bash
-# InkPi 书法评测系统 - Raspberry Pi 打包脚本
-# 在 Raspberry Pi 上运行此脚本生成单一可执行文件
+# InkPi Raspberry Pi build helper.
+# Usage:
+#   ./build_rpi.sh
+#   MODEL_SOURCE=/path/to/siamese_calligraphy.onnx ./build_rpi.sh
 
-set -e
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+install_optional_pkg() {
+    local pkg="$1"
+    sudo apt-get install -y "$pkg" 2>/dev/null || echo "Warning: optional package '$pkg' could not be installed."
+}
 
 echo "=========================================="
-echo "  InkPi 书法评测系统 - Raspberry Pi 打包"
+echo "  InkPi Raspberry Pi Build"
 echo "=========================================="
 
-# 检查是否在 Raspberry Pi 上运行
 if [ ! -f /proc/device-tree/model ]; then
-    echo "警告: 此脚本应在 Raspberry Pi 上运行"
+    echo "Warning: build_rpi.sh is intended to run on Raspberry Pi hardware."
 fi
 
-# 安装系统依赖
-echo "[1/5] 安装系统依赖..."
+echo "[1/5] Installing system dependencies..."
 sudo apt-get update
 sudo apt-get install -y \
     python3-dev \
     python3-pip \
     python3-venv \
-    libopencv-dev \
+    python3-pyqt6 \
+    python3-onnxruntime \
+    python3-matplotlib \
+    python3-numpy \
+    python3-scipy \
     python3-opencv \
+    python3-requests \
+    python3-spidev \
+    libopencv-dev \
     espeak-ng \
     portaudio19-dev \
     libespeak1 \
     libespeak-dev \
     spi-tools
 
-for pkg in python3-picamera2 python3-libcamera libcamera-apps; do
-    sudo apt-get install -y "$pkg" 2>/dev/null || echo "警告: 可选包 $pkg 安装失败，继续部署"
-done
+install_optional_pkg python3-picamera2
+install_optional_pkg python3-libcamera
+install_optional_pkg libcamera-apps
 
-# 启用 SPI 接口 (用于 WS2812B LED 灯带)
-echo "启用 SPI 接口..."
-sudo raspi-config nonint do_spi 0
+sudo raspi-config nonint do_spi 0 2>/dev/null || true
+sudo usermod -a -G spi "$USER" 2>/dev/null || true
 
-# 添加用户到 spi 组
-sudo usermod -a -G spi $USER
-
-# 创建虚拟环境
-echo "[2/5] 创建虚拟环境..."
-python3 -m venv venv
+echo "[2/5] Creating virtual environment..."
+rm -rf venv
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
 
-# 安装 Python 依赖
-echo "[3/5] 安装 Python 依赖..."
-pip install --upgrade pip
-pip install pyinstaller
-pip install -r requirements.txt
-pip install spidev
+echo "[3/5] Installing Python-only packages..."
+python -m pip install --upgrade pip
+python -m pip install pyinstaller pyttsx3
 
-# 创建模型目录结构
-echo "[4/5] 准备模型文件..."
+echo "[4/5] Preparing model and sanity check..."
 mkdir -p models
 if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
     cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
 fi
 
-if [ ! -f "models/siamese_calligraphy.onnx" ]; then
-    echo "警告: 孪生网络模型不存在，请先复制 siamese_calligraphy.onnx 到 models/ 目录"
+if [ -f "models/siamese_calligraphy.onnx" ]; then
+    echo "Found Siamese model: models/siamese_calligraphy.onnx"
 else
-    echo "检测到孪生网络模型: models/siamese_calligraphy.onnx"
+    echo "Warning: models/siamese_calligraphy.onnx not found. Packaged app will fall back to rule-based scoring."
 fi
 
-# 打包应用
-echo "[5/5] 打包应用..."
+python -c "import main; print('Health check passed: import main')"
+
+echo "[5/5] Building application..."
 pyinstaller \
     --onefile \
     --windowed \
@@ -95,14 +103,9 @@ pyinstaller \
     --exclude-module tkinter \
     main.py
 
-# 完成
 echo ""
 echo "=========================================="
-echo "  打包完成！"
+echo "  Build Complete"
 echo "=========================================="
-echo ""
-echo "可执行文件位置: dist/InkPi"
-echo "文件大小: $(du -h dist/InkPi | cut -f1)"
-echo ""
-echo "运行方式: ./dist/InkPi"
-echo "=========================================="
+echo "Binary: dist/InkPi"
+echo "Size:   $(du -h dist/InkPi | cut -f1)"

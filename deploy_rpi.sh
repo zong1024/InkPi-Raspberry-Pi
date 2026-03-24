@@ -1,95 +1,102 @@
 #!/bin/bash
-# InkPi 书法评测系统 - 树莓派完整部署脚本
-# 使用方法: ./deploy_rpi.sh
+# InkPi Raspberry Pi deployment helper.
+# Usage:
+#   ./deploy_rpi.sh
+#   MODEL_SOURCE=/path/to/siamese_calligraphy.onnx ./deploy_rpi.sh
+#   RUN_SELF_TEST=1 ./deploy_rpi.sh
+#   START_APP=1 ./deploy_rpi.sh
 
-set -e
+set -euo pipefail
 
-echo "=========================================="
-echo "  InkPi 书法评测系统 - 完整部署"
-echo "=========================================="
-
-# 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# 步骤1: 清理旧的打包文件
-echo ""
-echo "[1/6] 清理旧文件..."
+safe_git_sync() {
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+        echo "[2/7] Syncing repository from origin/master..."
+        git fetch origin
+        git pull --ff-only origin master
+    else
+        echo "[2/7] Working tree has local changes. Skipping git sync to avoid overwriting them."
+    fi
+}
+
+install_optional_pkg() {
+    local pkg="$1"
+    sudo apt-get install -y "$pkg" 2>/dev/null || echo "Warning: optional package '$pkg' could not be installed."
+}
+
+echo "=========================================="
+echo "  InkPi Raspberry Pi Deployment"
+echo "=========================================="
+
+echo "[1/7] Cleaning generated files..."
 rm -rf build dist *.spec __pycache__ */__pycache__ */*/__pycache__
 rm -rf venv
-echo "清理完成"
 
-# 步骤2: 拉取最新代码
-echo ""
-echo "[2/6] 拉取最新代码..."
-git fetch origin
-git reset --hard origin/master
-git pull origin master
-echo "代码已更新"
+safe_git_sync
 
-# 步骤3: 安装系统依赖
-echo ""
-echo "[3/6] 安装系统依赖..."
+echo "[3/7] Installing system dependencies..."
 sudo apt-get update
 sudo apt-get install -y \
     python3-dev \
     python3-pip \
     python3-venv \
-    libopencv-dev \
+    python3-pyqt6 \
+    python3-onnxruntime \
+    python3-matplotlib \
+    python3-numpy \
+    python3-scipy \
     python3-opencv \
+    python3-requests \
+    python3-spidev \
+    libopencv-dev \
     espeak-ng \
     portaudio19-dev \
     libespeak1 \
     spi-tools
 
-for pkg in python3-picamera2 python3-libcamera libcamera-apps; do
-    sudo apt-get install -y "$pkg" 2>/dev/null || echo "警告: 可选包 $pkg 安装失败，继续部署"
-done
+install_optional_pkg python3-picamera2
+install_optional_pkg python3-libcamera
+install_optional_pkg libcamera-apps
 
-# 启用 SPI (用于 LED 灯带)
 sudo raspi-config nonint do_spi 0 2>/dev/null || true
-sudo usermod -a -G spi $USER 2>/dev/null || true
-echo "系统依赖安装完成"
+sudo usermod -a -G spi "$USER" 2>/dev/null || true
 
-# 步骤4: 创建虚拟环境
-echo ""
-echo "[4/6] 创建虚拟环境..."
-python3 -m venv venv
+echo "[4/7] Creating virtual environment..."
+python3 -m venv --system-site-packages venv
 source venv/bin/activate
-echo "虚拟环境创建完成"
 
-# 步骤5: 安装 Python 依赖
-echo ""
-echo "[5/6] 安装 Python 依赖..."
-pip install --upgrade pip
-pip install -r requirements.txt
-pip install spidev
-echo "Python 依赖安装完成"
+echo "[5/7] Installing Python-only packages..."
+python -m pip install --upgrade pip
+python -m pip install pyttsx3
 
+echo "[6/7] Preparing model and running health check..."
 if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
     mkdir -p models
     cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
 fi
 
 if [ -f "models/siamese_calligraphy.onnx" ]; then
-    echo "检测到孪生网络模型: models/siamese_calligraphy.onnx"
+    echo "Found Siamese model: models/siamese_calligraphy.onnx"
 else
-    echo "警告: 未检测到 models/siamese_calligraphy.onnx，程序将回退到传统评分逻辑"
+    echo "Warning: models/siamese_calligraphy.onnx not found. The app will fall back to rule-based scoring."
 fi
 
-# 步骤6: 运行程序
-echo ""
-echo "[6/6] 启动程序..."
-echo ""
-echo "=========================================="
-echo "  部署完成！"
-echo "=========================================="
-echo ""
-echo "运行方式:"
-echo "  source venv/bin/activate"
-echo "  python main.py"
-echo ""
-echo "=========================================="
+python -c "import main; print('Health check passed: import main')"
 
-# 直接运行
-python main.py
+if [ "${RUN_SELF_TEST:-0}" = "1" ]; then
+    MPLBACKEND=Agg python test_all.py
+fi
+
+echo "[7/7] Deployment finished."
+echo "Activate env: source venv/bin/activate"
+echo "Run app:      python main.py"
+
+if [ "${START_APP:-0}" = "1" ]; then
+    python main.py
+fi

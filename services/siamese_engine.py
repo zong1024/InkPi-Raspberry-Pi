@@ -10,13 +10,15 @@ InkPi 书法评测系统 - 孪生网络推理引擎
 - 孪生网络只输出：结构相似度 + 平衡感知分数
 - 笔画和韵律由 OpenCV 物理特征模块负责
 """
-import numpy as np
-import cv2
-from typing import Dict, Tuple, Optional, List
-from pathlib import Path
+import contextlib
 import logging
-import time
 import os
+import time
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import cv2
+import numpy as np
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -82,6 +84,32 @@ class SiameseEngine:
 
         # 回退到默认位置，方便后续日志输出
         return str(candidates[0] if candidates else MODELS_DIR / "siamese_calligraphy.onnx")
+
+    @contextlib.contextmanager
+    def _suppress_native_stderr(self):
+        """
+        Debian arm64 onnxruntime packages can emit large volumes of schema
+        warnings to the native stderr stream even when model loading succeeds.
+        Keep Raspberry Pi startup quiet unless verbose diagnostics are enabled.
+        """
+        if os.environ.get("INKPI_VERBOSE_ONNX") == "1" or os.name != "posix":
+            yield
+            return
+
+        try:
+            saved_stderr = os.dup(2)
+            null_stderr = os.open(os.devnull, os.O_WRONLY)
+        except OSError:
+            yield
+            return
+
+        try:
+            os.dup2(null_stderr, 2)
+            yield
+        finally:
+            os.dup2(saved_stderr, 2)
+            os.close(saved_stderr)
+            os.close(null_stderr)
     
     def _init_onnx_session(self):
         """初始化 ONNX Runtime Session（全局单例）"""
@@ -99,10 +127,15 @@ class SiameseEngine:
             if 'CUDAExecutionProvider' in ort.get_available_providers():
                 providers.insert(0, 'CUDAExecutionProvider')
             
-            self._session = ort.InferenceSession(
-                self.model_path,
-                providers=providers
-            )
+            session_options = ort.SessionOptions()
+            session_options.log_severity_level = 3
+
+            with self._suppress_native_stderr():
+                self._session = ort.InferenceSession(
+                    self.model_path,
+                    sess_options=session_options,
+                    providers=providers
+                )
             
             # 获取输入输出信息
             self.input_names = [inp.name for inp in self._session.get_inputs()]
