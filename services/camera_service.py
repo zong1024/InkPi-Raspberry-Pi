@@ -30,13 +30,17 @@ class _Picamera2Capture:
         self._height = int(config.get("preview_height", 480))
         self._fps = int(config.get("fps", 30))
         self._opened = False
+        self.picam = None
 
         try:
             self.picam = Picamera2(camera_num=camera_index)
         except TypeError:
             self.picam = Picamera2()
-
-        self._configure(self._width, self._height)
+        try:
+            self._configure(self._width, self._height)
+        except Exception:
+            self.release()
+            raise
 
     def _configure(self, width: int, height: int):
         controls = {"FrameRate": self._fps} if self._fps > 0 else {}
@@ -46,10 +50,28 @@ class _Picamera2Capture:
         )
 
         if self._opened:
-            self.picam.stop()
+            try:
+                self.picam.stop()
+            except Exception:
+                pass
+            self._opened = False
 
-        self.picam.configure(camera_config)
-        self.picam.start()
+        try:
+            self.picam.configure(camera_config)
+            self.picam.start()
+        except RuntimeError as exc:
+            if controls and "not advertised by libcamera" in str(exc):
+                self.logger.warning(
+                    "Picamera2 frame controls are not supported on this camera; retrying without them."
+                )
+                camera_config = self.picam.create_preview_configuration(
+                    main={"size": (int(width), int(height)), "format": "RGB888"},
+                    controls={},
+                )
+                self.picam.configure(camera_config)
+                self.picam.start()
+            else:
+                raise
         self._opened = True
         time.sleep(0.2)
 
@@ -76,6 +98,9 @@ class _Picamera2Capture:
             return False, None
 
     def release(self):
+        if self.picam is None:
+            return
+
         if self._opened:
             try:
                 self.picam.stop()
@@ -87,18 +112,26 @@ class _Picamera2Capture:
             self.picam.close()
         except Exception:
             pass
+        finally:
+            self.picam = None
 
     def set(self, prop_id, value):
         value = int(value)
         if prop_id == cv2.CAP_PROP_FRAME_WIDTH and value > 0:
+            if value == self._width:
+                return True
             self._width = value
             self._configure(self._width, self._height)
             return True
         if prop_id == cv2.CAP_PROP_FRAME_HEIGHT and value > 0:
+            if value == self._height:
+                return True
             self._height = value
             self._configure(self._width, self._height)
             return True
         if prop_id == cv2.CAP_PROP_FPS and value > 0:
+            if value == self._fps:
+                return True
             self._fps = value
             self._configure(self._width, self._height)
             return True
@@ -154,7 +187,13 @@ class CameraService:
         
         self.logger.info(f"正在打开摄像头: index={index}, backend={backend_name}")
         
-        self.camera = self._create_capture(index, backend)
+        try:
+            self.camera = self._create_capture(index, backend)
+        except Exception as e:
+            self.logger.exception(f"Failed to create camera backend: {e}")
+            self.camera = None
+            self.is_opened = False
+            return False
         
         if not self.camera.isOpened():
             self.logger.error("无法打开摄像头")
@@ -171,7 +210,11 @@ class CameraService:
     def _create_capture(self, index: int, backend) -> cv2.VideoCapture:
         """根据后端创建 VideoCapture，并在需要时回退到默认实现。"""
         if backend == "picamera2":
-            return _Picamera2Capture(index, self.config, self.logger)
+            try:
+                return _Picamera2Capture(index, self.config, self.logger)
+            except Exception as e:
+                self.logger.warning(f"Picamera2 backend failed, falling back to OpenCV: {e}")
+                backend = getattr(cv2, "CAP_V4L2", cv2.CAP_ANY) if sys.platform.startswith("linux") else cv2.CAP_ANY
 
         if backend == cv2.CAP_ANY:
             return cv2.VideoCapture(index)
