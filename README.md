@@ -11,7 +11,7 @@
 
 为了解决模型边缘部署验证困难的问题，本项目实现了一套完整的书法评测系统框架，旨在提供从模型训练到边缘部署的一站式解决方案。框架经过一年多的开发和维护，目前已经完成核心API的开发，实现包括实时视频流采集、图像预处理、多后端推理引擎、四维评测算法等众多功能。
 
-> **本项目架构参考了 [DeepVision](https://github.com/zong1024/DeepVision) CV算法验证框架的设计思想，将系统解耦为数据流控制层、推理引擎层、评测算法层和UI层。**
+> **本项目架构参考了 [DeepVision](https://github.com/zong1024/DeepVision) CV算法验证框架的设计思想。当前仓库并不把 DeepVision 作为运行时依赖直接导入，而是在本仓库内部按类似分层思路实现了 `config/`、`data/`、`core/`、`services/`、`views/` 等模块。**
 
 ## 系统设计
 
@@ -70,6 +70,24 @@
 │  └─────────────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 与 DeepVision 的关系
+
+- **设计来源**：`config/`、`data/`、`core/` 的分层方式，以及相机监听器、配置集中管理等思路，来自对 DeepVision 的借鉴。
+- **当前现状**：InkPi 当前运行时不会 `import DeepVision`，而是将这些能力本地化到本仓库中维护。
+- **阅读建议**：如果你是第一次读这个项目，先看桌面应用真实入口链路，再回头看 `data/` 和 `core/` 的分层设计会更容易理解。
+
+### 当前真实运行链路
+
+当前桌面应用主链路以 `views/ + services/` 为主：
+
+`main.py` -> `views/main_window.py` -> `views/camera_view.py` -> `services/preprocessing_service.py` -> `services/evaluation_service.py` -> `services/database_service.py`
+
+其中：
+
+- `views/` 负责桌面端 UI、页面跳转和用户交互
+- `services/` 负责当前应用实际使用的相机、预处理、评分、存储、语音、LED 等能力
+- `data/` 和 `core/` 保留了更偏 DeepVision 风格的底层分层实现，可用于训练、推理封装和后续架构收敛
 
 ### 核心算法层 (core/)
 
@@ -250,7 +268,7 @@ pip install -r requirements.txt
 ### 运行
 
 ```bash
-# 桌面应用
+# 桌面应用（主入口链路: main.py -> views/* -> services/*）
 python main.py
 
 # 运行测试

@@ -37,8 +37,16 @@ inkpi_env\Scripts\activate  # Windows
 
 # 安装依赖
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-pip install opencv-python numpy matplotlib tqdm
-pip install onnx onnxruntime  # 用于模型导出
+pip install opencv-python numpy scipy pillow matplotlib tqdm
+pip install onnx onnxruntime onnxscript  # 用于模型导出
+```
+
+更推荐直接使用仓库内置脚本，它们会自动安装训练所需依赖并处理 CPU / GPU 环境差异：
+
+```bash
+bash training/train_cpu.sh
+# 或
+bash training/train_v100.sh
 ```
 
 ### 验证环境
