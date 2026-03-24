@@ -36,7 +36,7 @@ if IS_RASPBERRY_PI:
         LED_AVAILABLE = True
     except ImportError:
         LED_AVAILABLE = False
-        logging.warning("spidev 未安装，LED 功能不可用")
+        logging.debug("spidev is not installed; LED service will run in simulation mode.")
 else:
     LED_AVAILABLE = False
 
@@ -71,6 +71,7 @@ class LEDService:
         
         self.spi = None
         self.available = LED_AVAILABLE
+        self._disabled_reason = None
         self._animation_thread = None
         self._stop_animation = False
         
@@ -84,6 +85,15 @@ class LEDService:
     
     def _init_spi(self):
         """初始化 SPI 接口"""
+        device_path = Path(f"/dev/spidev{self.spi_bus}.{self.spi_device}")
+        if not device_path.exists():
+            self.available = False
+            self._disabled_reason = f"SPI device {device_path} is not available"
+            self.logger.debug(
+                f"{self._disabled_reason}; LED service will run in simulation mode."
+            )
+            return
+
         try:
             self.spi = spidev.SpiDev()
             self.spi.open(self.spi_bus, self.spi_device)
@@ -94,8 +104,24 @@ class LEDService:
             self.spi.mode = 0
             self.logger.info(f"SPI 初始化成功: bus={self.spi_bus}, device={self.spi_device}")
         except Exception as e:
-            self.logger.error(f"SPI 初始化失败: {e}")
             self.available = False
+            self._disabled_reason = f"SPI initialization is unavailable: {e}"
+            self.logger.debug(
+                f"{self._disabled_reason}; LED service will run in simulation mode."
+            )
+
+    def _disable_spi(self, reason: str):
+        """Disable hardware access and fall back to simulation mode."""
+        self.available = False
+        self._disabled_reason = reason
+        if self.spi:
+            try:
+                self.spi.close()
+            except Exception:
+                pass
+            finally:
+                self.spi = None
+        self.logger.debug(f"{reason}; LED service will run in simulation mode.")
     
     def _encode_color(self, r: int, g: int, b: int) -> bytes:
         """
@@ -173,7 +199,7 @@ class LEDService:
         try:
             self.spi.writebytes(list(frame))
         except Exception as e:
-            self.logger.error(f"写入 LED 数据失败: {e}")
+            self._disable_spi(f"LED write is unavailable: {e}")
     
     def set_rgb(self, r: int, g: int, b: int, led_index: Optional[int] = None):
         """
@@ -203,7 +229,7 @@ class LEDService:
         try:
             self.spi.writebytes(list(frame))
         except Exception as e:
-            self.logger.error(f"写入 LED 数据失败: {e}")
+            self._disable_spi(f"LED write is unavailable: {e}")
     
     def off(self):
         """关闭所有 LED"""
@@ -362,9 +388,9 @@ if not LED_AVAILABLE:
             pass
         
         def set_color(self, color_name: str, led_index: Optional[int] = None):
-            print(f"[LED 模拟] 颜色: {color_name}, LED: {led_index}")
+            self.logger.debug("[LED 模拟] 颜色: %s, LED: %s", color_name, led_index)
         
         def set_rgb(self, r: int, g: int, b: int, led_index: Optional[int] = None):
-            print(f"[LED 模拟] RGB: ({r}, {g}, {b}), LED: {led_index}")
+            self.logger.debug("[LED 模拟] RGB: (%s, %s, %s), LED: %s", r, g, b, led_index)
     
     led_service = MockLEDService()

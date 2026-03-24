@@ -60,7 +60,7 @@ class SpeechService:
 
         self._tts_disabled_reason = "No ALSA playback device detected"
         self._audio_available = False
-        self.logger.info("%s; speech playback disabled.", self._tts_disabled_reason)
+        self.logger.debug("%s; speech playback disabled.", self._tts_disabled_reason)
         return False
 
     def _init_engine(self):
@@ -128,7 +128,7 @@ class SpeechService:
         if self._engine is None:
             if self._tts_disabled_reason:
                 if not self._tts_skip_logged:
-                    self.logger.info("Skipping speech playback: %s.", self._tts_disabled_reason)
+                    self.logger.debug("Skipping speech playback: %s.", self._tts_disabled_reason)
                     self._tts_skip_logged = True
             else:
                 self.logger.error("TTS 引擎不可用")

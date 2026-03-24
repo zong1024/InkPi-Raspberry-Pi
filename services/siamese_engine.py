@@ -118,7 +118,7 @@ class SiameseEngine:
             
             # 检查模型文件是否存在
             if not Path(self.model_path).exists():
-                self.logger.warning(f"ONNX 模型不存在: {self.model_path}，使用模拟模式")
+                self.logger.debug(f"ONNX 模型不存在: {self.model_path}，使用模拟模式")
                 self.use_mock = True
                 return
             

@@ -8,7 +8,9 @@ InkPi 书法评测系统 - 摄像头服务
 import cv2
 import numpy as np
 from typing import Optional, Tuple, List
+from contextlib import contextmanager
 import logging
+import os
 import threading
 from pathlib import Path
 import sys
@@ -18,10 +20,36 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import CAMERA_CONFIG, IMAGE_CONFIG, IS_RASPBERRY_PI
 
 
+@contextmanager
+def _suppress_opencv_videoio_logs():
+    """Temporarily silence noisy native OpenCV video I/O warnings."""
+    previous_level = None
+    try:
+        previous_level = cv2.utils.logging.getLogLevel()
+        cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    except Exception:
+        previous_level = None
+
+    try:
+        yield
+    finally:
+        if previous_level is not None:
+            try:
+                cv2.utils.logging.setLogLevel(previous_level)
+            except Exception:
+                pass
+
+
 class _Picamera2Capture:
     """对 Picamera2 做一层 VideoCapture 风格适配。"""
 
+    _frame_rate_controls_supported = None
+    _unsupported_controls_logged = False
+
     def __init__(self, camera_index: int, config: dict, logger: logging.Logger):
+        os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:ERROR")
+        logging.getLogger("picamera2").setLevel(logging.WARNING)
+        logging.getLogger("picamera2.picamera2").setLevel(logging.WARNING)
         from picamera2 import Picamera2
 
         self.logger = logger
@@ -43,7 +71,9 @@ class _Picamera2Capture:
             raise
 
     def _configure(self, width: int, height: int):
-        controls = {"FrameRate": self._fps} if self._fps > 0 else {}
+        controls = {}
+        if self._fps > 0 and self.__class__._frame_rate_controls_supported is not False:
+            controls = {"FrameRate": self._fps}
         camera_config = self.picam.create_preview_configuration(
             main={"size": (int(width), int(height)), "format": "RGB888"},
             controls=controls,
@@ -59,11 +89,16 @@ class _Picamera2Capture:
         try:
             self.picam.configure(camera_config)
             self.picam.start()
+            if controls:
+                self.__class__._frame_rate_controls_supported = True
         except RuntimeError as exc:
             if controls and "not advertised by libcamera" in str(exc):
-                self.logger.warning(
-                    "Picamera2 frame controls are not supported on this camera; retrying without them."
-                )
+                self.__class__._frame_rate_controls_supported = False
+                if not self.__class__._unsupported_controls_logged:
+                    self.logger.debug(
+                        "Picamera2 frame controls are not supported on this camera; falling back to default timing."
+                    )
+                    self.__class__._unsupported_controls_logged = True
                 camera_config = self.picam.create_preview_configuration(
                     main={"size": (int(width), int(height)), "format": "RGB888"},
                     controls={},
@@ -217,15 +252,18 @@ class CameraService:
                 backend = getattr(cv2, "CAP_V4L2", cv2.CAP_ANY) if sys.platform.startswith("linux") else cv2.CAP_ANY
 
         if backend == cv2.CAP_ANY:
-            return cv2.VideoCapture(index)
+            with _suppress_opencv_videoio_logs():
+                return cv2.VideoCapture(index)
 
-        cap = cv2.VideoCapture(index, backend)
+        with _suppress_opencv_videoio_logs():
+            cap = cv2.VideoCapture(index, backend)
         if cap.isOpened():
             return cap
 
         self.logger.warning("指定后端打开失败，回退到 OpenCV 默认后端")
         cap.release()
-        return cv2.VideoCapture(index)
+        with _suppress_opencv_videoio_logs():
+            return cv2.VideoCapture(index)
 
     def _resolve_backend(self, backend_name):
         """将配置中的后端名称映射到 OpenCV 后端常量。"""
@@ -259,6 +297,9 @@ class CameraService:
     def _picamera2_available(self) -> bool:
         """检测 Picamera2 是否可用。"""
         try:
+            os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:ERROR")
+            logging.getLogger("picamera2").setLevel(logging.WARNING)
+            logging.getLogger("picamera2.picamera2").setLevel(logging.WARNING)
             from picamera2 import Picamera2  # noqa: F401
             return True
         except Exception:
@@ -434,6 +475,9 @@ class CameraService:
 
         if IS_RASPBERRY_PI:
             try:
+                os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:ERROR")
+                logging.getLogger("picamera2").setLevel(logging.WARNING)
+                logging.getLogger("picamera2.picamera2").setLevel(logging.WARNING)
                 from picamera2 import Picamera2
                 camera_info = Picamera2.global_camera_info()
                 return list(range(len(camera_info)))
@@ -447,7 +491,8 @@ class CameraService:
         
         # 常见设备索引通常落在 0-4，避免无意义地探测过多设备。
         for i in range(5):
-            cap = cv2.VideoCapture(i, backend) if backend != cv2.CAP_ANY else cv2.VideoCapture(i)
+            with _suppress_opencv_videoio_logs():
+                cap = cv2.VideoCapture(i, backend) if backend != cv2.CAP_ANY else cv2.VideoCapture(i)
             if cap.isOpened():
                 available.append(i)
                 cap.release()
