@@ -297,6 +297,8 @@ PRECHECK_CONFIG = {
     "min_contrast_std": 12,
     "min_ink_ratio": 0.01,
     "max_ink_ratio": 0.60,
+    "min_component_area_ratio": 0.00008,
+    "max_meaningful_components": 60,
 }
 
 # =========================

@@ -4,6 +4,7 @@ InkPi 书法评测系统 - 相机视图
 """
 import sys
 import time
+import logging
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -60,6 +61,7 @@ class CameraView(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread = None
         self.current_frame: np.ndarray = None
         self._init_ui()
@@ -258,7 +260,7 @@ class CameraView(QWidget):
             speech_service.speak_score(result.total_score, result.feedback)
             
             # 释放内存
-            preprocessing_service.release_memory()
+            self._release_preprocessing_memory()
             
             self.capture_completed.emit(result)
             
@@ -272,6 +274,13 @@ class CameraView(QWidget):
             QMessageBox.critical(self, "错误", f"评测失败: {str(e)}")
             self.btn_capture.setEnabled(True)
             
+    def _release_preprocessing_memory(self):
+        """Ensure cleanup failures never bubble up to the UI."""
+        try:
+            preprocessing_service.release_memory()
+        except Exception as exc:
+            self.logger.debug("Skip preprocessing memory cleanup: %s", exc)
+
     def _on_cancel(self):
         """取消按钮点击"""
         self.cancelled.emit()
@@ -340,7 +349,7 @@ class CameraView(QWidget):
             speech_service.speak_score(result.total_score, result.feedback)
             
             # 释放内存
-            preprocessing_service.release_memory()
+            self._release_preprocessing_memory()
             
             self.capture_completed.emit(result)
             

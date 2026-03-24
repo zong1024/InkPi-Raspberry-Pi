@@ -66,6 +66,30 @@ try:
         log_test("预处理服务 - 图像处理", False, f"预处理异常: {e}")
     except Exception as e:
         log_test("预处理服务 - 图像处理", False, f"未知错误: {e}")
+
+    # 测试释放内存兼容无界面 OpenCV
+    try:
+        preprocessing_service.release_memory()
+        log_test("预处理服务 - 释放内存", True, "无界面环境兼容")
+    except Exception as e:
+        log_test("预处理服务 - 释放内存", False, str(e))
+
+    # 测试忽略微小噪点，避免误报“碎片过多”
+    try:
+        noisy_binary = np.ones((256, 256), dtype=np.uint8) * 255
+        cv2.rectangle(noisy_binary, (48, 48), (208, 208), 0, 18)
+        rng = np.random.default_rng(42)
+        noise_points = rng.integers(0, 256, size=(180, 2))
+        for y, x in noise_points:
+            noisy_binary[y, x] = 0
+
+        ink_ratio = np.mean(noisy_binary == 0)
+        preprocessing_service._validate_calligraphy_features(noisy_binary, ink_ratio)
+        log_test("预处理服务 - 微小噪点过滤", True, "小连通域不会误判为碎片过多")
+    except PreprocessingError as e:
+        log_test("预处理服务 - 微小噪点过滤", False, str(e))
+    except Exception as e:
+        log_test("预处理服务 - 微小噪点过滤", False, f"未知错误: {e}")
         
 except Exception as e:
     log_test("预处理服务 - 导入", False, str(e))

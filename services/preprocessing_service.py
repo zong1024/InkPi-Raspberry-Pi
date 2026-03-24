@@ -192,12 +192,17 @@ class PreprocessingService:
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
             255 - binary, connectivity=8
         )
-        num_components = num_labels - 1  # 排除背景
+        component_areas = stats[1:, cv2.CC_STAT_AREA] if num_labels > 1 else np.array([], dtype=np.int32)
+        min_component_area = max(
+            8,
+            int(binary.size * self.precheck_config.get("min_component_area_ratio", 0.00008))
+        )
+        meaningful_components = component_areas[component_areas >= min_component_area]
+        num_components = len(meaningful_components)
         
-        # 放宽到 100 个连通分量（原 50）
-        if num_components > 100:
+        if num_components > self.precheck_config.get("max_meaningful_components", 60):
             raise PreprocessingError(
-                "检测到过多碎片，请移除杂物后重试",
+                "检测到较多零散笔画或背景噪点，请尽量对准单个字并保持画面干净后重试",
                 error_type="too_fragmented"
             )
         
@@ -216,7 +221,10 @@ class PreprocessingService:
                     error_type="scattered_content"
                 )
         
-        self.logger.debug(f"书法特征验证通过: 边缘密度={edge_ratio:.4f}, 连通分量={num_components}")
+        self.logger.debug(
+            f"书法特征验证通过: 边缘密度={edge_ratio:.4f}, "
+            f"有效连通域={num_components}, 最小面积阈值={min_component_area}"
+        )
     
     def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
         """
@@ -568,7 +576,11 @@ class PreprocessingService:
     
     def release_memory(self):
         """释放 OpenCV 临时内存"""
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except cv2.error:
+            # Headless OpenCV builds may not include HighGUI support.
+            pass
         self.logger.debug("释放 OpenCV 内存")
 
 
