@@ -1,229 +1,292 @@
-"""
-InkPi 书法评测系统 - 历史视图
-适配3.5寸屏幕 (480x320)
-"""
+"""History view for browsing past evaluations."""
+
+from __future__ import annotations
+
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QFrame, QScrollArea, QListWidget,
-    QListWidgetItem, QMessageBox, QComboBox, QDateEdit,
-    QGroupBox
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
+from views.ui_theme import app_font, clear_layout, score_to_color, score_to_soft_color
+
+
+class StatTile(QFrame):
+    """Small statistics tile."""
+
+    def __init__(self, title: str, value: str, parent=None):
+        super().__init__(parent)
+        self.setObjectName("statCard")
+        self.setMinimumHeight(74)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(2)
+
+        title_label = QLabel(title)
+        title_label.setObjectName("mutedLabel")
+        title_label.setFont(app_font(10))
+        layout.addWidget(title_label)
+
+        value_label = QLabel(value)
+        value_label.setObjectName("metricValue")
+        value_label.setFont(app_font(22, QFont.Weight.Bold))
+        layout.addWidget(value_label)
 
 
 class HistoryItem(QFrame):
-    """历史记录项 - 紧凑版"""
-    
+    """History record card."""
+
     clicked = pyqtSignal(EvaluationResult)
     delete_requested = pyqtSignal(int)
-    
+
     def __init__(self, result: EvaluationResult, parent=None):
         super().__init__(parent)
         self.result = result
-        self._init_ui()
-        
-    def _init_ui(self):
-        self.setObjectName("historyItem")
-        self.setFixedHeight(45)
+        self.setObjectName("historyCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 5, 8, 5)
-        
-        # 分数
-        score_label = QLabel(f"{self.result.total_score}")
-        score_label.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        score_label.setStyleSheet(f"color: {self.result.get_color()};")
-        score_label.setFixedWidth(35)
-        score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(score_label)
-        
-        # 信息
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(1)
-        
-        # 时间
-        time_str = self.result.timestamp.strftime("%m-%d %H:%M")
-        time_label = QLabel(time_str)
-        time_label.setFont(QFont("Microsoft YaHei", 8))
-        time_label.setStyleSheet("color: #666;")
-        info_layout.addWidget(time_label)
-        
-        # 四维分数 - 简短
-        scores_str = " ".join([f"{v}" for v in self.result.detail_scores.values()])
-        scores_label = QLabel(scores_str)
-        scores_label.setFont(QFont("Microsoft YaHei", 8))
-        scores_label.setStyleSheet("color: #999;")
-        info_layout.addWidget(scores_label)
-        
-        layout.addLayout(info_layout)
-        layout.addStretch()
-        
-        # 等级
-        grade_label = QLabel(self.result.get_grade())
-        grade_label.setFont(QFont("Microsoft YaHei", 9))
-        grade_label.setStyleSheet(f"color: {self.result.get_color()};")
-        layout.addWidget(grade_label)
-        
-        # 删除按钮
-        btn_delete = QPushButton("×")
-        btn_delete.setObjectName("deleteButton")
-        btn_delete.setFixedSize(20, 20)
-        btn_delete.setFont(QFont("Arial", 12))
-        btn_delete.clicked.connect(lambda: self.delete_requested.emit(self.result.id))
-        layout.addWidget(btn_delete)
-        
-    def mousePressEvent(self, event):
-        """点击事件"""
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+
+        score_panel = QFrame()
+        score_panel.setStyleSheet(
+            f"background-color: {score_to_soft_color(result.total_score)};"
+            "border-radius: 18px;"
+        )
+        score_layout = QVBoxLayout(score_panel)
+        score_layout.setContentsMargins(14, 10, 14, 10)
+        score_layout.setSpacing(0)
+
+        score_label = QLabel(str(result.total_score))
+        score_label.setObjectName("historyScore")
+        score_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
+        score_layout.addWidget(score_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        grade_label = QLabel(result.get_grade())
+        grade_label.setObjectName("historyGrade")
+        grade_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
+        score_layout.addWidget(grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(score_panel)
+
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(4)
+
+        title = result.character_name or "书法评测记录"
+        title_label = QLabel(title)
+        title_label.setObjectName("sectionTitle")
+        title_label.setFont(app_font(13, QFont.Weight.Bold))
+        text_layout.addWidget(title_label)
+
+        time_label = QLabel(result.timestamp.strftime("%Y-%m-%d %H:%M"))
+        time_label.setObjectName("cardSubtitle")
+        text_layout.addWidget(time_label)
+
+        detail_text = "  ·  ".join(f"{key}{value}" for key, value in result.detail_scores.items())
+        detail_label = QLabel(detail_text)
+        detail_label.setObjectName("mutedLabel")
+        detail_label.setWordWrap(True)
+        text_layout.addWidget(detail_label)
+
+        feedback_label = QLabel(result.feedback[:80] + ("..." if len(result.feedback) > 80 else ""))
+        feedback_label.setObjectName("sectionSubtitle")
+        feedback_label.setWordWrap(True)
+        text_layout.addWidget(feedback_label)
+
+        layout.addLayout(text_layout, stretch=1)
+
+        action_layout = QVBoxLayout()
+        action_layout.setSpacing(8)
+        action_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        view_chip = QLabel("查看")
+        view_chip.setObjectName("accentChip")
+        action_layout.addWidget(view_chip, alignment=Qt.AlignmentFlag.AlignRight)
+
+        delete_button = QPushButton("删除")
+        delete_button.setObjectName("dangerButton")
+        delete_button.setMinimumHeight(36)
+        delete_button.clicked.connect(lambda: self.delete_requested.emit(self.result.id))
+        action_layout.addWidget(delete_button)
+
+        layout.addLayout(action_layout)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.result)
+        super().mousePressEvent(event)
 
 
 class HistoryView(QWidget):
-    """历史视图 - 适配3.5寸屏幕"""
-    
-    # 信号
+    """History page."""
+
     back_requested = pyqtSignal()
     result_selected = pyqtSignal(EvaluationResult)
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._init_ui()
-        
-    def _init_ui(self):
-        """初始化 UI"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-        
-        # 顶部栏 - 紧凑
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(5)
-        
-        btn_back = QPushButton("← 返回")
-        btn_back.setObjectName("textButton")
-        btn_back.setFont(QFont("Microsoft YaHei", 9))
-        btn_back.clicked.connect(self.back_requested.emit)
-        top_layout.addWidget(btn_back)
-        
-        top_layout.addStretch()
-        
-        # 统计信息 - 简短
-        self.stats_label = QLabel("")
-        self.stats_label.setFont(QFont("Microsoft YaHei", 8))
-        self.stats_label.setStyleSheet("color: #666;")
-        top_layout.addWidget(self.stats_label)
-        
-        layout.addLayout(top_layout)
-        
-        # 筛选区域 - 简化
-        filter_layout = QHBoxLayout()
-        filter_layout.setSpacing(5)
-        
-        self.date_combo = QComboBox()
-        self.date_combo.addItems(["全部", "今天", "7天", "30天"])
-        self.date_combo.setFont(QFont("Microsoft YaHei", 8))
-        self.date_combo.setFixedWidth(60)
-        self.date_combo.currentIndexChanged.connect(self._on_filter_changed)
-        filter_layout.addWidget(self.date_combo)
-        
-        filter_layout.addStretch()
-        
-        btn_refresh = QPushButton("刷新")
-        btn_refresh.setObjectName("secondaryButton")
-        btn_refresh.setFont(QFont("Microsoft YaHei", 8))
-        btn_refresh.setFixedSize(50, 25)
-        btn_refresh.clicked.connect(self.refresh_data)
-        filter_layout.addWidget(btn_refresh)
-        
-        layout.addLayout(filter_layout)
-        
-        # 历史记录列表
+
+    def _init_ui(self) -> None:
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setStyleSheet("QScrollArea { border: none; }")
-        
+        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        root_layout.addWidget(self.scroll_area)
+
+        container = QWidget()
+        self.scroll_area.setWidget(container)
+
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(12)
+
+        stats_title = QLabel("成绩总览")
+        stats_title.setObjectName("sectionTitle")
+        stats_title.setFont(app_font(16, QFont.Weight.Bold))
+        layout.addWidget(stats_title)
+
+        self.stats_row = QHBoxLayout()
+        self.stats_row.setSpacing(10)
+        layout.addLayout(self.stats_row)
+
+        filter_card = QFrame()
+        filter_card.setObjectName("panelCard")
+        filter_layout = QHBoxLayout(filter_card)
+        filter_layout.setContentsMargins(16, 12, 16, 12)
+        filter_layout.setSpacing(8)
+
+        filter_title = QLabel("筛选范围")
+        filter_title.setObjectName("mutedLabel")
+        filter_layout.addWidget(filter_title)
+
+        self.date_combo = QComboBox()
+        self.date_combo.addItems(["全部", "今天", "近 7 天", "近 30 天"])
+        self.date_combo.setMinimumWidth(104)
+        self.date_combo.currentIndexChanged.connect(self._on_filter_changed)
+        filter_layout.addWidget(self.date_combo)
+
+        filter_layout.addStretch()
+
+        self.record_hint = QLabel("最近 20 条记录")
+        self.record_hint.setObjectName("mutedLabel")
+        filter_layout.addWidget(self.record_hint)
+
+        btn_refresh = QPushButton("刷新")
+        btn_refresh.setObjectName("secondaryButton")
+        btn_refresh.setMinimumHeight(40)
+        btn_refresh.clicked.connect(self.refresh_data)
+        filter_layout.addWidget(btn_refresh)
+
+        btn_back = QPushButton("返回首页")
+        btn_back.setObjectName("ghostButton")
+        btn_back.setMinimumHeight(40)
+        btn_back.clicked.connect(self.back_requested.emit)
+        filter_layout.addWidget(btn_back)
+
+        layout.addWidget(filter_card)
+
         self.list_container = QWidget()
         self.list_layout = QVBoxLayout(self.list_container)
-        self.list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        self.list_layout.setSpacing(5)
-        
-        self.scroll_area.setWidget(self.list_container)
-        layout.addWidget(self.scroll_area)
-        
-    def refresh_data(self):
-        """刷新数据"""
+        self.list_layout.setContentsMargins(0, 0, 0, 0)
+        self.list_layout.setSpacing(8)
+        layout.addWidget(self.list_container)
+        layout.addStretch()
+
+    def refresh_data(self) -> None:
+        self.scroll_area.verticalScrollBar().setValue(0)
         self._load_stats()
         self._load_records()
-        
-    def _load_stats(self):
-        """加载统计信息"""
+
+    def _load_stats(self) -> None:
         stats = database_service.get_statistics()
-        self.stats_label.setText(
-            f"共{stats['total_count']}次 | 均分{stats['average_score']}"
-        )
-        
-    def _load_records(self):
-        """加载历史记录"""
-        # 清除现有记录
-        while self.list_layout.count():
-            item = self.list_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
-        # 根据筛选条件获取记录
-        filter_idx = self.date_combo.currentIndex()
-        
-        if filter_idx == 0:  # 全部
+
+        clear_layout(self.stats_row)
+
+        tiles = [
+            StatTile("累计评测", str(stats["total_count"])),
+            StatTile("平均分", str(stats["average_score"]) if stats["total_count"] else "--"),
+            StatTile("最佳成绩", str(stats["max_score"]) if stats["total_count"] else "--"),
+            StatTile("最低成绩", str(stats["min_score"]) if stats["total_count"] else "--"),
+        ]
+
+        for index, tile in enumerate(tiles):
+            self.stats_row.addWidget(tile)
+
+    def _load_records(self) -> None:
+        clear_layout(self.list_layout)
+
+        filter_index = self.date_combo.currentIndex()
+        now = datetime.now()
+
+        if filter_index == 0:
             records = database_service.get_all(limit=20)
+            self.record_hint.setText("最近 20 条记录")
         else:
-            now = datetime.now()
-            if filter_idx == 1:  # 今天
+            if filter_index == 1:
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            elif filter_idx == 2:  # 最近7天
+            elif filter_index == 2:
                 start_date = now - timedelta(days=7)
-            else:  # 最近30天
+            else:
                 start_date = now - timedelta(days=30)
-                
             records = database_service.get_by_date_range(start_date, now)
-            
+            self.record_hint.setText(f"筛选结果：{len(records)} 条")
+
         if not records:
-            empty_label = QLabel("暂无评测记录")
-            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty_label.setStyleSheet("color: #999; padding: 20px;")
-            empty_label.setFont(QFont("Microsoft YaHei", 9))
-            self.list_layout.addWidget(empty_label)
+            empty_card = QFrame()
+            empty_card.setObjectName("emptyStateCard")
+            empty_layout = QVBoxLayout(empty_card)
+            empty_layout.setContentsMargins(24, 24, 24, 24)
+            empty_layout.setSpacing(8)
+
+            title = QLabel("这个时间范围内还没有记录")
+            title.setObjectName("sectionTitle")
+            empty_layout.addWidget(title)
+
+            body = QLabel("完成新的书法评测后，记录会自动保存在这里。")
+            body.setObjectName("sectionSubtitle")
+            body.setWordWrap(True)
+            empty_layout.addWidget(body)
+
+            self.list_layout.addWidget(empty_card)
             return
-            
+
         for record in records:
             item = HistoryItem(record)
             item.clicked.connect(self.result_selected.emit)
             item.delete_requested.connect(self._on_delete_record)
             self.list_layout.addWidget(item)
-            
-    def _on_filter_changed(self):
-        """筛选条件改变"""
+
+    def _on_filter_changed(self) -> None:
         self._load_records()
-        
-    def _on_delete_record(self, record_id: int):
-        """删除记录"""
+
+    def _on_delete_record(self, record_id: int) -> None:
         reply = QMessageBox.question(
             self,
             "确认删除",
-            "确定要删除这条记录吗？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            "确定要删除这条评测记录吗？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        
         if reply == QMessageBox.StandardButton.Yes:
             database_service.delete(record_id)
             self.refresh_data()

@@ -1,381 +1,398 @@
-"""
-InkPi 书法评测系统 - 相机视图
-适配3.5寸屏幕 (480x320)
-"""
+"""Camera view for capture and evaluation."""
+
+from __future__ import annotations
+
+import logging
 import sys
 import time
-import logging
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QPushButton, QFrame, QMessageBox, QFileDialog
-)
-from PyQt6.QtCore import Qt, pyqtSignal, QThread, QTimer
-from PyQt6.QtGui import QFont, QImage, QPixmap
-
 import cv2
 import numpy as np
+from PyQt6.QtCore import QThread, Qt, pyqtSignal
+from PyQt6.QtGui import QFont, QImage, QPixmap
+from PyQt6.QtWidgets import (
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from services.camera_service import camera_service
-from services.preprocessing_service import preprocessing_service, PreprocessingError
-from services.evaluation_service import evaluation_service
-from services.database_service import database_service
-from services.speech_service import speech_service
-from services.camera_service import CameraService
 from config import IMAGES_DIR
 from models.evaluation_result import EvaluationResult
+from services.camera_service import CameraService, camera_service
+from services.database_service import database_service
+from services.evaluation_service import evaluation_service
+from services.preprocessing_service import PreprocessingError, preprocessing_service
+from services.speech_service import speech_service
+from views.ui_theme import app_font
 
 
 class PreviewThread(QThread):
-    """预览线程"""
-    
+    """Lightweight preview loop."""
+
     frame_ready = pyqtSignal(np.ndarray)
-    
-    def __init__(self, camera_service: CameraService):
+
+    def __init__(self, camera: CameraService):
         super().__init__()
-        self.camera = camera_service
+        self.camera = camera
         self._running = False
-        
-    def run(self):
+
+    def run(self) -> None:
         self._running = True
         while self._running:
             frame = self.camera.capture_frame()
             if frame is not None:
                 self.frame_ready.emit(frame)
-            time.sleep(0.033)  # ~30 FPS
-            
-    def stop(self):
+            self.msleep(33)
+
+    def stop(self) -> None:
         self._running = False
         self.wait()
 
 
 class CameraView(QWidget):
-    """相机视图 - 适配3.5寸屏幕"""
-    
-    # 信号
-    capture_completed = pyqtSignal(EvaluationResult)  # 拍照完成
-    cancelled = pyqtSignal()                          # 取消
-    
+    """Touch-first capture page."""
+
+    capture_completed = pyqtSignal(EvaluationResult)
+    cancelled = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
-        self.preview_thread: PreviewThread = None
-        self.current_frame: np.ndarray = None
+        self.preview_thread: PreviewThread | None = None
+        self.current_frame: np.ndarray | None = None
         self._init_ui()
-        
-    def _init_ui(self):
-        """初始化 UI"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
-        
-        # 预览区域 - 占满大部分屏幕
+
+    def _init_ui(self) -> None:
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(12)
+
+        preview_card = QFrame()
+        preview_card.setObjectName("previewCard")
+        preview_layout = QVBoxLayout(preview_card)
+        preview_layout.setContentsMargins(16, 16, 16, 16)
+        preview_layout.setSpacing(8)
+
+        preview_header = QHBoxLayout()
+        preview_header.setSpacing(10)
+
+        preview_title = QLabel("实时取景")
+        preview_title.setObjectName("sectionTitle")
+        preview_title.setFont(app_font(16, QFont.Weight.Bold))
+        preview_header.addWidget(preview_title)
+
+        preview_header.addStretch()
+
+        self.camera_state = QLabel("准备中")
+        self.camera_state.setObjectName("statusPill")
+        preview_header.addWidget(self.camera_state)
+
+        preview_layout.addLayout(preview_header)
+
         self.preview_frame = QFrame()
         self.preview_frame.setObjectName("previewFrame")
-        preview_layout = QVBoxLayout(self.preview_frame)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.preview_label = QLabel("启动中...")
+        frame_layout = QVBoxLayout(self.preview_frame)
+        frame_layout.setContentsMargins(14, 14, 14, 14)
+
+        self.preview_label = QLabel("正在准备相机...")
+        self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumSize(470, 260)
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                background-color: #1a1a1a;
-                color: #fff;
-                font-size: 12px;
-            }
-        """)
-        preview_layout.addWidget(self.preview_label)
-        
-        layout.addWidget(self.preview_frame, stretch=1)
-        
-        # 按钮区域 - 底部紧凑
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
-        
-        self.btn_cancel = QPushButton("取消")
-        self.btn_cancel.setObjectName("secondaryButton")
-        self.btn_cancel.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_cancel.setFixedSize(80, 40)
-        self.btn_cancel.clicked.connect(self._on_cancel)
-        btn_layout.addWidget(self.btn_cancel)
-        
-        btn_layout.addStretch()
-        
-        self.btn_capture = QPushButton("📷 拍照")
-        self.btn_capture.setObjectName("captureButton")
-        self.btn_capture.setFont(QFont("Microsoft YaHei", 11))
-        self.btn_capture.setFixedSize(100, 40)
+        self.preview_label.setMinimumSize(430, 270)
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setFont(app_font(12))
+        frame_layout.addWidget(self.preview_label)
+
+        preview_layout.addWidget(self.preview_frame, stretch=1)
+
+        self.preview_hint = QLabel("单字尽量占画面 60% 左右，避免纸张边缘进入取景框。")
+        self.preview_hint.setObjectName("sectionSubtitle")
+        self.preview_hint.setWordWrap(True)
+        preview_layout.addWidget(self.preview_hint)
+
+        layout.addWidget(preview_card, stretch=7)
+
+        side_panel = QVBoxLayout()
+        side_panel.setSpacing(10)
+
+        guide_card = QFrame()
+        guide_card.setObjectName("guideCard")
+        guide_layout = QVBoxLayout(guide_card)
+        guide_layout.setContentsMargins(16, 16, 16, 16)
+        guide_layout.setSpacing(6)
+
+        guide_title = QLabel("拍摄与状态")
+        guide_title.setObjectName("sectionTitle")
+        guide_title.setFont(app_font(15, QFont.Weight.Bold))
+        guide_layout.addWidget(guide_title)
+
+        for text in [
+            "1. 只保留一个汉字，避免整页一起入镜。",
+            "2. 使用浅色背景并尽量减少阴影。",
+        ]:
+            label = QLabel(text)
+            label.setObjectName("sectionSubtitle")
+            label.setWordWrap(True)
+            guide_layout.addWidget(label)
+
+        self.status_label = QLabel("等待相机就绪")
+        self.status_label.setObjectName("sectionSubtitle")
+        self.status_label.setWordWrap(True)
+        guide_layout.addWidget(self.status_label)
+
+        self.source_label = QLabel("输入来源：摄像头")
+        self.source_label.setObjectName("mutedLabel")
+        guide_layout.addWidget(self.source_label)
+
+        side_panel.addWidget(guide_card)
+
+        action_card = QFrame()
+        action_card.setObjectName("panelCard")
+        action_layout = QVBoxLayout(action_card)
+        action_layout.setContentsMargins(16, 16, 16, 16)
+        action_layout.setSpacing(8)
+
+        self.btn_capture = QPushButton("拍照并评测")
+        self.btn_capture.setObjectName("primaryButton")
+        self.btn_capture.setMinimumHeight(48)
         self.btn_capture.clicked.connect(self._on_capture)
-        btn_layout.addWidget(self.btn_capture)
-        
-        # 从文件加载按钮（无摄像头时使用）
-        self.btn_load = QPushButton("📁 加载")
+        action_layout.addWidget(self.btn_capture)
+
+        self.btn_load = QPushButton("载入图片评测")
         self.btn_load.setObjectName("secondaryButton")
-        self.btn_load.setFont(QFont("Microsoft YaHei", 10))
-        self.btn_load.setFixedSize(80, 40)
+        self.btn_load.setMinimumHeight(46)
         self.btn_load.clicked.connect(self._on_load_image)
-        btn_layout.addWidget(self.btn_load)
-        
-        layout.addLayout(btn_layout)
-        
-    def showEvent(self, event):
-        """显示事件 - 启动相机"""
+        action_layout.addWidget(self.btn_load)
+
+        self.btn_cancel = QPushButton("返回首页")
+        self.btn_cancel.setObjectName("ghostButton")
+        self.btn_cancel.setMinimumHeight(42)
+        self.btn_cancel.clicked.connect(self._on_cancel)
+        action_layout.addWidget(self.btn_cancel)
+
+        side_panel.addWidget(action_card)
+        side_panel.addStretch()
+
+        side_widget = QWidget()
+        side_widget.setLayout(side_panel)
+        side_widget.setMaximumWidth(232)
+        layout.addWidget(side_widget, stretch=3)
+
+    def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
         self._start_camera()
-        
-    def hideEvent(self, event):
-        """隐藏事件 - 停止相机"""
+
+    def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
         self._stop_camera()
-        
-    def _start_camera(self):
-        """启动相机"""
-        # 打开相机
+
+    def _set_camera_state(self, text: str, state: str) -> None:
+        self.camera_state.setText(text)
+        self.camera_state.setProperty("state", state)
+        self.camera_state.style().unpolish(self.camera_state)
+        self.camera_state.style().polish(self.camera_state)
+
+    def _start_camera(self) -> None:
+        self._set_camera_state("连接中", "working")
+        self.status_label.setText("正在尝试连接树莓派摄像头...")
+        self.source_label.setText("输入来源：摄像头")
+
         if not camera_service.open():
-            self.preview_label.setText("无法打开摄像头")
+            self.preview_label.setText("相机暂时不可用\n你仍然可以载入图片完成评测。")
             self.btn_capture.setEnabled(False)
+            self._set_camera_state("离线", "error")
+            self.status_label.setText("未能打开摄像头，建议检查连接或直接使用图片评测。")
             return
-            
+
         self.btn_capture.setEnabled(True)
-        
-        # 启动预览线程
+        self._set_camera_state("在线", "ready")
+        self.status_label.setText("相机已就绪，请将单个汉字放到取景框中央。")
+
         self.preview_thread = PreviewThread(camera_service)
         self.preview_thread.frame_ready.connect(self._update_preview)
         self.preview_thread.start()
-        
-    def _stop_camera(self):
-        """停止相机"""
+
+    def _stop_camera(self) -> None:
         if self.preview_thread:
             self.preview_thread.stop()
             self.preview_thread = None
-            
         camera_service.close()
-        
-    def _update_preview(self, frame: np.ndarray):
-        """更新预览画面"""
+
+    def _update_preview(self, frame: np.ndarray) -> None:
         self.current_frame = frame.copy()
-        
-        # 添加取景框蒙版
         display_frame = self._add_guide_overlay(frame)
-        
-        # 转换为 QPixmap
-        h, w, ch = display_frame.shape
-        bytes_per_line = ch * w
-        q_image = QImage(display_frame.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
-        pixmap = QPixmap.fromImage(q_image)
-        
-        # 缩放显示
-        scaled_pixmap = pixmap.scaled(
+
+        height, width, channels = display_frame.shape
+        bytes_per_line = channels * width
+        image = QImage(display_frame.data, width, height, bytes_per_line, QImage.Format.Format_BGR888)
+        pixmap = QPixmap.fromImage(image)
+        scaled = pixmap.scaled(
             self.preview_label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
-        
-        self.preview_label.setPixmap(scaled_pixmap)
-        
+        self.preview_label.setPixmap(scaled)
+
     def _add_guide_overlay(self, frame: np.ndarray) -> np.ndarray:
-        """添加取景框蒙版"""
-        h, w = frame.shape[:2]
         overlay = frame.copy()
-        
-        # 计算取景框区域（中心正方形）
-        size = min(w, h) - 40
-        x1 = (w - size) // 2
-        y1 = (h - size) // 2
-        x2 = x1 + size
-        y2 = y1 + size
-        
-        # 绘制取景框
-        color = (255, 200, 0)  # 黄色
-        thickness = 2
-        
-        # 外框
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness)
-        
-        # 米字格辅助线（半透明）
+        height, width = overlay.shape[:2]
+
+        guide_size = min(width, height) - 54
+        x1 = (width - guide_size) // 2
+        y1 = (height - guide_size) // 2
+        x2 = x1 + guide_size
+        y2 = y1 + guide_size
+
+        accent = (95, 161, 201)
+        soft = (149, 170, 183)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), accent, 2)
+
         center_x = (x1 + x2) // 2
         center_y = (y1 + y2) // 2
-        
-        # 横竖线
-        cv2.line(overlay, (x1, center_y), (x2, center_y), (128, 128, 128), 1)
-        cv2.line(overlay, (center_x, y1), (center_x, y2), (128, 128, 128), 1)
-        
-        # 对角线
-        cv2.line(overlay, (x1, y1), (x2, y2), (128, 128, 128), 1)
-        cv2.line(overlay, (x1, y2), (x2, y1), (128, 128, 128), 1)
-        
-        # 四角标记
-        corner_len = 20
-        # 左上
-        cv2.line(overlay, (x1, y1 + corner_len), (x1, y1), color, thickness)
-        cv2.line(overlay, (x1, y1), (x1 + corner_len, y1), color, thickness)
-        # 右上
-        cv2.line(overlay, (x2 - corner_len, y1), (x2, y1), color, thickness)
-        cv2.line(overlay, (x2, y1), (x2, y1 + corner_len), color, thickness)
-        # 左下
-        cv2.line(overlay, (x1, y2 - corner_len), (x1, y2), color, thickness)
-        cv2.line(overlay, (x1, y2), (x1 + corner_len, y2), color, thickness)
-        # 右下
-        cv2.line(overlay, (x2 - corner_len, y2), (x2, y2), color, thickness)
-        cv2.line(overlay, (x2, y2), (x2, y2 - corner_len), color, thickness)
-        
+        cv2.line(overlay, (x1, center_y), (x2, center_y), soft, 1)
+        cv2.line(overlay, (center_x, y1), (center_x, y2), soft, 1)
+        cv2.line(overlay, (x1, y1), (x2, y2), soft, 1)
+        cv2.line(overlay, (x1, y2), (x2, y1), soft, 1)
+
+        corner_length = 24
+        for start, mid1, mid2 in [
+            ((x1, y1), (x1 + corner_length, y1), (x1, y1 + corner_length)),
+            ((x2, y1), (x2 - corner_length, y1), (x2, y1 + corner_length)),
+            ((x1, y2), (x1 + corner_length, y2), (x1, y2 - corner_length)),
+            ((x2, y2), (x2 - corner_length, y2), (x2, y2 - corner_length)),
+        ]:
+            cv2.line(overlay, start, mid1, accent, 3)
+            cv2.line(overlay, start, mid2, accent, 3)
+
+        caption = "对准单个汉字"
+        cv2.rectangle(overlay, (x1, y2 + 10), (x1 + 128, y2 + 38), (34, 25, 19), -1)
+        cv2.putText(overlay, caption, (x1 + 10, y2 + 29), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (245, 235, 222), 1)
+
         return overlay
-        
-    def _on_capture(self):
-        """拍照按钮点击"""
+
+    def _run_evaluation(self, image: np.ndarray, original_path: Path) -> EvaluationResult:
+        processed, processed_path = preprocessing_service.preprocess(image, save_processed=True)
+        result = evaluation_service.evaluate(
+            processed,
+            original_image_path=str(original_path),
+            processed_image_path=processed_path,
+            texture_image=image,
+        )
+        result.id = database_service.save(result)
+        speech_service.speak_score(result.total_score, result.feedback)
+        self._release_preprocessing_memory()
+        return result
+
+    def _on_capture(self) -> None:
         if self.current_frame is None:
+            QMessageBox.information(self, "暂无画面", "请等待摄像头预览稳定后再拍照。")
             return
-            
+
         self.btn_capture.setEnabled(False)
-        
-        # 保存原始图像
+        self._set_camera_state("评测中", "working")
+        self.status_label.setText("正在预处理图像并生成评测结果...")
+
         timestamp = int(time.time() * 1000)
         original_path = IMAGES_DIR / f"original_{timestamp}.jpg"
         cv2.imwrite(str(original_path), self.current_frame)
-        
+
         try:
-            # 图像预处理
-            processed, processed_path = preprocessing_service.preprocess(
-                self.current_frame, 
-                save_processed=True
-            )
-            
-            # 评测分析
-            result = evaluation_service.evaluate(
-                processed,
-                original_image_path=str(original_path),
-                processed_image_path=processed_path,
-                texture_image=self.current_frame
-            )
-            
-            # 保存到数据库
-            record_id = database_service.save(result)
-            result.id = record_id
-            
-            # 语音播报
-            speech_service.speak_score(result.total_score, result.feedback)
-            
-            # 释放内存
-            self._release_preprocessing_memory()
-            
+            result = self._run_evaluation(self.current_frame, original_path)
+            self._set_camera_state("完成", "ready")
+            self.status_label.setText("评测完成，正在打开结果页。")
             self.capture_completed.emit(result)
-            
-        except PreprocessingError as e:
-            # 预处理错误
-            speech_service.speak_error(str(e))
-            QMessageBox.warning(self, "图像质量问题", str(e))
+        except PreprocessingError as exc:
+            self._set_camera_state("需重拍", "error")
+            self.status_label.setText(str(exc))
+            speech_service.speak_error(str(exc))
+            QMessageBox.warning(self, "图像质量问题", str(exc))
             self.btn_capture.setEnabled(True)
-            
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"评测失败: {str(e)}")
+        except Exception as exc:  # noqa: BLE001
+            self._set_camera_state("异常", "error")
+            self.status_label.setText("评测流程中断，请查看错误信息。")
+            QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
-            
-    def _release_preprocessing_memory(self):
-        """Ensure cleanup failures never bubble up to the UI."""
+
+    def _release_preprocessing_memory(self) -> None:
         try:
             preprocessing_service.release_memory()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self.logger.debug("Skip preprocessing memory cleanup: %s", exc)
 
-    def _on_cancel(self):
-        """取消按钮点击"""
+    def _on_cancel(self) -> None:
         self.cancelled.emit()
-    
-    def _on_load_image(self):
-        """从文件加载图片（无摄像头时使用）"""
+
+    def _on_load_image(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "选择书法图片",
             str(IMAGES_DIR),
-            "图片文件 (*.jpg *.jpeg *.png *.bmp);;所有文件 (*)"
+            "图片文件 (*.jpg *.jpeg *.png *.bmp);;所有文件 (*)",
         )
-        
         if not file_path:
             return
-        
-        # 读取图片（支持中文路径）
+
         image = self._read_image_chinese(file_path)
         if image is None:
-            QMessageBox.warning(self, "错误", "无法读取图片文件")
+            QMessageBox.warning(self, "读取失败", "无法读取所选图片，请换一张再试。")
             return
-        
+
         self.current_frame = image.copy()
-        
-        # 显示预览
+        self.source_label.setText(f"输入来源：图片 · {Path(file_path).name}")
+        self._set_camera_state("图片模式", "working")
+        self.status_label.setText("正在使用载入的图片进行评测...")
+
         display_frame = self._add_guide_overlay(image)
-        h, w, ch = display_frame.shape
-        bytes_per_line = ch * w
-        q_image = QImage(display_frame.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
-        pixmap = QPixmap.fromImage(q_image)
-        scaled_pixmap = pixmap.scaled(
+        height, width, channels = display_frame.shape
+        bytes_per_line = channels * width
+        qt_image = QImage(display_frame.data, width, height, bytes_per_line, QImage.Format.Format_BGR888)
+        pixmap = QPixmap.fromImage(qt_image)
+        scaled = pixmap.scaled(
             self.preview_label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
+            Qt.TransformationMode.SmoothTransformation,
         )
-        self.preview_label.setPixmap(scaled_pixmap)
-        
-        # 直接进行评测
+        self.preview_label.setPixmap(scaled)
+
         self._evaluate_image(image, Path(file_path))
-    
-    def _evaluate_image(self, image: np.ndarray, original_path: Path):
-        """评测图片"""
+
+    def _evaluate_image(self, image: np.ndarray, original_path: Path) -> None:
         self.btn_load.setEnabled(False)
         self.btn_load.setText("评测中...")
-        
+
         try:
-            # 图像预处理
-            processed, processed_path = preprocessing_service.preprocess(
-                image,
-                save_processed=True
-            )
-            
-            # 评测分析
-            result = evaluation_service.evaluate(
-                processed,
-                original_image_path=str(original_path),
-                processed_image_path=processed_path,
-                texture_image=image
-            )
-            
-            # 保存到数据库
-            record_id = database_service.save(result)
-            result.id = record_id
-            
-            # 语音播报
-            speech_service.speak_score(result.total_score, result.feedback)
-            
-            # 释放内存
-            self._release_preprocessing_memory()
-            
+            result = self._run_evaluation(image, original_path)
+            self._set_camera_state("完成", "ready")
+            self.status_label.setText("图片评测完成，正在打开结果页。")
             self.capture_completed.emit(result)
-            
-        except PreprocessingError as e:
-            speech_service.speak_error(str(e))
-            QMessageBox.warning(self, "图像质量问题", str(e))
-            
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"评测失败: {str(e)}")
-            
+        except PreprocessingError as exc:
+            self._set_camera_state("需调整", "error")
+            self.status_label.setText(str(exc))
+            speech_service.speak_error(str(exc))
+            QMessageBox.warning(self, "图像质量问题", str(exc))
+        except Exception as exc:  # noqa: BLE001
+            self._set_camera_state("异常", "error")
+            self.status_label.setText("评测流程中断，请查看错误信息。")
+            QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)
-            self.btn_load.setText("📁 加载")
-        
-    def _read_image_chinese(self, file_path: str) -> np.ndarray:
-        """读取支持中文路径的图片"""
+            self.btn_load.setText("载入图片评测")
+
+    def _read_image_chinese(self, file_path: str) -> np.ndarray | None:
         try:
-            # 使用numpy读取文件内容，避免中文路径问题
-            with open(file_path, 'rb') as f:
-                data = np.frombuffer(f.read(), dtype=np.uint8)
-            image = cv2.imdecode(data, cv2.IMREAD_COLOR)
-            return image
-        except Exception as e:
-            print(f"读取图片失败: {e}")
+            with open(file_path, "rb") as file:
+                data = np.frombuffer(file.read(), dtype=np.uint8)
+            return cv2.imdecode(data, cv2.IMREAD_COLOR)
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning("读取图片失败: %s", exc)
             return None
-    
-    def cleanup(self):
-        """清理资源"""
+
+    def cleanup(self) -> None:
         self._stop_camera()

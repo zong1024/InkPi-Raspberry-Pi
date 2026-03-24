@@ -1,188 +1,225 @@
-"""
-InkPi 书法评测系统 - 主窗口
-"""
+"""Main application window."""
+
+from __future__ import annotations
+
+import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QStackedWidget, QPushButton, QLabel, QMessageBox,
-    QApplication, QStatusBar
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QIcon
 
-from config import UI_CONFIG
-from views.home_view import HomeView
-from views.camera_view import CameraView
-from views.result_view import ResultView
-from views.history_view import HistoryView
+from config import IS_RASPBERRY_PI, UI_CONFIG
 from models.evaluation_result import EvaluationResult
+from views.camera_view import CameraView
+from views.history_view import HistoryView
+from views.home_view import HomeView
+from views.result_view import ResultView
+from views.ui_theme import app_font
 
 
 class MainWindow(QMainWindow):
-    """主窗口"""
-    
+    """Top-level application window."""
+
     def __init__(self):
         super().__init__()
-        
-        # 当前评测结果
-        self.current_result: EvaluationResult = None
-        
-        # 初始化 UI
+        self.logger = logging.getLogger(__name__)
+        self.current_result: EvaluationResult | None = None
+
         self._init_ui()
         self._connect_signals()
-        
-    def _init_ui(self):
-        """初始化 UI"""
-        # 窗口设置
+        self._start_clock()
+        self.show_home()
+
+    def _init_ui(self) -> None:
+        self.setObjectName("mainWindow")
         self.setWindowTitle(UI_CONFIG["window_title"])
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(800, 480)
         self.resize(UI_CONFIG["window_width"], UI_CONFIG["window_height"])
-        
-        # 中央部件
+
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
-        # 主布局
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        # 顶部导航栏
-        self._create_navbar(main_layout)
-        
-        # 页面堆栈
+
+        root_layout = QVBoxLayout(central_widget)
+        root_layout.setContentsMargins(12, 12, 12, 10)
+        root_layout.setSpacing(10)
+
+        root_layout.addWidget(self._create_header())
+
+        surface = QFrame()
+        surface.setObjectName("mainSurface")
+        surface_layout = QVBoxLayout(surface)
+        surface_layout.setContentsMargins(14, 14, 14, 14)
+        surface_layout.setSpacing(0)
+
         self.stack = QStackedWidget()
-        main_layout.addWidget(self.stack)
-        
-        # 创建各页面
+        surface_layout.addWidget(self.stack)
+        root_layout.addWidget(surface, stretch=1)
+
         self.home_view = HomeView()
         self.camera_view = CameraView()
         self.result_view = ResultView()
         self.history_view = HistoryView()
-        
-        self.stack.addWidget(self.home_view)      # 0
-        self.stack.addWidget(self.camera_view)    # 1
-        self.stack.addWidget(self.result_view)    # 2
-        self.stack.addWidget(self.history_view)   # 3
-        
-        # 状态栏
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("就绪")
-        
-    def _create_navbar(self, layout: QVBoxLayout):
-        """创建导航栏"""
-        navbar = QWidget()
-        navbar.setObjectName("navbar")
-        navbar.setFixedHeight(60)
-        
-        nav_layout = QHBoxLayout(navbar)
-        nav_layout.setContentsMargins(20, 10, 20, 10)
-        
-        # Logo/标题
-        title_label = QLabel("🖌️ InkPi 书法评测")
-        title_label.setObjectName("navTitle")
-        title_label.setFont(QFont("Microsoft YaHei", 16, QFont.Weight.Bold))
-        nav_layout.addWidget(title_label)
-        
-        nav_layout.addStretch()
-        
-        # 导航按钮
+
+        self.stack.addWidget(self.home_view)
+        self.stack.addWidget(self.camera_view)
+        self.stack.addWidget(self.result_view)
+        self.stack.addWidget(self.history_view)
+
+        root_layout.addWidget(self._create_footer())
+
+    def _create_header(self) -> QFrame:
+        header = QFrame()
+        header.setObjectName("appHeader")
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(20, 14, 20, 14)
+        layout.setSpacing(14)
+
+        brand_layout = QVBoxLayout()
+        brand_layout.setSpacing(2)
+
+        brand_title = QLabel("InkPi")
+        brand_title.setObjectName("brandTitle")
+        brand_title.setFont(app_font(22, QFont.Weight.Bold))
+        brand_layout.addWidget(brand_title)
+
+        brand_caption = QLabel("树莓派书法智能评测台")
+        brand_caption.setObjectName("brandCaption")
+        brand_caption.setFont(app_font(9))
+        brand_layout.addWidget(brand_caption)
+
+        layout.addLayout(brand_layout)
+        layout.addSpacing(12)
+
+        title_layout = QVBoxLayout()
+        title_layout.setSpacing(4)
+
+        self.header_title = QLabel("首页")
+        self.header_title.setObjectName("headerTitle")
+        self.header_title.setFont(app_font(20, QFont.Weight.Bold))
+        title_layout.addWidget(self.header_title)
+
+        self.header_subtitle = QLabel("准备开始新的书法评测")
+        self.header_subtitle.setObjectName("headerSubtitle")
+        self.header_subtitle.setFont(app_font(9))
+        title_layout.addWidget(self.header_subtitle)
+
+        layout.addLayout(title_layout, stretch=1)
+
+        side_layout = QVBoxLayout()
+        side_layout.setSpacing(8)
+        side_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.header_pill = QLabel("树莓派触控模式" if IS_RASPBERRY_PI else "桌面演示模式")
+        self.header_pill.setObjectName("headerPill")
+        side_layout.addWidget(self.header_pill, alignment=Qt.AlignmentFlag.AlignRight)
+
+        self.header_clock = QLabel("--/-- --:--")
+        self.header_clock.setObjectName("headerClock")
+        self.header_clock.setFont(app_font(11, QFont.Weight.Medium))
+        side_layout.addWidget(self.header_clock, alignment=Qt.AlignmentFlag.AlignRight)
+
+        layout.addLayout(side_layout)
+        return header
+
+    def _create_footer(self) -> QFrame:
+        footer = QFrame()
+        footer.setObjectName("footerBar")
+        layout = QHBoxLayout(footer)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+
         self.btn_home = QPushButton("首页")
         self.btn_home.setObjectName("navButton")
+        layout.addWidget(self.btn_home)
+
         self.btn_camera = QPushButton("拍照")
         self.btn_camera.setObjectName("navButton")
+        layout.addWidget(self.btn_camera)
+
         self.btn_history = QPushButton("历史")
         self.btn_history.setObjectName("navButton")
-        
-        nav_layout.addWidget(self.btn_home)
-        nav_layout.addWidget(self.btn_camera)
-        nav_layout.addWidget(self.btn_history)
-        
-        layout.addWidget(navbar)
-        
-    def _connect_signals(self):
-        """连接信号"""
-        # 导航按钮
+        layout.addWidget(self.btn_history)
+
+        return footer
+
+    def _connect_signals(self) -> None:
         self.btn_home.clicked.connect(self.show_home)
         self.btn_camera.clicked.connect(self.show_camera)
         self.btn_history.clicked.connect(self.show_history)
-        
-        # 首页信号
+
         self.home_view.start_evaluation.connect(self.show_camera)
         self.home_view.view_history.connect(self.show_history)
-        
-        # 相机页信号
-        self.camera_view.capture_completed.connect(self._on_capture_completed)
+        self.home_view.recent_selected.connect(self._open_result)
+
+        self.camera_view.capture_completed.connect(self._open_result)
         self.camera_view.cancelled.connect(self.show_home)
-        
-        # 结果页信号
+
         self.result_view.back_requested.connect(self.show_home)
         self.result_view.new_evaluation_requested.connect(self.show_camera)
         self.result_view.history_requested.connect(self.show_history)
-        
-        # 历史页信号
+
         self.history_view.back_requested.connect(self.show_home)
-        self.history_view.result_selected.connect(self._on_history_result_selected)
-        
-    def show_home(self):
-        """显示首页"""
-        self.stack.setCurrentIndex(0)
-        self.status_bar.showMessage("首页")
-        self._update_nav_buttons(0)
-        
-    def show_camera(self):
-        """显示相机页"""
-        self.stack.setCurrentIndex(1)
-        self.status_bar.showMessage("准备拍照")
-        self._update_nav_buttons(1)
-        
-    def show_result(self):
-        """显示结果页"""
-        self.stack.setCurrentIndex(2)
-        self.status_bar.showMessage("评测结果")
-        self._update_nav_buttons(2)
-        
-    def show_history(self):
-        """显示历史页"""
-        self.stack.setCurrentIndex(3)
+        self.history_view.result_selected.connect(self._open_result)
+
+    def _start_clock(self) -> None:
+        self._refresh_clock()
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self._refresh_clock)
+        self.clock_timer.start(30_000)
+
+    def _refresh_clock(self) -> None:
+        self.header_clock.setText(datetime.now().strftime("%m/%d %H:%M"))
+
+    def _set_nav_state(self, active_index: int | None) -> None:
+        for index, button in enumerate([self.btn_home, self.btn_camera, self.btn_history]):
+            button.setProperty("active", active_index is not None and index == active_index)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+    def _set_page(self, index: int, title: str, subtitle: str, active_nav: int | None) -> None:
+        if index != 1:
+            self.camera_view.cleanup()
+        self.stack.setCurrentIndex(index)
+        self.header_title.setText(title)
+        self.header_subtitle.setText(subtitle)
+        self._set_nav_state(active_nav)
+
+    def show_home(self) -> None:
+        self.home_view.refresh()
+        self._set_page(0, "首页", "查看近期成绩并开始新的书法评测", 0)
+
+    def show_camera(self) -> None:
+        self._set_page(1, "拍照评测", "将单个汉字放入取景框中央，保持背景干净", 1)
+
+    def show_result(self) -> None:
+        subtitle = "评测已完成，可回放结果或继续下一张"
+        if self.current_result and self.current_result.character_name:
+            subtitle = f"识别字符：{self.current_result.character_name}"
+        self._set_page(2, "评测结果", subtitle, None)
+
+    def show_history(self) -> None:
         self.history_view.refresh_data()
-        self.status_bar.showMessage("历史记录")
-        self._update_nav_buttons(3)
-        
-    def _update_nav_buttons(self, active_index: int):
-        """更新导航按钮状态"""
-        buttons = [self.btn_home, self.btn_camera, self.btn_history]
-        for i, btn in enumerate(buttons):
-            btn.setProperty("active", i == active_index)
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-            
-    def _on_capture_completed(self, result: EvaluationResult):
-        """拍照完成回调"""
+        self._set_page(3, "历史记录", "按时间筛选并回看过去的评测结果", 2)
+
+    def _open_result(self, result: EvaluationResult) -> None:
         self.current_result = result
         self.result_view.set_result(result)
         self.show_result()
-        
-    def _on_history_result_selected(self, result: EvaluationResult):
-        """历史记录选择回调"""
-        self.current_result = result
-        self.result_view.set_result(result)
-        self.show_result()
-        
-    def closeEvent(self, event):
-        """窗口关闭事件"""
-        # 停止相机
+
+    def closeEvent(self, event) -> None:  # noqa: N802
         self.camera_view.cleanup()
         event.accept()
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
