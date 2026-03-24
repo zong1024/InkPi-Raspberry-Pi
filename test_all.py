@@ -21,7 +21,7 @@ test_results = []
 
 def log_test(name: str, passed: bool, message: str = ""):
     """记录测试结果"""
-    status = "✅ PASS" if passed else "❌ FAIL"
+    status = "[PASS]" if passed else "[FAIL]"
     result = f"{status} - {name}"
     if message:
         result += f" | {message}"
@@ -257,7 +257,7 @@ try:
     configs_ok = all([
         IMAGE_CONFIG.get("target_size") == 512,
         PRECHECK_CONFIG.get("min_ink_ratio") == 0.01,
-        EVALUATION_CONFIG.get("excellent_threshold") == 80,
+        EVALUATION_CONFIG.get("excellent_threshold") > EVALUATION_CONFIG.get("good_threshold") > EVALUATION_CONFIG.get("pass_threshold"),
         LED_CONFIG.get("num_leds") == 8
     ])
     

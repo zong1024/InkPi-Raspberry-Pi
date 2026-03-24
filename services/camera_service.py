@@ -11,6 +11,7 @@ from typing import Optional, Tuple, List
 import logging
 import threading
 from pathlib import Path
+import sys
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,12 +49,16 @@ class CameraService:
             self.logger.warning("摄像头已经打开")
             return True
             
-        index = camera_index if camera_index is not None else self.config["camera_index"]
-        backend = self.config["backend"]
+        index = camera_index if camera_index is not None else self.config.get(
+            "camera_index",
+            self.config.get("device_index", 0)
+        )
+        backend_name = self.config.get("backend", "auto")
+        backend = self._resolve_backend(backend_name)
         
-        self.logger.info(f"正在打开摄像头: index={index}, backend={backend}")
+        self.logger.info(f"正在打开摄像头: index={index}, backend={backend_name}")
         
-        self.camera = cv2.VideoCapture(index, backend)
+        self.camera = self._create_capture(index, backend)
         
         if not self.camera.isOpened():
             self.logger.error("无法打开摄像头")
@@ -66,6 +71,44 @@ class CameraService:
         self.is_opened = True
         self.logger.info("摄像头已打开")
         return True
+
+    def _create_capture(self, index: int, backend: int) -> cv2.VideoCapture:
+        """根据后端创建 VideoCapture，并在需要时回退到默认实现。"""
+        if backend == cv2.CAP_ANY:
+            return cv2.VideoCapture(index)
+
+        cap = cv2.VideoCapture(index, backend)
+        if cap.isOpened():
+            return cap
+
+        self.logger.warning("指定后端打开失败，回退到 OpenCV 默认后端")
+        cap.release()
+        return cv2.VideoCapture(index)
+
+    def _resolve_backend(self, backend_name) -> int:
+        """将配置中的后端名称映射到 OpenCV 后端常量。"""
+        if isinstance(backend_name, int):
+            return backend_name
+
+        backend_name = str(backend_name).lower()
+
+        if backend_name in {"", "auto", "opencv", "default"}:
+            if sys.platform.startswith("win"):
+                return getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
+            if sys.platform.startswith("linux"):
+                return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
+            return cv2.CAP_ANY
+
+        if backend_name in {"picamera", "libcamera"}:
+            return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY) if sys.platform.startswith("linux") else cv2.CAP_ANY
+        if backend_name == "ffmpeg":
+            return getattr(cv2, "CAP_FFMPEG", cv2.CAP_ANY)
+        if backend_name == "v4l2":
+            return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
+        if backend_name == "dshow":
+            return getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
+
+        return cv2.CAP_ANY
     
     def _configure_camera(self):
         """配置摄像头参数"""
@@ -91,6 +134,10 @@ class CameraService:
             
         self.is_opened = False
         self.logger.info("摄像头已关闭")
+
+    def release(self):
+        """兼容旧接口。"""
+        self.close()
     
     def capture_frame(self) -> Optional[np.ndarray]:
         """
@@ -229,15 +276,29 @@ class CameraService:
             可用摄像头索引列表
         """
         available = []
+        backend = cv2.CAP_ANY
+
+        if sys.platform.startswith("win"):
+            backend = getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
+        elif sys.platform.startswith("linux"):
+            backend = getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
         
-        # 测试索引 0-9
-        for i in range(10):
-            cap = cv2.VideoCapture(i)
+        # 常见设备索引通常落在 0-4，避免无意义地探测过多设备。
+        for i in range(5):
+            cap = cv2.VideoCapture(i, backend) if backend != cv2.CAP_ANY else cv2.VideoCapture(i)
             if cap.isOpened():
                 available.append(i)
                 cap.release()
                 
         return available
+
+    @property
+    def available(self) -> bool:
+        """兼容旧测试逻辑，返回当前环境是否探测到可用摄像头。"""
+        try:
+            return bool(self.list_cameras())
+        except Exception:
+            return False
     
     def __enter__(self):
         """上下文管理器入口"""

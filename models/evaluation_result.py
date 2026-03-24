@@ -71,18 +71,32 @@ class EvaluationResult:
     
     def get_grade(self) -> str:
         """获取等级评价"""
-        if self.total_score >= 80:
+        excellent_threshold, good_threshold = self._get_grade_thresholds()
+        if self.total_score >= excellent_threshold:
             return "优秀"
-        elif self.total_score >= 60:
+        elif self.total_score >= good_threshold:
             return "良好"
         else:
             return "需加强"
     
     def get_color(self) -> str:
         """获取对应颜色（用于UI显示）"""
-        if self.total_score >= 80:
+        excellent_threshold, good_threshold = self._get_grade_thresholds()
+        if self.total_score >= excellent_threshold:
             return "#4CAF50"  # 绿色
-        elif self.total_score >= 60:
+        elif self.total_score >= good_threshold:
             return "#FF9800"  # 橙色
         else:
             return "#F44336"  # 红色
+
+    @staticmethod
+    def _get_grade_thresholds() -> tuple[int, int]:
+        """从配置中读取等级阈值，并提供安全回退。"""
+        try:
+            from config import EVALUATION_CONFIG
+            return (
+                int(EVALUATION_CONFIG.get("excellent_threshold", 80)),
+                int(EVALUATION_CONFIG.get("good_threshold", 60)),
+            )
+        except Exception:
+            return (80, 60)

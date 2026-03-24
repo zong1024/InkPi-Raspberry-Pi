@@ -6,6 +6,18 @@ InkPi 配置设置
 from pathlib import Path
 import os
 
+
+def _detect_raspberry_pi() -> bool:
+    """检测当前是否运行在树莓派环境。"""
+    model_path = Path("/proc/device-tree/model")
+    try:
+        return model_path.exists() and "Raspberry Pi" in model_path.read_text(
+            encoding="utf-8",
+            errors="ignore",
+        )
+    except OSError:
+        return False
+
 # =========================
 # 路径配置
 # =========================
@@ -16,6 +28,8 @@ PATHS = {
     "models_dir": PROJECT_ROOT / "models",
     "data_dir": PROJECT_ROOT / "data",
     "templates_dir": PROJECT_ROOT / "models" / "templates",
+    "images_dir": PROJECT_ROOT / "data" / "images",
+    "processed_dir": PROJECT_ROOT / "data" / "processed",
     "logs_dir": PROJECT_ROOT / "logs",
     "cache_dir": PROJECT_ROOT / ".inkpi",
     "screenshots_dir": PROJECT_ROOT / "screenshots",
@@ -25,6 +39,9 @@ PATHS = {
 for key, path in PATHS.items():
     if key.endswith("_dir"):
         path.mkdir(parents=True, exist_ok=True)
+
+
+IS_RASPBERRY_PI = _detect_raspberry_pi()
 
 
 # =========================
@@ -58,7 +75,8 @@ APP_CONFIG = {
 CAMERA_CONFIG = {
     # 相机设备
     "device_index": 0,
-    "backend": "picamera",  # picamera, opencv, ffmpeg
+    "camera_index": 0,      # 兼容旧服务层命名
+    "backend": "auto",      # auto, picamera, opencv, ffmpeg
     
     # 预览分辨率
     "preview_width": 640,
@@ -252,6 +270,9 @@ LOG_CONFIG = {
 # 数据目录（简化版）
 # =========================
 DATA_DIR = PATHS["data_dir"]
+MODELS_DIR = PATHS["models_dir"]
+IMAGES_DIR = PATHS["images_dir"]
+PROCESSED_DIR = PATHS["processed_dir"]
 
 # =========================
 # 图像配置
@@ -268,9 +289,29 @@ IMAGE_CONFIG = {
 }
 
 # =========================
+# 图像预检配置
+# =========================
+PRECHECK_CONFIG = {
+    "min_brightness": 40,
+    "max_brightness": 245,
+    "min_contrast_std": 12,
+    "min_ink_ratio": 0.01,
+    "max_ink_ratio": 0.60,
+}
+
+# =========================
 # 反馈模板
 # =========================
 FEEDBACK_TEMPLATES = EVALUATION_CONFIG["feedback_templates"]
+
+# =========================
+# 数据库配置
+# =========================
+DB_PATH = DATA_DIR / "inkpi.db"
+DB_CONFIG = {
+    "table_name": "evaluation_records",
+    "max_records": 1000,
+}
 
 # =========================
 # LED 配置
@@ -316,6 +357,8 @@ def get_config(key: str, default=None):
         "ui": UI_CONFIG,
         "log": LOG_CONFIG,
         "image": IMAGE_CONFIG,
+        "precheck": PRECHECK_CONFIG,
+        "db": DB_CONFIG,
         "led": LED_CONFIG,
         "tts": TTS_CONFIG,
     }

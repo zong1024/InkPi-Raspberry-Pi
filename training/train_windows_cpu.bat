@@ -100,7 +100,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 REM 安装其他依赖
 echo 安装其他依赖...
-pip install numpy opencv-python scipy pillow tqdm onnx onnxruntime
+pip install numpy opencv-python scipy pillow tqdm onnx onnxruntime onnxscript
 
 REM 验证 PyTorch
 python -c "import torch; print(f'PyTorch 版本: {torch.__version__}'); print(f'CUDA 可用: {torch.cuda.is_available()}'); print(f'CPU 核心数: {torch.get_num_threads()}')"

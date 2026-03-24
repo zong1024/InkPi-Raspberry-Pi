@@ -83,7 +83,7 @@ source "$PROJECT_ROOT/venv/bin/activate"
 
 python -m pip install --upgrade pip
 python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-python -m pip install numpy opencv-python tqdm onnx onnxscript
+python -m pip install numpy opencv-python scipy pillow tqdm onnx onnxruntime onnxscript
 
 python - <<'PY'
 import torch
