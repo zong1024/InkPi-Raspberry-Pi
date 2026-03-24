@@ -84,8 +84,10 @@ class RecognitionService:
     def _init_onnx_session(self):
         """初始化ONNX推理会话"""
         if not self.model_path.exists():
-            self.logger.warning(f"模型文件不存在: {self.model_path}")
-            self.logger.info("将使用模拟识别模式。请下载模型文件以启用真实识别。")
+            self.logger.debug(
+                "Optional recognition model not found at %s; using simulated recognition.",
+                self.model_path,
+            )
             return
         
         try:

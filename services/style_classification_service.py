@@ -88,7 +88,10 @@ class StyleClassificationService:
     def _init_onnx_session(self):
         """初始化ONNX会话"""
         if not self.model_path.exists():
-            self.logger.warning(f"模型文件不存在: {self.model_path}")
+            self.logger.debug(
+                "Optional style classification model not found at %s; using simulated classification.",
+                self.model_path,
+            )
             return
         
         try:
