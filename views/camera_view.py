@@ -246,7 +246,8 @@ class CameraView(QWidget):
             result = evaluation_service.evaluate(
                 processed,
                 original_image_path=str(original_path),
-                processed_image_path=processed_path
+                processed_image_path=processed_path,
+                texture_image=self.current_frame
             )
             
             # 保存到数据库
@@ -327,7 +328,8 @@ class CameraView(QWidget):
             result = evaluation_service.evaluate(
                 processed,
                 original_image_path=str(original_path),
-                processed_image_path=processed_path
+                processed_image_path=processed_path,
+                texture_image=image
             )
             
             # 保存到数据库

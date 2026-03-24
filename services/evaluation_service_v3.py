@@ -76,12 +76,15 @@ class HybridEvaluationService:
         """
         self.logger.info("开始混合评测 (v3.0 Hybrid)...")
         total_start = time.perf_counter()
+        template, matched_character = self._select_template(
+            binary_image, character_name, template_style
+        )
         
         # ============ 阶段1: 孪生网络评分 ============
         stage1_start = time.perf_counter()
         
         structure_score, balance_score = self._siamese_evaluate(
-            binary_image, character_name, template_style
+            binary_image, template
         )
         
         stage1_time = (time.perf_counter() - stage1_start) * 1000
@@ -123,35 +126,71 @@ class HybridEvaluationService:
             timestamp=datetime.now(),
             image_path=original_image_path,
             processed_image_path=None,
-            character_name=character_name,
+            character_name=matched_character,
             style=template_style,
             style_confidence=None
         )
     
-    def _siamese_evaluate(
+    def _select_template(
         self,
         binary_image: np.ndarray,
         character_name: str,
-        template_style: str
+        template_style: str,
+    ) -> Tuple[np.ndarray, Optional[str]]:
+        """优先按字符取模板，失败时从模板库自动匹配最相似模板。"""
+        if character_name:
+            template = template_manager.get_template(
+                character_name,
+                template_style,
+                allow_default=False,
+            )
+            if template is not None:
+                resolved_char = template_manager.to_display_character(
+                    template_manager.resolve_character_key(character_name)
+                )
+                return template, resolved_char
+
+        best_template = None
+        best_char = None
+        best_score = -1.0
+
+        for template_info in template_manager.iter_templates(template_style):
+            template = cv2.imread(template_info["path"], cv2.IMREAD_GRAYSCALE)
+            if template is None:
+                continue
+
+            structure_score, _ = siamese_engine.compare_structure(binary_image, template)
+            if structure_score > best_score:
+                best_score = structure_score
+                best_template = template
+                best_char = template_info["char"]
+
+        if best_template is not None:
+            self.logger.info(
+                "自动匹配模板成功: %s (结构分 %.1f)",
+                best_char,
+                best_score,
+            )
+            return best_template, template_manager.to_display_character(best_char)
+
+        fallback_character = character_name or "字"
+        return template_manager._generate_default_template(fallback_character), fallback_character
+
+    def _siamese_evaluate(
+        self,
+        binary_image: np.ndarray,
+        template: np.ndarray
     ) -> Tuple[float, float]:
         """
         孪生网络评分
         
         Args:
             binary_image: 二值化图像
-            character_name: 字符名称
-            template_style: 字帖风格
+            template: 字帖图像
             
         Returns:
             Tuple[结构分, 平衡分]
         """
-        # 获取对应字帖
-        if character_name:
-            template = template_manager.get_template(character_name, template_style)
-        else:
-            # 无字符名时，使用通用占位符
-            template = template_manager._generate_default_template("字")
-        
         # 孪生网络对比
         structure_score, balance_score = siamese_engine.compare_structure(
             binary_image, template

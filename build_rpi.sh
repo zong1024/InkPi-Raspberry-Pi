@@ -28,6 +28,10 @@ sudo apt-get install -y \
     libespeak-dev \
     spi-tools
 
+for pkg in python3-picamera2 python3-libcamera libcamera-apps; do
+    sudo apt-get install -y "$pkg" 2>/dev/null || echo "警告: 可选包 $pkg 安装失败，继续部署"
+done
+
 # 启用 SPI 接口 (用于 WS2812B LED 灯带)
 echo "启用 SPI 接口..."
 sudo raspi-config nonint do_spi 0
@@ -45,12 +49,19 @@ echo "[3/5] 安装 Python 依赖..."
 pip install --upgrade pip
 pip install pyinstaller
 pip install -r requirements.txt
+pip install spidev
 
 # 创建模型目录结构
 echo "[4/5] 准备模型文件..."
 mkdir -p models
+if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
+    cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
+fi
+
 if [ ! -f "models/siamese_calligraphy.onnx" ]; then
-    echo "警告: 汉字识别模型不存在，请先训练或下载预训练模型"
+    echo "警告: 孪生网络模型不存在，请先复制 siamese_calligraphy.onnx 到 models/ 目录"
+else
+    echo "检测到孪生网络模型: models/siamese_calligraphy.onnx"
 fi
 
 # 打包应用
@@ -78,8 +89,6 @@ pyinstaller \
     --hidden-import sqlite3 \
     --hidden-import requests \
     --hidden-import onnxruntime \
-    --hidden-import torch \
-    --hidden-import torchvision \
     --hidden-import PIL \
     --hidden-import scipy \
     --collect-all PyQt6 \

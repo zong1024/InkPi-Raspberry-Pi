@@ -27,6 +27,8 @@ from config import EVALUATION_CONFIG, FEEDBACK_TEMPLATES
 from models.evaluation_result import EvaluationResult
 from services.recognition_service import recognition_service
 from services.style_classification_service import style_classification_service
+from services.siamese_engine import siamese_engine
+from services.evaluation_service_v3 import hybrid_evaluation_service
 
 
 class EvaluationService:
@@ -44,7 +46,10 @@ class EvaluationService:
         original_image_path: str = None,
         processed_image_path: str = None,
         character_name: str = None,
-        enable_recognition: bool = True
+        enable_recognition: bool = True,
+        texture_image: np.ndarray = None,
+        template_style: str = "楷书",
+        prefer_hybrid: bool = True,
     ) -> EvaluationResult:
         """
         执行评测分析
@@ -64,7 +69,11 @@ class EvaluationService:
         # 汉字识别（如果启用且未提供字符名称）
         recognized_char = None
         recognition_confidence = 0.0
-        if enable_recognition and character_name is None:
+        if (
+            enable_recognition
+            and character_name is None
+            and recognition_service.is_model_loaded()
+        ):
             try:
                 recognition_result = recognition_service.recognize(processed_image)
                 recognized_char = recognition_result.character
@@ -74,17 +83,44 @@ class EvaluationService:
                 self.logger.warning(f"汉字识别失败: {e}")
         
         # 使用识别结果或提供的字符名称
-        final_character = character_name or recognized_char
+        final_character = character_name or (
+            recognized_char if recognition_confidence >= 0.5 else None
+        )
         
         # 书法风格分类
         style = None
         style_confidence = None
-        try:
-            style, confidence, _ = style_classification_service.classify(processed_image)
-            style_confidence = confidence
-            self.logger.info(f"风格分类: {style} (置信度: {confidence:.2%})")
-        except Exception as e:
-            self.logger.warning(f"风格分类失败: {e}")
+        if style_classification_service.is_model_loaded():
+            try:
+                style, confidence, _ = style_classification_service.classify(processed_image)
+                style_confidence = confidence
+                self.logger.info(f"风格分类: {style} (置信度: {confidence:.2%})")
+            except Exception as e:
+                self.logger.warning(f"风格分类失败: {e}")
+
+        effective_style = style or template_style
+
+        if prefer_hybrid and siamese_engine.is_model_loaded():
+            texture_input = self._prepare_texture_image(
+                texture_image if texture_image is not None else processed_image,
+                processed_image.shape[:2]
+            )
+            result = hybrid_evaluation_service.evaluate(
+                binary_image=processed_image,
+                texture_image=texture_input,
+                original_image_path=original_image_path,
+                character_name=final_character,
+                template_style=effective_style,
+            )
+            result.processed_image_path = processed_image_path
+            result.style = style
+            result.style_confidence = style_confidence
+
+            if result.character_name and recognition_confidence >= 0.5:
+                result.feedback = f"【识别结果: {result.character_name}】\n{result.feedback}"
+
+            self.logger.info(f"混合评测完成: 总分={result.total_score}")
+            return result
         
         # 计算四维评分
         detail_scores = self._calculate_scores(processed_image)
@@ -114,6 +150,22 @@ class EvaluationService:
         
         self.logger.info(f"评测完成: 总分={total_score}")
         return result
+
+    def _prepare_texture_image(self, image: np.ndarray, target_shape: Tuple[int, int]) -> np.ndarray:
+        """准备混合评测所需的灰度纹理图。"""
+        if image is None:
+            return np.ones(target_shape, dtype=np.uint8) * 255
+
+        if len(image.shape) == 3:
+            texture = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            texture = image.copy()
+
+        target_h, target_w = target_shape
+        if texture.shape[:2] != (target_h, target_w):
+            texture = cv2.resize(texture, (target_w, target_h), interpolation=cv2.INTER_AREA)
+
+        return texture
     
     def _calculate_scores(self, image: np.ndarray) -> Dict[str, int]:
         """

@@ -42,6 +42,10 @@ sudo apt-get install -y \
     libespeak1 \
     spi-tools
 
+for pkg in python3-picamera2 python3-libcamera libcamera-apps; do
+    sudo apt-get install -y "$pkg" 2>/dev/null || echo "警告: 可选包 $pkg 安装失败，继续部署"
+done
+
 # 启用 SPI (用于 LED 灯带)
 sudo raspi-config nonint do_spi 0 2>/dev/null || true
 sudo usermod -a -G spi $USER 2>/dev/null || true
@@ -59,7 +63,19 @@ echo ""
 echo "[5/6] 安装 Python 依赖..."
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install spidev
 echo "Python 依赖安装完成"
+
+if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
+    mkdir -p models
+    cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
+fi
+
+if [ -f "models/siamese_calligraphy.onnx" ]; then
+    echo "检测到孪生网络模型: models/siamese_calligraphy.onnx"
+else
+    echo "警告: 未检测到 models/siamese_calligraphy.onnx，程序将回退到传统评分逻辑"
+fi
 
 # 步骤6: 运行程序
 echo ""

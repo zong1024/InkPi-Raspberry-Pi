@@ -31,6 +31,25 @@ class TemplateManager:
     """
     
     _instance = None
+    CHARACTER_ALIASES = {
+        "永": "yong",
+        "山": "shan",
+        "水": "shui",
+        "火": "huo",
+        "土": "tu",
+        "金": "jin",
+        "木": "mu",
+        "人": "ren",
+        "大": "da",
+        "小": "xiao",
+    }
+    STYLE_ALIASES = {
+        "楷书": "kaishu",
+        "行书": "xingshu",
+        "草书": "caoshu",
+        "隶书": "lishu",
+        "篆书": "zhuanshu",
+    }
     
     def __new__(cls, *args, **kwargs):
         """单例模式"""
@@ -88,7 +107,8 @@ class TemplateManager:
         self, 
         character: str, 
         style: str = "楷书",
-        calligrapher: str = None
+        calligrapher: str = None,
+        allow_default: bool = True
     ) -> Optional[np.ndarray]:
         """
         获取字帖图像
@@ -102,21 +122,26 @@ class TemplateManager:
             字帖图像，如果找不到返回 None
         """
         # 构建缓存键
-        cache_key = f"{character}_{style}_{calligrapher or 'any'}"
+        normalized_char = self.resolve_character_key(character)
+        normalized_style = self.resolve_style_key(style)
+        cache_key = f"{normalized_char}_{normalized_style}_{calligrapher or 'any'}"
         
         # 检查缓存
         if cache_key in self._cache:
             return self._cache[cache_key]
         
         # 查找字帖
-        if character not in self._templates:
+        if normalized_char not in self._templates:
             self.logger.warning(f"未找到字符 '{character}' 的字帖")
-            return self._generate_default_template(character)
-        
-        templates = self._templates[character]
+            return self._generate_default_template(character) if allow_default else None
+
+        templates = self._templates[normalized_char]
         
         # 按风格筛选
-        matched = [t for t in templates if t["style"] == style]
+        matched = [
+            t for t in templates
+            if t["style"] == normalized_style or self.resolve_style_key(t["style"]) == normalized_style
+        ]
         
         if not matched:
             # 如果没有指定风格，使用第一个可用的
@@ -140,7 +165,50 @@ class TemplateManager:
         except Exception as e:
             self.logger.error(f"加载字帖失败: {e}")
         
-        return self._generate_default_template(character)
+        return self._generate_default_template(character) if allow_default else None
+
+    def resolve_character_key(self, character: str) -> str:
+        """将中文字符或别名解析为模板库中的键。"""
+        if not character:
+            return character
+
+        raw = str(character).strip()
+        candidates = [
+            raw,
+            raw.lower(),
+            self.CHARACTER_ALIASES.get(raw),
+        ]
+
+        for candidate in candidates:
+            if candidate and candidate in self._templates:
+                return candidate
+
+        return self.CHARACTER_ALIASES.get(raw, raw.lower())
+
+    def resolve_style_key(self, style: str) -> str:
+        """将中文书体名解析为模板库中的键。"""
+        if not style:
+            return "kaishu"
+
+        raw = str(style).strip()
+        return self.STYLE_ALIASES.get(raw, raw.lower())
+
+    def to_display_character(self, character_key: str) -> str:
+        """将模板键转换为更适合展示的字符。"""
+        reverse_aliases = {value: key for key, value in self.CHARACTER_ALIASES.items()}
+        return reverse_aliases.get(character_key, character_key)
+
+    def iter_templates(self, style: str = None) -> List[Dict]:
+        """遍历模板元数据，支持按风格筛选。"""
+        normalized_style = self.resolve_style_key(style) if style else None
+        results = []
+
+        for templates in self._templates.values():
+            for template in templates:
+                if normalized_style is None or self.resolve_style_key(template["style"]) == normalized_style:
+                    results.append(template)
+
+        return results
     
     def _generate_default_template(self, character: str) -> Optional[np.ndarray]:
         """

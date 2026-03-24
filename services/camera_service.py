@@ -12,10 +12,106 @@ import logging
 import threading
 from pathlib import Path
 import sys
+import time
 
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import CAMERA_CONFIG, IMAGE_CONFIG
+from config import CAMERA_CONFIG, IMAGE_CONFIG, IS_RASPBERRY_PI
+
+
+class _Picamera2Capture:
+    """对 Picamera2 做一层 VideoCapture 风格适配。"""
+
+    def __init__(self, camera_index: int, config: dict, logger: logging.Logger):
+        from picamera2 import Picamera2
+
+        self.logger = logger
+        self.config = config
+        self._width = int(config.get("preview_width", 640))
+        self._height = int(config.get("preview_height", 480))
+        self._fps = int(config.get("fps", 30))
+        self._opened = False
+
+        try:
+            self.picam = Picamera2(camera_num=camera_index)
+        except TypeError:
+            self.picam = Picamera2()
+
+        self._configure(self._width, self._height)
+
+    def _configure(self, width: int, height: int):
+        controls = {"FrameRate": self._fps} if self._fps > 0 else {}
+        camera_config = self.picam.create_preview_configuration(
+            main={"size": (int(width), int(height)), "format": "RGB888"},
+            controls=controls,
+        )
+
+        if self._opened:
+            self.picam.stop()
+
+        self.picam.configure(camera_config)
+        self.picam.start()
+        self._opened = True
+        time.sleep(0.2)
+
+    def isOpened(self):
+        return self._opened
+
+    def read(self):
+        if not self._opened:
+            return False, None
+
+        try:
+            frame = self.picam.capture_array()
+            if frame is None:
+                return False, None
+
+            if frame.ndim == 3 and frame.shape[2] == 4:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+            elif frame.ndim == 3:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            return True, frame
+        except Exception as e:
+            self.logger.error(f"Picamera2 读取帧失败: {e}")
+            return False, None
+
+    def release(self):
+        if self._opened:
+            try:
+                self.picam.stop()
+            except Exception:
+                pass
+            self._opened = False
+
+        try:
+            self.picam.close()
+        except Exception:
+            pass
+
+    def set(self, prop_id, value):
+        value = int(value)
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH and value > 0:
+            self._width = value
+            self._configure(self._width, self._height)
+            return True
+        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT and value > 0:
+            self._height = value
+            self._configure(self._width, self._height)
+            return True
+        if prop_id == cv2.CAP_PROP_FPS and value > 0:
+            self._fps = value
+            self._configure(self._width, self._height)
+            return True
+        return False
+
+    def get(self, prop_id):
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._width)
+        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._height)
+        if prop_id == cv2.CAP_PROP_FPS:
+            return float(self._fps)
+        return 0.0
 
 
 class CameraService:
@@ -72,8 +168,11 @@ class CameraService:
         self.logger.info("摄像头已打开")
         return True
 
-    def _create_capture(self, index: int, backend: int) -> cv2.VideoCapture:
+    def _create_capture(self, index: int, backend) -> cv2.VideoCapture:
         """根据后端创建 VideoCapture，并在需要时回退到默认实现。"""
+        if backend == "picamera2":
+            return _Picamera2Capture(index, self.config, self.logger)
+
         if backend == cv2.CAP_ANY:
             return cv2.VideoCapture(index)
 
@@ -85,7 +184,7 @@ class CameraService:
         cap.release()
         return cv2.VideoCapture(index)
 
-    def _resolve_backend(self, backend_name) -> int:
+    def _resolve_backend(self, backend_name):
         """将配置中的后端名称映射到 OpenCV 后端常量。"""
         if isinstance(backend_name, int):
             return backend_name
@@ -93,13 +192,17 @@ class CameraService:
         backend_name = str(backend_name).lower()
 
         if backend_name in {"", "auto", "opencv", "default"}:
+            if IS_RASPBERRY_PI and self._picamera2_available():
+                return "picamera2"
             if sys.platform.startswith("win"):
                 return getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
             if sys.platform.startswith("linux"):
                 return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
             return cv2.CAP_ANY
 
-        if backend_name in {"picamera", "libcamera"}:
+        if backend_name in {"picamera", "picamera2", "libcamera"}:
+            if self._picamera2_available():
+                return "picamera2"
             return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY) if sys.platform.startswith("linux") else cv2.CAP_ANY
         if backend_name == "ffmpeg":
             return getattr(cv2, "CAP_FFMPEG", cv2.CAP_ANY)
@@ -109,6 +212,14 @@ class CameraService:
             return getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
 
         return cv2.CAP_ANY
+
+    def _picamera2_available(self) -> bool:
+        """检测 Picamera2 是否可用。"""
+        try:
+            from picamera2 import Picamera2  # noqa: F401
+            return True
+        except Exception:
+            return False
     
     def _configure_camera(self):
         """配置摄像头参数"""
@@ -277,6 +388,14 @@ class CameraService:
         """
         available = []
         backend = cv2.CAP_ANY
+
+        if IS_RASPBERRY_PI:
+            try:
+                from picamera2 import Picamera2
+                camera_info = Picamera2.global_camera_info()
+                return list(range(len(camera_info)))
+            except Exception:
+                pass
 
         if sys.platform.startswith("win"):
             backend = getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)

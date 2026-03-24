@@ -16,10 +16,11 @@ from typing import Dict, Tuple, Optional, List
 from pathlib import Path
 import logging
 import time
+import os
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import MODELS_DIR
+from config import MODELS_DIR, MODEL_CONFIG, DATA_DIR
 
 
 class SiameseEngine:
@@ -47,15 +48,40 @@ class SiameseEngine:
         self.input_size = (224, 224)  # 输入尺寸
         
         # 模型路径
-        if model_path is None:
-            model_path = str(MODELS_DIR / "siamese_calligraphy.onnx")
-        self.model_path = model_path
+        self.model_path = self._resolve_model_path(model_path)
         
         # 初始化 ONNX Session
         if not use_mock:
             self._init_onnx_session()
         else:
             self.logger.info("孪生网络使用模拟模式")
+
+    def _resolve_model_path(self, model_path: str = None) -> str:
+        """解析孪生网络模型路径，支持环境变量和多个兼容位置。"""
+        candidates = []
+
+        env_model_path = os.environ.get("INKPI_SIAMESE_MODEL")
+        if env_model_path:
+            candidates.append(Path(env_model_path))
+
+        if model_path:
+            candidates.append(Path(model_path))
+
+        config_model_path = MODEL_CONFIG.get("onnx_path")
+        if config_model_path:
+            candidates.append(Path(config_model_path))
+
+        candidates.extend([
+            MODELS_DIR / "siamese_calligraphy.onnx",
+            DATA_DIR / "models" / "siamese_calligraphy.onnx",
+        ])
+
+        for candidate in candidates:
+            if candidate and Path(candidate).exists():
+                return str(Path(candidate))
+
+        # 回退到默认位置，方便后续日志输出
+        return str(candidates[0] if candidates else MODELS_DIR / "siamese_calligraphy.onnx")
     
     def _init_onnx_session(self):
         """初始化 ONNX Runtime Session（全局单例）"""
@@ -91,6 +117,14 @@ class SiameseEngine:
         except Exception as e:
             self.logger.warning(f"ONNX Session 初始化失败: {e}，使用模拟模式")
             self.use_mock = True
+
+    def is_model_loaded(self) -> bool:
+        """检查真实 ONNX 模型是否已加载。"""
+        if self._session is None and self.use_mock and Path(self.model_path).exists():
+            self.use_mock = False
+            self._init_onnx_session()
+
+        return (self._session is not None) and (not self.use_mock)
     
     def preprocess_image(self, image: np.ndarray) -> np.ndarray:
         """
@@ -134,15 +168,34 @@ class SiameseEngine:
         
         # 预处理
         tensor = self.preprocess_image(image)
-        
-        # ONNX 推理
-        input_name = self.input_names[0]
-        output_name = self.output_names[0]
-        
-        outputs = self._session.run([output_name], {input_name: tensor})
+        input_feed = {name: tensor for name in self.input_names}
+        outputs = self._session.run([self.output_names[0]], input_feed)
         features = outputs[0].flatten()
         
         return features
+
+    def infer_pair(self, image1: np.ndarray, image2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        对一对图像执行孪生网络推理。
+
+        Args:
+            image1: 图像1
+            image2: 图像2
+
+        Returns:
+            Tuple[feature1, feature2]
+        """
+        if self.use_mock:
+            return self._mock_extract_features(image1), self._mock_extract_features(image2)
+
+        tensor1 = self.preprocess_image(image1)
+        tensor2 = self.preprocess_image(image2)
+        input_feed = {
+            self.input_names[0]: tensor1,
+            self.input_names[1]: tensor2,
+        }
+        outputs = self._session.run(self.output_names[:2], input_feed)
+        return outputs[0].flatten(), outputs[1].flatten()
     
     def _mock_extract_features(self, image: np.ndarray) -> np.ndarray:
         """
@@ -249,8 +302,7 @@ class SiameseEngine:
         start_time = time.perf_counter()
         
         # 提取特征
-        user_features = self.extract_features(user_image)
-        template_features = self.extract_features(template_image)
+        user_features, template_features = self.infer_pair(user_image, template_image)
         
         # 计算整体相似度 → 结构分
         structure_similarity = self.compute_similarity(user_features, template_features)
