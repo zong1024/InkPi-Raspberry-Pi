@@ -5,8 +5,10 @@ InkPi 书法评测系统 - 语音服务
 - Windows: SAPI5
 - Linux/RPi: espeak-ng
 """
-import threading
 import logging
+import os
+import re
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -24,12 +26,51 @@ class SpeechService:
         self._engine = None
         self._lock = threading.Lock()
         self._is_speaking = False
+        self._audio_available: Optional[bool] = None
+        self._tts_disabled_reason: Optional[str] = None
+        self._tts_skip_logged = False
         
+    def _check_audio_output(self) -> bool:
+        """Detect whether local audio playback is available."""
+        if self._audio_available is not None:
+            return self._audio_available
+
+        if os.environ.get("INKPI_FORCE_TTS") == "1":
+            self._audio_available = True
+            return True
+
+        if not sys.platform.startswith("linux"):
+            self._audio_available = True
+            return True
+
+        cards_path = Path("/proc/asound/cards")
+        if cards_path.exists():
+            try:
+                cards_text = cards_path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                cards_text = ""
+
+            has_card = any(
+                re.match(r"^\s*\d+\s+\[", line)
+                for line in cards_text.splitlines()
+            )
+            if has_card:
+                self._audio_available = True
+                return True
+
+        self._tts_disabled_reason = "No ALSA playback device detected"
+        self._audio_available = False
+        self.logger.info("%s; speech playback disabled.", self._tts_disabled_reason)
+        return False
+
     def _init_engine(self):
         """初始化 TTS 引擎"""
         if self._engine is not None:
             return
-            
+
+        if not self._check_audio_output():
+            return
+
         try:
             import pyttsx3
             self._engine = pyttsx3.init()
@@ -85,7 +126,12 @@ class SpeechService:
         self._init_engine()
         
         if self._engine is None:
-            self.logger.error("TTS 引擎不可用")
+            if self._tts_disabled_reason:
+                if not self._tts_skip_logged:
+                    self.logger.info("Skipping speech playback: %s.", self._tts_disabled_reason)
+                    self._tts_skip_logged = True
+            else:
+                self.logger.error("TTS 引擎不可用")
             return False
             
         with self._lock:
