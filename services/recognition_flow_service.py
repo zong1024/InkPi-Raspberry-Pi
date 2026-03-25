@@ -1,4 +1,4 @@
-"""Unified recognition flow for character detection, recognition and style resolution."""
+"""Unified flow for character recognition, rejection and style resolution."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ from services.template_manager import template_manager
 
 @dataclass
 class RecognitionFlowResult:
+    """Resolved recognition metadata consumed by evaluation."""
+
     character_name: Optional[str]
     recognition_confidence: float
     style: str
@@ -31,7 +33,7 @@ class RecognitionFlowResult:
 
 
 class RecognitionFlowService:
-    """Single place to decide whether the image is evaluable and how to label it."""
+    """Single entry point for character and style resolution before scoring."""
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -58,17 +60,23 @@ class RecognitionFlowService:
             candidates = recognition_result.candidates
             recognition_source = recognition_result.source or ""
 
-
-        if not character_name:
-            if candidates and recognition_source == "template_ambiguous":
+            if recognition_result.status == "ambiguous":
                 raise PreprocessingError(
-                    "识别结果不稳定，当前字形与多个内置字模板过于接近，请换成系统支持的字或手动指定评测字。",
+                    "识别结果不稳定，当前字形与多个内置评测字模板过于接近，请换成系统支持的字或手动指定评测字。",
                     error_type="ambiguous_character",
                 )
-            raise PreprocessingError(
-                "未检测到可评测的单个汉字，请重新对准作品后再试。",
-                error_type="not_calligraphy",
-            )
+
+            if recognition_result.status == "unsupported":
+                raise PreprocessingError(
+                    "当前作品是毛笔字，但不在系统当前内置的评测字库中，请改拍受支持的字或手动指定评测字。",
+                    error_type="unsupported_character",
+                )
+
+            if recognition_result.status in {"rejected", "missing_templates"} or not character_name:
+                raise PreprocessingError(
+                    recognition_result.reason or "未检测到可评测的单个汉字，请重新对准作品后再试。",
+                    error_type="not_calligraphy",
+                )
 
         if requested_style:
             style = template_manager.to_display_style(template_manager.resolve_style_key(requested_style))

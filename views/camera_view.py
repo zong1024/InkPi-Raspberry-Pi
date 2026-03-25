@@ -502,5 +502,20 @@ class CameraView(QWidget):
             self.logger.warning("读取图片失败: %s", exc)
             return None
 
+    def _build_retry_guidance(self, exc: PreprocessingError) -> str:
+        error_guidance = {
+            "too_dark": "把纸张移到更亮的位置，再让镜头正对作品后重拍。",
+            "too_bright": "避开顶灯反光或窗边强光，让纸面明亮但不过曝。",
+            "low_contrast": "请换一张更清晰的作品，或让墨迹和背景分离得更明显。",
+            "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
+            "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
+            "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
+            "ambiguous_character": "当前字形与多个内置评测字模板过于接近，系统无法稳定判定。请换成系统支持的字，或手动指定评测字。",
+            "unsupported_character": "当前作品是毛笔字，但不在系统当前内置的评测字库中。请改拍受支持的字，或手动指定评测字。",
+            "too_fragmented": "画面里的内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
+            "scattered_content": "请再靠近一点，让目标汉字更集中地落在取景框中央。",
+        }
+        return error_guidance.get(exc.error_type, "请按照取景框重新对准单个汉字后再试一次。")
+
     def cleanup(self) -> None:
         self._stop_camera()
