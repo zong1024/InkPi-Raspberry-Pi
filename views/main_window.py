@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         self._set_page(1, "拍照评测", "将单个汉字放入取景框中央，保持背景干净", 1)
 
     def show_result(self) -> None:
-        subtitle = "评测已完成，可回放结果或继续下一张"
+        subtitle = "评测已完成，可以回看结果或继续下一张"
         if self.current_result and self.current_result.character_name:
             subtitle = f"识别字符：{self.current_result.character_name}"
         self._set_page(2, "评测结果", subtitle, None)

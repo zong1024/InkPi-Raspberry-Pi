@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -199,11 +199,11 @@ class ResultView(QWidget):
         self.grade_label.setStyleSheet("color: #f6d8b0;")
         summary_layout.addWidget(self.grade_label)
 
-        self.meta_primary = QLabel("识别结果：--")
+        self.meta_primary = QLabel("识别结果：-")
         self.meta_primary.setStyleSheet("color: #fff1e2; font-size: 12px;")
         summary_layout.addWidget(self.meta_primary)
 
-        self.meta_secondary = QLabel("书体风格：--")
+        self.meta_secondary = QLabel("书体风格：-")
         self.meta_secondary.setStyleSheet("color: #d7c4ae; font-size: 10px;")
         summary_layout.addWidget(self.meta_secondary)
 
@@ -317,7 +317,7 @@ class ResultView(QWidget):
         score_color = score_to_color(score)
 
         self.total_score_label.setText(str(score))
-        self.total_score_label.setStyleSheet(f"color: #fff8f1; font-size: 64px; font-weight: 800;")
+        self.total_score_label.setStyleSheet("color: #fff8f1; font-size: 64px; font-weight: 800;")
         self.grade_label.setText(self.result.get_grade())
         self.grade_label.setStyleSheet(f"color: {score_color}; font-size: 16px; font-weight: 700;")
 

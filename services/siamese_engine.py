@@ -145,7 +145,7 @@ class SiameseEngine:
             self.logger.info(f"输入: {self.input_names}, 输出: {self.output_names}")
             
         except ImportError:
-            self.logger.warning("ONNX Runtime 未安装，使用模拟模式")
+            self.logger.debug("Optional onnxruntime is unavailable; Siamese engine will use fallback mode.")
             self.use_mock = True
         except Exception as e:
             self.logger.warning(f"ONNX Session 初始化失败: {e}，使用模拟模式")

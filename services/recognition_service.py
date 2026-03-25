@@ -41,6 +41,8 @@ class RecognitionService:
         self.input_size = input_size
         self.num_classes = num_classes
         self.use_quantized = use_quantized
+        inference_cfg = MODEL_CONFIG.get("inference", {})
+        self.num_threads = int(inference_cfg.get("num_threads", 4))
 
         self.model_dir = DATA_DIR / "models"
         self.model_dir.mkdir(parents=True, exist_ok=True)
@@ -59,9 +61,6 @@ class RecognitionService:
             self._init_onnx_session()
         else:
             self.logger.info("ONNX Runtime unavailable; using deterministic template fallback.")
-
-        inference_cfg = MODEL_CONFIG.get("inference", {})
-        self.num_threads = int(inference_cfg.get("num_threads", 4))
         self.min_template_score = 57.0
         self.min_character_confidence = 0.46
         self.min_candidate_gap = 4.0

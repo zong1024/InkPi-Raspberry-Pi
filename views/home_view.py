@@ -102,7 +102,7 @@ class RecentCard(QFrame):
         time_label.setFont(app_font(9))
         info_layout.addWidget(time_label)
 
-        details = "  ·  ".join(f"{name}{score}" for name, score in result.detail_scores.items())
+        details = " / ".join(f"{name}{score}" for name, score in result.detail_scores.items())
         details_label = QLabel(details)
         details_label.setObjectName("mutedLabel")
         details_label.setWordWrap(True)
@@ -200,7 +200,7 @@ class HomeView(QWidget):
         cue_layout.setContentsMargins(18, 16, 18, 16)
         cue_layout.setSpacing(6)
 
-        cue_title = QLabel("今日节奏")
+        cue_title = QLabel("今日状态")
         cue_title.setStyleSheet("color: #fff4e5; font-size: 13px; font-weight: 700;")
         cue_layout.addWidget(cue_title)
 
@@ -261,7 +261,7 @@ class HomeView(QWidget):
             self.hero_metric.setText(f"最近 {latest.total_score} 分")
             self.hero_metric.setStyleSheet("color: #fffaf1; font-size: 28px; font-weight: 800;")
             self.hero_hint.setText(
-                f"最近一次评测：{latest.timestamp.strftime('%m-%d %H:%M')} · {latest.get_grade()}"
+                f"最近一次评测：{latest.timestamp.strftime('%m-%d %H:%M')} / {latest.get_grade()}"
             )
         else:
             self.hero_metric.setText("准备开始")

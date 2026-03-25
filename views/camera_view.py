@@ -71,6 +71,7 @@ class CameraView(QWidget):
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
         self._compact_mode = False
+        self.guide_steps: list[QLabel] = []
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -132,7 +133,7 @@ class CameraView(QWidget):
         guide_layout.setContentsMargins(16, 16, 16, 16)
         guide_layout.setSpacing(6)
 
-        guide_title = QLabel("拍摄与状态")
+        guide_title = QLabel("拍摄引导")
         guide_title.setObjectName("sectionTitle")
         guide_title.setFont(app_font(15, QFont.Weight.Bold))
         guide_layout.addWidget(guide_title)
@@ -143,12 +144,13 @@ class CameraView(QWidget):
 
         for text in [
             "1. 只保留一个汉字，避免整页一起入镜。",
-            "2. 使用浅色背景并尽量减少阴影。",
+            "2. 使用浅色背景，并尽量减少阴影和反光。",
         ]:
             label = QLabel(text)
             label.setObjectName("sectionSubtitle")
             label.setWordWrap(True)
             guide_layout.addWidget(label)
+            self.guide_steps.append(label)
 
         self.status_label = QLabel("等待相机就绪")
         self.status_label.setObjectName("sectionSubtitle")
@@ -159,7 +161,9 @@ class CameraView(QWidget):
         self.source_label.setObjectName("mutedLabel")
         guide_layout.addWidget(self.source_label)
 
-        self.action_hint = QLabel("准备好后点击“拍照并评测”，系统会先检查画面里是否真的有单个毛笔字。")
+        self.action_hint = QLabel(
+            "准备好后点击“拍照并评测”，系统会先检查画面里是否真的有可评测的单个毛笔字。"
+        )
         self.action_hint.setObjectName("sectionSubtitle")
         self.action_hint.setWordWrap(True)
         self.action_hint.setFont(app_font(10))
@@ -223,16 +227,28 @@ class CameraView(QWidget):
         self._compact_mode = compact
         if compact:
             self.content_layout.setDirection(QBoxLayout.Direction.TopToBottom)
-            self.side_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.side_layout.setDirection(QBoxLayout.Direction.TopToBottom)
             self.side_widget.setMaximumWidth(16777215)
             self.side_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-            self.preview_label.setMinimumSize(240, 170)
+            self.preview_label.setMinimumSize(220, 160)
+            self.preview_hint.setVisible(False)
+            for label in self.guide_steps:
+                label.setVisible(False)
+            self.btn_capture.setMinimumHeight(42)
+            self.btn_load.setMinimumHeight(40)
+            self.btn_cancel.setMinimumHeight(38)
         else:
             self.content_layout.setDirection(QBoxLayout.Direction.LeftToRight)
             self.side_layout.setDirection(QBoxLayout.Direction.TopToBottom)
             self.side_widget.setMaximumWidth(232)
             self.side_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
             self.preview_label.setMinimumSize(430, 270)
+            self.preview_hint.setVisible(True)
+            for label in self.guide_steps:
+                label.setVisible(True)
+            self.btn_capture.setMinimumHeight(48)
+            self.btn_load.setMinimumHeight(46)
+            self.btn_cancel.setMinimumHeight(42)
 
     def _set_camera_state(self, text: str, state: str) -> None:
         self.camera_state.setText(text)
@@ -249,12 +265,12 @@ class CameraView(QWidget):
         error_guidance = {
             "too_dark": "把纸张移到更亮的地方，再让镜头正对作品后重拍。",
             "too_bright": "避开顶灯反光或窗边强光，让纸面亮但不过曝。",
-            "low_contrast": "请换一张更清晰的作品，或让墨迹和背景更分离。",
+            "low_contrast": "请换一张更清晰的作品，或让墨迹和背景分离得更明显。",
             "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
             "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
             "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
-            "too_fragmented": "画面里内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
-            "scattered_content": "请靠近一点，让目标汉字更集中地落在取景框中央。",
+            "too_fragmented": "画面里的内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
+            "scattered_content": "请再靠近一点，让目标汉字更集中地落在取景框中央。",
         }
         return error_guidance.get(exc.error_type, "请按照取景框重新对准单个汉字后再试一次。")
 
@@ -277,7 +293,10 @@ class CameraView(QWidget):
             self.btn_capture.setEnabled(False)
             self._set_camera_state("离线", "error")
             self.status_label.setText("未能打开摄像头，建议检查连接或直接使用图片评测。")
-            self._set_action_hint("如果评委现场相机异常，可以先用“载入图片评测”继续演示流程。", "相机异常")
+            self._set_action_hint(
+                "如果评委现场相机异常，可以先用“载入图片评测”继续演示流程。",
+                "相机异常",
+            )
             return
 
         self.btn_capture.setEnabled(True)
@@ -314,7 +333,7 @@ class CameraView(QWidget):
         overlay = frame.copy()
         height, width = overlay.shape[:2]
 
-        guide_size = min(width, height) - 54
+        guide_size = max(120, min(width, height) - 54)
         x1 = (width - guide_size) // 2
         y1 = (height - guide_size) // 2
         x2 = x1 + guide_size
@@ -341,9 +360,9 @@ class CameraView(QWidget):
             cv2.line(overlay, start, mid1, accent, 3)
             cv2.line(overlay, start, mid2, accent, 3)
 
-        caption = "对准单个汉字"
-        cv2.rectangle(overlay, (x1, y2 + 10), (x1 + 128, y2 + 38), (34, 25, 19), -1)
-        cv2.putText(overlay, caption, (x1 + 10, y2 + 29), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (245, 235, 222), 1)
+        caption = "Single Char"
+        cv2.rectangle(overlay, (x1, y2 + 10), (x1 + 152, y2 + 40), (34, 25, 19), -1)
+        cv2.putText(overlay, caption, (x1 + 10, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (245, 235, 222), 1)
 
         return overlay
 
@@ -368,7 +387,10 @@ class CameraView(QWidget):
         self.btn_capture.setEnabled(False)
         self._set_camera_state("评测中", "working")
         self.status_label.setText("正在预处理图像并生成评测结果...")
-        self._set_action_hint("系统正在检查画面里是否是清晰的单个毛笔字，并生成评测结果。", "评测中")
+        self._set_action_hint(
+            "系统正在检查画面里是否是清晰的单个毛笔字，并生成评测结果。",
+            "评测中",
+        )
 
         timestamp = int(time.time() * 1000)
         original_path = IMAGES_DIR / f"original_{timestamp}.jpg"
@@ -378,7 +400,10 @@ class CameraView(QWidget):
             result = self._run_evaluation(self.current_frame, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("评测完成，正在打开结果页。")
-            self._set_action_hint("这次结果已经生成。你可以继续拍下一张，或者直接向评委讲解评分维度。", "评测完成")
+            self._set_action_hint(
+                "这次结果已经生成。你可以继续拍下一张，或者直接向评委讲解评分维度。",
+                "评测完成",
+            )
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
             self._handle_preprocessing_failure(exc, "请调整拍摄画面")
@@ -386,7 +411,7 @@ class CameraView(QWidget):
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
             self.status_label.setText("评测流程中断，请查看错误信息。")
-            self._set_action_hint("评测流程意外中断。可以先回到首页再重新进入拍照页。", "系统异常")
+            self._set_action_hint("评测流程意外中断。可以先回到首页，再重新进入拍照页。", "系统异常")
             QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
 
@@ -415,7 +440,7 @@ class CameraView(QWidget):
             return
 
         self.current_frame = image.copy()
-        self.source_label.setText(f"输入来源：图片 · {Path(file_path).name}")
+        self.source_label.setText(f"输入来源：图片 / {Path(file_path).name}")
         self._set_camera_state("图片模式", "working")
         self.status_label.setText("正在使用载入的图片进行评测...")
         self._set_action_hint("系统会先检查这张图片里是不是单个毛笔字，再进入评分。", "图片模式")
@@ -442,7 +467,10 @@ class CameraView(QWidget):
             result = self._run_evaluation(image, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("图片评测完成，正在打开结果页。")
-            self._set_action_hint("图片评测已完成。若要继续演示，建议换一张不同书体或不同得分的作品。", "评测完成")
+            self._set_action_hint(
+                "图片评测已完成。若要继续演示，建议换一张不同书体或不同得分的作品。",
+                "评测完成",
+            )
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
             self._handle_preprocessing_failure(exc, "图片内容不符合评测条件")

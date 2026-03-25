@@ -13,7 +13,6 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -100,7 +99,7 @@ class HistoryItem(QFrame):
         time_label.setObjectName("cardSubtitle")
         text_layout.addWidget(time_label)
 
-        detail_text = "  ·  ".join(f"{key}{value}" for key, value in result.detail_scores.items())
+        detail_text = " / ".join(f"{key}{value}" for key, value in result.detail_scores.items())
         detail_label = QLabel(detail_text)
         detail_label.setObjectName("mutedLabel")
         detail_label.setWordWrap(True)
@@ -230,7 +229,7 @@ class HistoryView(QWidget):
             StatTile("最低成绩", str(stats["min_score"]) if stats["total_count"] else "--"),
         ]
 
-        for index, tile in enumerate(tiles):
+        for tile in tiles:
             self.stats_row.addWidget(tile)
 
     def _load_records(self) -> None:
