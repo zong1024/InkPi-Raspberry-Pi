@@ -58,6 +58,12 @@ class RecognitionFlowService:
             candidates = recognition_result.candidates
             recognition_source = recognition_result.source or ""
 
+            if not character_name and candidates:
+                fallback_character, fallback_confidence = candidates[0]
+                character_name = fallback_character or None
+                recognition_confidence = float(fallback_confidence)
+                recognition_source = f"{recognition_source or 'candidate'}:best_effort"
+
         if not character_name:
             raise PreprocessingError(
                 "未检测到可评测的单个汉字，请重新对准作品后再试。",
