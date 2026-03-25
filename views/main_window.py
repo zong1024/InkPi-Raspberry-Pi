@@ -112,7 +112,7 @@ class MainWindow(QMainWindow):
         self.header_title.setFont(app_font(20, QFont.Weight.Bold))
         title_layout.addWidget(self.header_title)
 
-        self.header_subtitle = QLabel("准备开始新的书法评测")
+        self.header_subtitle = QLabel("准备开始新的一次书法评测")
         self.header_subtitle.setObjectName("headerSubtitle")
         self.header_subtitle.setFont(app_font(9))
         title_layout.addWidget(self.header_subtitle)
@@ -123,7 +123,8 @@ class MainWindow(QMainWindow):
         side_layout.setSpacing(8)
         side_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        self.header_pill = QLabel("树莓派触控模式" if IS_RASPBERRY_PI else "桌面演示模式")
+        mode_text = "树莓派触控模式" if IS_RASPBERRY_PI else "桌面演示模式"
+        self.header_pill = QLabel(mode_text)
         self.header_pill.setObjectName("headerPill")
         side_layout.addWidget(self.header_pill, alignment=Qt.AlignmentFlag.AlignRight)
 
@@ -200,13 +201,13 @@ class MainWindow(QMainWindow):
 
     def show_home(self) -> None:
         self.home_view.refresh()
-        self._set_page(0, "首页", "查看近期成绩并开始新的书法评测", 0)
+        self._set_page(0, "首页", "查看近期成绩，并开始新的一次书法评测", 0)
 
     def show_camera(self) -> None:
         self._set_page(1, "拍照评测", "将单个汉字放入取景框中央，保持背景干净", 1)
 
     def show_result(self) -> None:
-        subtitle = "评测已完成，可以回看结果或继续下一张"
+        subtitle = "评测已完成，可以查看结果或继续下一次拍摄"
         if self.current_result and self.current_result.character_name:
             subtitle = f"识别字符：{self.current_result.character_name}"
         self._set_page(2, "评测结果", subtitle, None)

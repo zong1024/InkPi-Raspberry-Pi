@@ -21,7 +21,7 @@ from PyQt6.QtWidgets import (
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import THEME, app_font, clear_layout, score_to_color, score_to_soft_color
+from views.ui_theme import app_font, clear_layout, score_to_color, score_to_soft_color
 
 
 class StatCard(QFrame):
@@ -229,7 +229,7 @@ class HomeView(QWidget):
         recent_header.addWidget(recent_title)
         recent_header.addStretch()
 
-        recent_hint = QLabel("点开可直接回看结果")
+        recent_hint = QLabel("点开即可回看结果")
         recent_hint.setObjectName("mutedLabel")
         recent_header.addWidget(recent_hint)
         layout.addLayout(recent_header)
@@ -281,7 +281,7 @@ class HomeView(QWidget):
             empty_title.setObjectName("sectionTitle")
             empty_layout.addWidget(empty_title)
 
-            empty_text = QLabel("第一次拍照评测后，成绩和建议会自动保存到这里。")
+            empty_text = QLabel("完成第一次拍照评测后，成绩和建议会自动保存在这里。")
             empty_text.setObjectName("sectionSubtitle")
             empty_text.setWordWrap(True)
             empty_layout.addWidget(empty_text)

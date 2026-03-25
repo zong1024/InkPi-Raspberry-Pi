@@ -199,11 +199,11 @@ class ResultView(QWidget):
         self.grade_label.setStyleSheet("color: #f6d8b0;")
         summary_layout.addWidget(self.grade_label)
 
-        self.meta_primary = QLabel("识别结果：-")
+        self.meta_primary = QLabel("识别结果：--")
         self.meta_primary.setStyleSheet("color: #fff1e2; font-size: 12px;")
         summary_layout.addWidget(self.meta_primary)
 
-        self.meta_secondary = QLabel("书体风格：-")
+        self.meta_secondary = QLabel("书体风格：--")
         self.meta_secondary.setStyleSheet("color: #d7c4ae; font-size: 10px;")
         summary_layout.addWidget(self.meta_secondary)
 

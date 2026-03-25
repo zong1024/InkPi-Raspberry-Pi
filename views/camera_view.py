@@ -145,6 +145,7 @@ class CameraView(QWidget):
         for text in [
             "1. 只保留一个汉字，避免整页一起入镜。",
             "2. 使用浅色背景，并尽量减少阴影和反光。",
+            "3. 拍摄前先看取景框，确认作品落在中心区域。",
         ]:
             label = QLabel(text)
             label.setObjectName("sectionSubtitle")
@@ -162,7 +163,7 @@ class CameraView(QWidget):
         guide_layout.addWidget(self.source_label)
 
         self.action_hint = QLabel(
-            "准备好后点击“拍照并评测”，系统会先检查画面里是否真的有可评测的单个毛笔字。"
+            "准备好后点击“拍照并评测”。系统会先判断画面里是否真的是清晰、可评测的单个毛笔字，再给出结果。"
         )
         self.action_hint.setObjectName("sectionSubtitle")
         self.action_hint.setWordWrap(True)
@@ -294,7 +295,7 @@ class CameraView(QWidget):
             self._set_camera_state("离线", "error")
             self.status_label.setText("未能打开摄像头，建议检查连接或直接使用图片评测。")
             self._set_action_hint(
-                "如果评委现场相机异常，可以先用“载入图片评测”继续演示流程。",
+                "如果评委现场摄像头异常，可以先用“载入图片评测”继续演示流程。",
                 "相机异常",
             )
             return
@@ -362,7 +363,15 @@ class CameraView(QWidget):
 
         caption = "Single Char"
         cv2.rectangle(overlay, (x1, y2 + 10), (x1 + 152, y2 + 40), (34, 25, 19), -1)
-        cv2.putText(overlay, caption, (x1 + 10, y2 + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (245, 235, 222), 1)
+        cv2.putText(
+            overlay,
+            caption,
+            (x1 + 10, y2 + 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (245, 235, 222),
+            1,
+        )
 
         return overlay
 
@@ -411,7 +420,7 @@ class CameraView(QWidget):
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
             self.status_label.setText("评测流程中断，请查看错误信息。")
-            self._set_action_hint("评测流程意外中断。可以先回到首页，再重新进入拍照页。", "系统异常")
+            self._set_action_hint("评测流程意外中断。可先回到首页，再重新进入拍照页。", "系统异常")
             QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
 
@@ -468,7 +477,7 @@ class CameraView(QWidget):
             self._set_camera_state("完成", "ready")
             self.status_label.setText("图片评测完成，正在打开结果页。")
             self._set_action_hint(
-                "图片评测已完成。若要继续演示，建议换一张不同书体或不同得分的作品。",
+                "图片评测已经完成。若要继续演示，建议换一张不同书体或不同得分的作品。",
                 "评测完成",
             )
             self.capture_completed.emit(result)
