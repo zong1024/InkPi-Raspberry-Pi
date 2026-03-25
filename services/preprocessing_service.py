@@ -178,7 +178,10 @@ class PreprocessingService:
         # 2. 边缘复杂度检查
         # 毛笔字笔画较粗，边缘密度可能较低，放宽阈值
         edges = cv2.Canny(binary, 30, 100)  # 降低 Canny 阈值以检测更多边缘
-        edge_ratio = np.sum(edges > 0) / binary.size
+        edge_pixels = int(np.sum(edges > 0))
+        ink_pixels = int(np.sum(binary == 0))
+        edge_ratio = edge_pixels / binary.size
+        edge_to_ink_ratio = edge_pixels / max(1, ink_pixels)
         
         # 毛笔字边缘密度阈值放宽到 0.001（原来 0.01）
         if edge_ratio < 0.001:
@@ -186,6 +189,35 @@ class PreprocessingService:
                 "内容过于简单，请确保拍摄的是书法作品",
                 error_type="not_calligraphy"
             )
+
+        contours, _ = cv2.findContours(255 - binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        largest_area_ratio = 0.0
+        largest_solidity = 0.0
+        largest_bbox_fill = 0.0
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            largest_area = float(cv2.contourArea(largest_contour))
+            largest_area_ratio = largest_area / binary.size
+            x, y, w_box, h_box = cv2.boundingRect(largest_contour)
+            bbox_area = max(1, w_box * h_box)
+            hull = cv2.convexHull(largest_contour)
+            hull_area = max(1.0, cv2.contourArea(hull))
+            largest_solidity = largest_area / hull_area
+            largest_bbox_fill = float(np.mean(binary[y : y + h_box, x : x + w_box] == 0))
+
+            # 单个大色块或遮挡物通常边缘相对少、实心度和填充度都偏高。
+            if (
+                edge_to_ink_ratio < self.precheck_config.get("min_edge_to_ink_ratio", 0.08)
+                and (
+                    largest_solidity > self.precheck_config.get("max_blob_solidity", 0.90)
+                    or largest_bbox_fill > self.precheck_config.get("max_blob_fill_ratio", 0.58)
+                    or largest_area_ratio > self.precheck_config.get("max_blob_area_ratio", 0.18)
+                )
+            ):
+                raise PreprocessingError(
+                    "未检测到清晰的单个毛笔字，请重新对准作品后再试",
+                    error_type="not_calligraphy"
+                )
         
         # 3. 连通性检查
         # 毛笔字可能有较多离散笔画（如点、撇等），放宽阈值
@@ -222,8 +254,10 @@ class PreprocessingService:
                 )
         
         self.logger.debug(
-            f"书法特征验证通过: 边缘密度={edge_ratio:.4f}, "
-            f"有效连通域={num_components}, 最小面积阈值={min_component_area}"
+            f"书法特征验证通过: 边缘密度={edge_ratio:.4f}, 边缘墨迹比={edge_to_ink_ratio:.4f}, "
+            f"最大连通域面积占比={largest_area_ratio:.4f}, 最大实心度={largest_solidity:.4f}, "
+            f"最大包围盒填充率={largest_bbox_fill:.4f}, 有效连通域={num_components}, "
+            f"最小面积阈值={min_component_area}"
         )
     
     def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:

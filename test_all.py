@@ -90,7 +90,23 @@ try:
         log_test("预处理服务 - 微小噪点过滤", False, str(e))
     except Exception as e:
         log_test("预处理服务 - 微小噪点过滤", False, f"未知错误: {e}")
-        
+
+    # 测试识别纯色块，避免“没有汉字也能评测”
+    try:
+        blob_binary = np.ones((256, 256), dtype=np.uint8) * 255
+        cv2.rectangle(blob_binary, (52, 52), (204, 204), 0, -1)
+        ink_ratio = np.mean(blob_binary == 0)
+        try:
+            preprocessing_service._validate_calligraphy_features(blob_binary, ink_ratio)
+            log_test("预处理服务 - 非汉字拦截", False, "纯色块未被拦截")
+        except PreprocessingError as e:
+            if e.error_type == "not_calligraphy":
+                log_test("预处理服务 - 非汉字拦截", True, str(e))
+            else:
+                log_test("预处理服务 - 非汉字拦截", False, f"异常类型不符合预期: {e.error_type}")
+    except Exception as e:
+        log_test("预处理服务 - 非汉字拦截", False, f"未知错误: {e}")
+         
 except Exception as e:
     log_test("预处理服务 - 导入", False, str(e))
 
@@ -112,7 +128,18 @@ try:
         log_test("评测服务 - 反馈生成", True, f"反馈长度: {len(result.feedback)}")
     else:
         log_test("评测服务 - 评分算法", False, "评分结果异常")
-        
+
+    style_result = evaluation_service.evaluate(
+        processed,
+        enable_recognition=False,
+        prefer_hybrid=False,
+        template_style="楷书",
+    )
+    if style_result.style:
+        log_test("评测服务 - 风格回退", True, f"风格: {style_result.style}")
+    else:
+        log_test("评测服务 - 风格回退", False, "风格仍为空")
+         
 except Exception as e:
     log_test("评测服务 - 导入/执行", False, str(e))
 

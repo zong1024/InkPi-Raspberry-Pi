@@ -98,7 +98,9 @@ class EvaluationService:
             except Exception as e:
                 self.logger.warning(f"风格分类失败: {e}")
 
-        effective_style = style or template_style
+        effective_style = style or template_style or "楷书"
+        if style is None:
+            self.logger.info("风格分类模型不可用，回退到模板风格: %s", effective_style)
 
         if prefer_hybrid and siamese_engine.is_model_loaded():
             texture_input = self._prepare_texture_image(
@@ -113,7 +115,7 @@ class EvaluationService:
                 template_style=effective_style,
             )
             result.processed_image_path = processed_image_path
-            result.style = style
+            result.style = effective_style
             result.style_confidence = style_confidence
 
             if result.character_name and recognition_confidence >= 0.5:
@@ -144,7 +146,7 @@ class EvaluationService:
             image_path=original_image_path,
             processed_image_path=processed_image_path,
             character_name=final_character,
-            style=style,
+            style=effective_style,
             style_confidence=style_confidence
         )
         

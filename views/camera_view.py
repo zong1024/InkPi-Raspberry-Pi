@@ -14,12 +14,14 @@ import numpy as np
 from PyQt6.QtCore import QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QImage, QPixmap
 from PyQt6.QtWidgets import (
+    QBoxLayout,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -68,12 +70,13 @@ class CameraView(QWidget):
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
+        self._compact_mode = False
         self._init_ui()
 
     def _init_ui(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(12)
+        self.content_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
+        self.content_layout.setContentsMargins(4, 4, 4, 4)
+        self.content_layout.setSpacing(12)
 
         preview_card = QFrame()
         preview_card.setObjectName("previewCard")
@@ -99,6 +102,7 @@ class CameraView(QWidget):
 
         self.preview_frame = QFrame()
         self.preview_frame.setObjectName("previewFrame")
+        self.preview_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         frame_layout = QVBoxLayout(self.preview_frame)
         frame_layout.setContentsMargins(14, 14, 14, 14)
 
@@ -117,14 +121,14 @@ class CameraView(QWidget):
         self.preview_hint.setWordWrap(True)
         preview_layout.addWidget(self.preview_hint)
 
-        layout.addWidget(preview_card, stretch=7)
+        self.content_layout.addWidget(preview_card, stretch=7)
 
-        side_panel = QVBoxLayout()
-        side_panel.setSpacing(10)
+        self.side_layout = QBoxLayout(QBoxLayout.Direction.TopToBottom)
+        self.side_layout.setSpacing(10)
 
-        guide_card = QFrame()
-        guide_card.setObjectName("guideCard")
-        guide_layout = QVBoxLayout(guide_card)
+        self.guide_card = QFrame()
+        self.guide_card.setObjectName("guideCard")
+        guide_layout = QVBoxLayout(self.guide_card)
         guide_layout.setContentsMargins(16, 16, 16, 16)
         guide_layout.setSpacing(6)
 
@@ -151,11 +155,11 @@ class CameraView(QWidget):
         self.source_label.setObjectName("mutedLabel")
         guide_layout.addWidget(self.source_label)
 
-        side_panel.addWidget(guide_card)
+        self.side_layout.addWidget(self.guide_card)
 
-        action_card = QFrame()
-        action_card.setObjectName("panelCard")
-        action_layout = QVBoxLayout(action_card)
+        self.action_card = QFrame()
+        self.action_card.setObjectName("panelCard")
+        action_layout = QVBoxLayout(self.action_card)
         action_layout.setContentsMargins(16, 16, 16, 16)
         action_layout.setSpacing(8)
 
@@ -177,13 +181,17 @@ class CameraView(QWidget):
         self.btn_cancel.clicked.connect(self._on_cancel)
         action_layout.addWidget(self.btn_cancel)
 
-        side_panel.addWidget(action_card)
-        side_panel.addStretch()
+        self.side_layout.addWidget(self.action_card)
+        self.side_layout.addStretch()
 
-        side_widget = QWidget()
-        side_widget.setLayout(side_panel)
-        side_widget.setMaximumWidth(232)
-        layout.addWidget(side_widget, stretch=3)
+        self.side_widget = QWidget()
+        self.side_widget.setLayout(self.side_layout)
+        self.side_widget.setMaximumWidth(232)
+        self.side_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.content_layout.addWidget(self.side_widget, stretch=3)
+        self.side_layout.setStretch(0, 3)
+        self.side_layout.setStretch(1, 2)
+        self._update_layout_mode()
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -192,6 +200,29 @@ class CameraView(QWidget):
     def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
         self._stop_camera()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._update_layout_mode()
+
+    def _update_layout_mode(self) -> None:
+        compact = self.width() < 760 or self.height() < 430
+        if compact == self._compact_mode:
+            return
+
+        self._compact_mode = compact
+        if compact:
+            self.content_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.side_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.side_widget.setMaximumWidth(16777215)
+            self.side_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+            self.preview_label.setMinimumSize(240, 170)
+        else:
+            self.content_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.side_layout.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.side_widget.setMaximumWidth(232)
+            self.side_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+            self.preview_label.setMinimumSize(430, 270)
 
     def _set_camera_state(self, text: str, state: str) -> None:
         self.camera_state.setText(text)

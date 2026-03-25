@@ -299,6 +299,10 @@ PRECHECK_CONFIG = {
     "max_ink_ratio": 0.60,
     "min_component_area_ratio": 0.00008,
     "max_meaningful_components": 60,
+    "min_edge_to_ink_ratio": 0.08,
+    "max_blob_solidity": 0.90,
+    "max_blob_fill_ratio": 0.58,
+    "max_blob_area_ratio": 0.18,
 }
 
 # =========================
