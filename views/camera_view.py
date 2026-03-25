@@ -33,6 +33,7 @@ from services.database_service import database_service
 from services.evaluation_service import evaluation_service
 from services.preprocessing_service import PreprocessingError, preprocessing_service
 from services.speech_service import speech_service
+from services.template_manager import template_manager
 from views.ui_theme import app_font
 
 
@@ -70,9 +71,11 @@ class CameraView(QWidget):
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
+        self.requested_character: str | None = None
         self._compact_mode = False
         self.guide_steps: list[QLabel] = []
         self._init_ui()
+        self.set_requested_character(None)
 
     def _init_ui(self) -> None:
         self.content_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
@@ -117,7 +120,7 @@ class CameraView(QWidget):
 
         preview_layout.addWidget(self.preview_frame, stretch=1)
 
-        self.preview_hint = QLabel("单字尽量占画面 60% 左右，避免纸张边缘进入取景框。")
+        self.preview_hint = QLabel("单字尽量占画面六成左右，避免纸张边缘和整页注释进入取景框。")
         self.preview_hint.setObjectName("sectionSubtitle")
         self.preview_hint.setWordWrap(True)
         preview_layout.addWidget(self.preview_hint)
@@ -142,10 +145,14 @@ class CameraView(QWidget):
         self.guide_badge.setObjectName("chipLabel")
         guide_layout.addWidget(self.guide_badge, alignment=Qt.AlignmentFlag.AlignLeft)
 
+        self.target_status = QLabel("当前评测字：自动识别")
+        self.target_status.setObjectName("accentChip")
+        guide_layout.addWidget(self.target_status, alignment=Qt.AlignmentFlag.AlignLeft)
+
         for text in [
-            "1. 只保留一个汉字，避免整页一起入镜。",
+            "1. 只保留一个汉字，避免把整页一起拍进去。",
             "2. 使用浅色背景，并尽量减少阴影和反光。",
-            "3. 拍摄前先看取景框，确认作品落在中心区域。",
+            "3. 先看取景框，确认作品主体落在中间参考区。",
         ]:
             label = QLabel(text)
             label.setObjectName("sectionSubtitle")
@@ -162,9 +169,7 @@ class CameraView(QWidget):
         self.source_label.setObjectName("mutedLabel")
         guide_layout.addWidget(self.source_label)
 
-        self.action_hint = QLabel(
-            "准备好后点击“拍照并评测”。系统会先判断画面里是否真的是清晰、可评测的单个毛笔字，再给出结果。"
-        )
+        self.action_hint = QLabel("")
         self.action_hint.setObjectName("sectionSubtitle")
         self.action_hint.setWordWrap(True)
         self.action_hint.setFont(app_font(10))
@@ -177,6 +182,11 @@ class CameraView(QWidget):
         action_layout = QVBoxLayout(self.action_card)
         action_layout.setContentsMargins(16, 16, 16, 16)
         action_layout.setSpacing(8)
+
+        self.action_target = QLabel("本次按自动识别模式评测")
+        self.action_target.setObjectName("mutedLabel")
+        self.action_target.setWordWrap(True)
+        action_layout.addWidget(self.action_target)
 
         self.btn_capture = QPushButton("拍照并评测")
         self.btn_capture.setObjectName("primaryButton")
@@ -207,6 +217,30 @@ class CameraView(QWidget):
         self.side_layout.setStretch(0, 3)
         self.side_layout.setStretch(1, 2)
         self._update_layout_mode()
+
+    def set_requested_character(self, character_key: str | None) -> None:
+        normalized = template_manager.resolve_character_key(character_key) if character_key else None
+        self.requested_character = normalized or None
+
+        if self.requested_character:
+            display = template_manager.to_display_character(self.requested_character)
+            self.target_status.setText(f"当前评测字：{display}")
+            self.action_target.setText(f"本次将直接按“{display}”评测，不再自动猜字。")
+            self.btn_capture.setText(f"拍照并评测 {display}")
+            self.btn_load.setText(f"载入图片评测 {display}")
+            self._set_action_hint(
+                f"当前已锁定评测字“{display}”。只要画面里是清晰的单个毛笔字，系统就会直接按该字评测。",
+                "锁定评测字",
+            )
+        else:
+            self.target_status.setText("当前评测字：自动识别")
+            self.action_target.setText("本次按自动识别模式评测。演示时建议先回首页锁定评测字。")
+            self.btn_capture.setText("拍照并评测")
+            self.btn_load.setText("载入图片评测")
+            self._set_action_hint(
+                "系统会先判断画面里是不是可评测的单个毛笔字，再尝试自动识别并给出结果。",
+                "拍摄前检查",
+            )
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -262,15 +296,21 @@ class CameraView(QWidget):
         if badge:
             self.guide_badge.setText(badge)
 
+    def _current_target_display(self) -> str | None:
+        if not self.requested_character:
+            return None
+        return template_manager.to_display_character(self.requested_character)
+
     def _build_retry_guidance(self, exc: PreprocessingError) -> str:
         error_guidance = {
-            "too_dark": "把纸张移到更亮的地方，再让镜头正对作品后重拍。",
+            "too_dark": "把纸张移到更亮的位置，再让镜头正对作品后重拍。",
             "too_bright": "避开顶灯反光或窗边强光，让纸面亮但不过曝。",
             "low_contrast": "请换一张更清晰的作品，或让墨迹和背景分离得更明显。",
             "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
             "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
             "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
-            "ambiguous_character": "当前字形与多个内置字过于接近，系统无法稳定识别。请改拍系统支持的字，或手动指定评测字。",
+            "ambiguous_character": "当前字形与多个内置评测字模板过于接近。建议回首页手动锁定评测字后再拍。",
+            "unsupported_character": "当前作品是毛笔字，但不在系统当前内置的评测字库中。请改拍受支持的字，或手动指定评测字。",
             "too_fragmented": "画面里的内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
             "scattered_content": "请再靠近一点，让目标汉字更集中地落在取景框中央。",
         }
@@ -280,7 +320,7 @@ class CameraView(QWidget):
         retry_guidance = self._build_retry_guidance(exc)
         self._set_camera_state("需重拍", "error")
         self.status_label.setText(str(exc))
-        self._set_action_hint(retry_guidance, badge="重拍建议")
+        self._set_action_hint(retry_guidance, "重拍建议")
         speech_service.speak_error(str(exc))
         QMessageBox.warning(self, dialog_title, f"{exc}\n\n建议：{retry_guidance}")
 
@@ -294,9 +334,9 @@ class CameraView(QWidget):
             self.preview_label.setText("相机暂时不可用\n你仍然可以载入图片完成评测。")
             self.btn_capture.setEnabled(False)
             self._set_camera_state("离线", "error")
-            self.status_label.setText("未能打开摄像头，建议检查连接或直接使用图片评测。")
+            self.status_label.setText("未能打开摄像头，建议检查连接，或先使用图片评测继续演示。")
             self._set_action_hint(
-                "如果评委现场摄像头异常，可以先用“载入图片评测”继续演示流程。",
+                "如果现场摄像头异常，可以先用“载入图片评测”继续演示流程。",
                 "相机异常",
             )
             return
@@ -304,7 +344,7 @@ class CameraView(QWidget):
         self.btn_capture.setEnabled(True)
         self._set_camera_state("在线", "ready")
         self.status_label.setText("相机已就绪，请将单个汉字放到取景框中央。")
-        self._set_action_hint("让单个汉字落在参考框中央，尽量不要把整页纸一起拍进来。", "拍摄中")
+        self._set_action_hint("让单个汉字落在参考框中央，尽量不要把整页练习纸一起拍进来。", "拍摄中")
 
         self.preview_thread = PreviewThread(camera_service)
         self.preview_thread.frame_ready.connect(self._update_preview)
@@ -363,7 +403,11 @@ class CameraView(QWidget):
             cv2.line(overlay, start, mid2, accent, 3)
 
         caption = "Single Char"
-        cv2.rectangle(overlay, (x1, y2 + 10), (x1 + 152, y2 + 40), (34, 25, 19), -1)
+        if self.requested_character:
+            caption = f"Target: {self.requested_character.upper()}"
+
+        caption_width = max(152, 18 + len(caption) * 10)
+        cv2.rectangle(overlay, (x1, y2 + 10), (x1 + caption_width, y2 + 40), (34, 25, 19), -1)
         cv2.putText(
             overlay,
             caption,
@@ -382,6 +426,7 @@ class CameraView(QWidget):
             processed,
             original_image_path=str(original_path),
             processed_image_path=processed_path,
+            character_name=self.requested_character,
             texture_image=image,
         )
         result.id = database_service.save(result)
@@ -397,10 +442,11 @@ class CameraView(QWidget):
         self.btn_capture.setEnabled(False)
         self._set_camera_state("评测中", "working")
         self.status_label.setText("正在预处理图像并生成评测结果...")
-        self._set_action_hint(
-            "系统正在检查画面里是否是清晰的单个毛笔字，并生成评测结果。",
-            "评测中",
-        )
+        target = self._current_target_display()
+        if target:
+            self._set_action_hint(f"系统将直接按“{target}”评测当前作品。", "评测中")
+        else:
+            self._set_action_hint("系统正在检查画面里是不是清晰的单个毛笔字，并生成评测结果。", "评测中")
 
         timestamp = int(time.time() * 1000)
         original_path = IMAGES_DIR / f"original_{timestamp}.jpg"
@@ -410,10 +456,7 @@ class CameraView(QWidget):
             result = self._run_evaluation(self.current_frame, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("评测完成，正在打开结果页。")
-            self._set_action_hint(
-                "这次结果已经生成。你可以继续拍下一张，或者直接向评委讲解评分维度。",
-                "评测完成",
-            )
+            self._set_action_hint("本次结果已经生成。你可以继续拍下一张，或直接向评委讲解评分维度。", "评测完成")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
             self._handle_preprocessing_failure(exc, "请调整拍摄画面")
@@ -421,7 +464,7 @@ class CameraView(QWidget):
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
             self.status_label.setText("评测流程中断，请查看错误信息。")
-            self._set_action_hint("评测流程意外中断。可先回到首页，再重新进入拍照页。", "系统异常")
+            self._set_action_hint("评测流程意外中断。可以先回到首页，再重新进入拍照页。", "系统异常")
             QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
 
@@ -453,7 +496,11 @@ class CameraView(QWidget):
         self.source_label.setText(f"输入来源：图片 / {Path(file_path).name}")
         self._set_camera_state("图片模式", "working")
         self.status_label.setText("正在使用载入的图片进行评测...")
-        self._set_action_hint("系统会先检查这张图片里是不是单个毛笔字，再进入评分。", "图片模式")
+        target = self._current_target_display()
+        if target:
+            self._set_action_hint(f"当前图片将按“{target}”直接评测。", "图片模式")
+        else:
+            self._set_action_hint("系统会先检查这张图片里是不是单个毛笔字，再进入评分。", "图片模式")
 
         display_frame = self._add_guide_overlay(image)
         height, width, channels = display_frame.shape
@@ -477,10 +524,7 @@ class CameraView(QWidget):
             result = self._run_evaluation(image, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("图片评测完成，正在打开结果页。")
-            self._set_action_hint(
-                "图片评测已经完成。若要继续演示，建议换一张不同书体或不同得分的作品。",
-                "评测完成",
-            )
+            self._set_action_hint("图片评测已经完成。若要继续演示，建议换一张不同书体或不同得分的作品。", "评测完成")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
             self._handle_preprocessing_failure(exc, "图片内容不符合评测条件")
@@ -491,7 +535,8 @@ class CameraView(QWidget):
             QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)
-            self.btn_load.setText("载入图片评测")
+            target = self._current_target_display()
+            self.btn_load.setText(f"载入图片评测 {target}" if target else "载入图片评测")
 
     def _read_image_chinese(self, file_path: str) -> np.ndarray | None:
         try:
@@ -501,21 +546,6 @@ class CameraView(QWidget):
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("读取图片失败: %s", exc)
             return None
-
-    def _build_retry_guidance(self, exc: PreprocessingError) -> str:
-        error_guidance = {
-            "too_dark": "把纸张移到更亮的位置，再让镜头正对作品后重拍。",
-            "too_bright": "避开顶灯反光或窗边强光，让纸面明亮但不过曝。",
-            "low_contrast": "请换一张更清晰的作品，或让墨迹和背景分离得更明显。",
-            "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
-            "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
-            "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
-            "ambiguous_character": "当前字形与多个内置评测字模板过于接近，系统无法稳定判定。请换成系统支持的字，或手动指定评测字。",
-            "unsupported_character": "当前作品是毛笔字，但不在系统当前内置的评测字库中。请改拍受支持的字，或手动指定评测字。",
-            "too_fragmented": "画面里的内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
-            "scattered_content": "请再靠近一点，让目标汉字更集中地落在取景框中央。",
-        }
-        return error_guidance.get(exc.error_type, "请按照取景框重新对准单个汉字后再试一次。")
 
     def cleanup(self) -> None:
         self._stop_camera()

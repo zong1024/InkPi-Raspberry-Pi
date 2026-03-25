@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -21,7 +22,8 @@ from PyQt6.QtWidgets import (
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, clear_layout, score_to_color, score_to_soft_color
+from services.template_manager import template_manager
+from views.ui_theme import THEME, app_font, clear_layout, score_to_color, score_to_soft_color
 
 
 class StatCard(QFrame):
@@ -127,8 +129,11 @@ class HomeView(QWidget):
     start_evaluation = pyqtSignal()
     view_history = pyqtSignal()
     recent_selected = pyqtSignal(EvaluationResult)
+    selected_character_changed = pyqtSignal(str)
 
     def __init__(self, parent=None):
+        self.selected_character_key = ""
+        self.character_buttons: dict[str, QPushButton] = {}
         super().__init__(parent)
         self._init_ui()
         self.refresh()
@@ -181,7 +186,7 @@ class HomeView(QWidget):
         self.btn_start = QPushButton("开始评测")
         self.btn_start.setObjectName("primaryButton")
         self.btn_start.setMinimumHeight(50)
-        self.btn_start.clicked.connect(self.start_evaluation.emit)
+        self.btn_start.clicked.connect(self._emit_start_evaluation)
         button_row.addWidget(self.btn_start)
 
         self.btn_history = QPushButton("查看历史")
@@ -215,6 +220,50 @@ class HomeView(QWidget):
 
         hero_layout.addWidget(cue_card, stretch=2)
         layout.addWidget(hero_card)
+
+        selector_card = QFrame()
+        selector_card.setObjectName("panelCard")
+        selector_layout = QVBoxLayout(selector_card)
+        selector_layout.setContentsMargins(18, 16, 18, 16)
+        selector_layout.setSpacing(10)
+
+        selector_header = QHBoxLayout()
+        selector_header.setSpacing(8)
+
+        selector_title = QLabel("评测字设置")
+        selector_title.setObjectName("sectionTitle")
+        selector_title.setFont(app_font(16, QFont.Weight.Bold))
+        selector_header.addWidget(selector_title)
+        selector_header.addStretch()
+
+        self.selector_hint = QLabel("当前：自动识别")
+        self.selector_hint.setObjectName("accentChip")
+        selector_header.addWidget(self.selector_hint)
+        selector_layout.addLayout(selector_header)
+
+        selector_subtitle = QLabel("比赛演示时建议先锁定要评测的字。这样系统会直接按该字评测，不再自动猜字。")
+        selector_subtitle.setObjectName("sectionSubtitle")
+        selector_subtitle.setWordWrap(True)
+        selector_layout.addWidget(selector_subtitle)
+
+        self.selector_grid = QGridLayout()
+        self.selector_grid.setHorizontalSpacing(8)
+        self.selector_grid.setVerticalSpacing(8)
+        selector_layout.addLayout(self.selector_grid)
+        layout.addWidget(selector_card)
+
+        options = [("", "自动识别")]
+        options.extend(
+            (char_key, template_manager.to_display_character(char_key))
+            for char_key in template_manager.list_available_chars()
+        )
+        for index, (char_key, label) in enumerate(options):
+            button = QPushButton(label)
+            button.setMinimumHeight(42)
+            button.clicked.connect(lambda _checked=False, key=char_key: self.set_selected_character(key))
+            self.selector_grid.addWidget(button, index // 4, index % 4)
+            self.character_buttons[char_key] = button
+        self._sync_character_buttons()
 
         self.stats_layout = QHBoxLayout()
         self.stats_layout.setSpacing(10)
@@ -256,17 +305,21 @@ class HomeView(QWidget):
             StatCard("最佳成绩", str(stats["max_score"]) if stats["total_count"] else "--", "个人最好表现")
         )
 
+        self.hero_metric.setStyleSheet("color: #fffaf1; font-size: 28px; font-weight: 800;")
         if recent_records:
             latest = recent_records[0]
             self.hero_metric.setText(f"最近 {latest.total_score} 分")
-            self.hero_metric.setStyleSheet("color: #fffaf1; font-size: 28px; font-weight: 800;")
             self.hero_hint.setText(
                 f"最近一次评测：{latest.timestamp.strftime('%m-%d %H:%M')} / {latest.get_grade()}"
             )
         else:
             self.hero_metric.setText("准备开始")
-            self.hero_metric.setStyleSheet("color: #fffaf1; font-size: 28px; font-weight: 800;")
             self.hero_hint.setText("完成一次评测后，这里会显示你的近期趋势。")
+
+        if self.selected_character_key:
+            display = template_manager.to_display_character(self.selected_character_key)
+            self.hero_hint.setText(f"演示模式：已锁定评测字 {display}")
+        self._sync_character_buttons()
 
         clear_layout(self.recent_layout)
 
@@ -293,3 +346,33 @@ class HomeView(QWidget):
             card = RecentCard(record)
             card.selected.connect(self.recent_selected.emit)
             self.recent_layout.addWidget(card)
+
+    def set_selected_character(self, character_key: str, emit_signal: bool = True) -> None:
+        normalized = template_manager.resolve_character_key(character_key) if character_key else ""
+        self.selected_character_key = normalized
+        if normalized:
+            display = template_manager.to_display_character(normalized)
+            self.selector_hint.setText(f"当前：{display}")
+            self.btn_start.setText(f"开始评测 {display}")
+            self.hero_hint.setText(f"演示模式：已锁定评测字 {display}")
+        else:
+            self.selector_hint.setText("当前：自动识别")
+            self.btn_start.setText("开始评测")
+            self.hero_hint.setText("系统会尝试自动识别当前汉字；比赛演示时建议先锁定评测字。")
+        self._sync_character_buttons()
+        if emit_signal:
+            self.selected_character_changed.emit(normalized)
+
+    def _emit_start_evaluation(self) -> None:
+        self.start_evaluation.emit()
+
+    def _sync_character_buttons(self) -> None:
+        for char_key, button in self.character_buttons.items():
+            active = char_key == self.selected_character_key
+            if active:
+                button.setStyleSheet(
+                    f"background-color: {THEME['accent']}; color: #fff8f3; "
+                    f"border: 1px solid {THEME['accent_hover']};"
+                )
+            else:
+                button.setStyleSheet("")
