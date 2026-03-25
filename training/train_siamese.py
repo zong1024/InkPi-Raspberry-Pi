@@ -7,7 +7,7 @@ import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import cv2
 import numpy as np
@@ -105,6 +105,19 @@ def list_png_count(path: Path) -> int:
     if not path.exists():
         return 0
     return len(list(path.glob("*.png")))
+
+
+def empty_history(audit: DatasetAudit) -> Dict[str, Any]:
+    return {
+        "train_loss": [],
+        "train_acc": [],
+        "val_loss": [],
+        "val_acc": [],
+        "lr": [],
+        "matched_samples": audit.matched_samples,
+        "matched_ratio": audit.matched_ratio,
+        "unique_chars": audit.unique_chars,
+    }
 
 
 def parse_sample_character(sample_path: Path) -> tuple[str | None, str | None]:
@@ -564,12 +577,60 @@ def train(args: argparse.Namespace) -> None:
     model = SiameseNet(pretrained=args.pretrained, embedding_dim=args.embedding_dim).to(device)
     criterion = nn.CosineEmbeddingLoss(margin=args.margin)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=args.epochs, eta_min=1e-6
-    )
 
     use_amp = bool(args.amp and device.type == "cuda")
     scaler = make_grad_scaler(use_amp)
+
+    checkpoint: Dict[str, Any] | None = None
+    checkpoint_path: Path | None = None
+    completed_epochs = 0
+    start_epoch = 1
+    history = empty_history(audit)
+    best_val_loss = float("inf")
+
+    if args.resume:
+        checkpoint_path = Path(args.resume).expanduser().resolve()
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+
+        optimizer_state = checkpoint.get("optimizer_state_dict")
+        if optimizer_state:
+            optimizer.load_state_dict(optimizer_state)
+
+        completed_epochs = int(checkpoint.get("epoch", 0))
+        start_epoch = completed_epochs + 1
+        best_val_loss = float(checkpoint.get("best_val_loss", checkpoint.get("val_loss", float("inf"))))
+
+        checkpoint_history = checkpoint.get("history")
+        if isinstance(checkpoint_history, dict):
+            history = checkpoint_history
+            history["matched_samples"] = audit.matched_samples
+            history["matched_ratio"] = audit.matched_ratio
+            history["unique_chars"] = audit.unique_chars
+        else:
+            history["resumed_from_epoch"] = completed_epochs
+            history["resume_checkpoint"] = str(checkpoint_path)
+
+    scheduler_t_max = args.epochs
+    if checkpoint and "scheduler_state_dict" not in checkpoint:
+        scheduler_t_max = max(args.epochs - completed_epochs, 1)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=scheduler_t_max, eta_min=1e-6
+    )
+
+    if checkpoint:
+        scheduler_state = checkpoint.get("scheduler_state_dict")
+        if scheduler_state:
+            for param_group in optimizer.param_groups:
+                param_group.setdefault("initial_lr", args.lr)
+            scheduler.load_state_dict(scheduler_state)
+        scaler_state = checkpoint.get("scaler_state_dict")
+        if scaler_state and use_amp:
+            scaler.load_state_dict(scaler_state)
 
     logger.info(
         "Start training: matched_samples=%d train_pairs=%d val_pairs=%d batch=%d epochs=%d",
@@ -580,24 +641,31 @@ def train(args: argparse.Namespace) -> None:
         args.epochs,
     )
 
-    history = {
-        "train_loss": [],
-        "train_acc": [],
-        "val_loss": [],
-        "val_acc": [],
-        "lr": [],
-        "matched_samples": audit.matched_samples,
-        "matched_ratio": audit.matched_ratio,
-        "unique_chars": audit.unique_chars,
-    }
-
-    best_val_loss = float("inf")
     best_path = output_dir / "siamese_calligraphy_best.pth"
     final_path = output_dir / "siamese_calligraphy_final.pth"
     history_path = output_dir / "training_history.json"
     onnx_path = output_dir / "siamese_calligraphy.onnx"
 
-    for epoch in range(1, args.epochs + 1):
+    if checkpoint_path:
+        if start_epoch > args.epochs:
+            logger.info(
+                "Checkpoint %s is already at epoch %d, which meets/exceeds target epochs=%d. Export skipped.",
+                checkpoint_path,
+                completed_epochs,
+                args.epochs,
+            )
+            return
+
+        logger.info(
+            "Resuming from %s at epoch %d/%d (best_val_loss=%.4f current_lr=%.6f)",
+            checkpoint_path,
+            start_epoch,
+            args.epochs,
+            best_val_loss,
+            optimizer.param_groups[0]["lr"],
+        )
+
+    for epoch in range(start_epoch, args.epochs + 1):
         train_metrics = train_one_epoch(
             model, train_loader, criterion, optimizer, device, scaler, use_amp
         )
@@ -629,8 +697,12 @@ def train(args: argparse.Namespace) -> None:
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
+                    "scheduler_state_dict": scheduler.state_dict(),
+                    "scaler_state_dict": scaler.state_dict() if use_amp else None,
                     "val_loss": val_metrics["loss"],
                     "val_acc": val_metrics["accuracy"],
+                    "best_val_loss": best_val_loss,
+                    "history": history,
                     "args": vars(args),
                     "dataset_audit": audit.__dict__,
                 },
@@ -643,6 +715,9 @@ def train(args: argparse.Namespace) -> None:
             "epoch": args.epochs,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "scaler_state_dict": scaler.state_dict() if use_amp else None,
+            "best_val_loss": best_val_loss,
             "history": history,
             "args": vars(args),
             "dataset_audit": audit.__dict__,
@@ -676,6 +751,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", type=str, default=None, help="cuda/cpu")
     parser.add_argument("--pretrained", action="store_true", help="Use ImageNet pretrained weights")
     parser.add_argument("--amp", action="store_true", help="Enable AMP on CUDA")
+    parser.add_argument("--resume", type=str, default=None, help="Resume training from a checkpoint file")
     parser.add_argument("--negative-ratio", type=int, default=1, help="Number of negative pairs per positive pair")
     parser.add_argument(
         "--min-match-ratio",

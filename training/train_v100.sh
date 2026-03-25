@@ -39,6 +39,8 @@ MIN_MATCHED_SAMPLES="${MIN_MATCHED_SAMPLES:-1000}"
 MIN_IMAGES_PER_CHAR="${MIN_IMAGES_PER_CHAR:-4}"
 MAX_IMAGES_PER_CHAR="${MAX_IMAGES_PER_CHAR:-24}"
 MAX_CHARS="${MAX_CHARS:-}"
+RESUME="${RESUME:-0}"
+RESUME_FROM="${RESUME_FROM:-}"
 
 MODEL_DIR="$PROJECT_ROOT/models"
 mkdir -p "$MODEL_DIR"
@@ -59,6 +61,8 @@ echo "USE_AMP             : $USE_AMP"
 echo "NEGATIVE_RATIO      : $NEGATIVE_RATIO"
 echo "MIN_MATCH_RATIO     : $MIN_MATCH_RATIO"
 echo "MIN_MATCHED_SAMPLES : $MIN_MATCHED_SAMPLES"
+echo "RESUME              : $RESUME"
+echo "RESUME_FROM         : ${RESUME_FROM:-<auto>}"
 echo ""
 
 echo -e "${YELLOW}[1/5] Checking environment...${NC}"
@@ -201,6 +205,23 @@ if [ "$USE_PRETRAINED" = "1" ]; then
 fi
 if [ "$USE_AMP" = "1" ]; then
   CMD+=(--amp)
+fi
+
+if [ "$RESUME" = "1" ] || [ -n "$RESUME_FROM" ]; then
+  if [ -z "$RESUME_FROM" ]; then
+    if [ -f "$MODEL_DIR/siamese_calligraphy_best.pth" ]; then
+      RESUME_FROM="$MODEL_DIR/siamese_calligraphy_best.pth"
+    elif [ -f "$MODEL_DIR/siamese_calligraphy_final.pth" ]; then
+      RESUME_FROM="$MODEL_DIR/siamese_calligraphy_final.pth"
+    fi
+  fi
+
+  if [ -n "$RESUME_FROM" ]; then
+    echo "Resuming from checkpoint: $RESUME_FROM"
+    CMD+=(--resume "$RESUME_FROM")
+  else
+    echo -e "${YELLOW}Resume requested, but no checkpoint was found. Starting fresh.${NC}"
+  fi
 fi
 
 echo "Running command:"
