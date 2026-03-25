@@ -74,14 +74,15 @@ class PreprocessingService:
         
         # 8. 锐化增强
         sharpened = self._sharpen(denoised)
+        focused = self._extract_primary_subject(sharpened)
         
         # 保存处理后的图像
         processed_path = None
         if save_processed:
-            processed_path = self._save_image(sharpened)
+            processed_path = self._save_image(focused)
             
         self.logger.info("图像预处理完成")
-        return sharpened, processed_path
+        return focused, processed_path
     
     def _precheck(self, image: np.ndarray) -> None:
         """
@@ -190,6 +191,13 @@ class PreprocessingService:
                 error_type="not_calligraphy"
             )
 
+        dominant_component = self._find_dominant_central_component(binary)
+        dominant_central_character = bool(
+            dominant_component
+            and dominant_component["ink_share"] >= self.precheck_config.get("min_dominant_ink_share", 0.42)
+            and dominant_component["center_distance"] <= self.precheck_config.get("max_dominant_center_distance", 0.34)
+        )
+
         contours, _ = cv2.findContours(255 - binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         largest_area_ratio = 0.0
         largest_solidity = 0.0
@@ -213,6 +221,7 @@ class PreprocessingService:
                     or largest_bbox_fill > self.precheck_config.get("max_blob_fill_ratio", 0.58)
                     or largest_area_ratio > self.precheck_config.get("max_blob_area_ratio", 0.18)
                 )
+                and not dominant_central_character
             ):
                 raise PreprocessingError(
                     "未检测到清晰的单个毛笔字，请重新对准作品后再试",
@@ -231,8 +240,27 @@ class PreprocessingService:
         )
         meaningful_components = component_areas[component_areas >= min_component_area]
         num_components = len(meaningful_components)
+        dominant_central_character = dominant_central_character and (
+            edge_to_ink_ratio >= self.precheck_config.get("dominant_min_edge_to_ink_ratio", 0.12)
+            or num_components >= self.precheck_config.get("min_annotation_components", 4)
+        )
+
+        if (
+            dominant_component
+            and num_components <= 2
+            and dominant_component["ink_share"] >= 0.9
+            and edge_to_ink_ratio < self.precheck_config.get("solid_blob_max_edge_to_ink_ratio", 0.2)
+            and largest_bbox_fill > self.precheck_config.get("solid_blob_max_fill_ratio", 0.7)
+        ):
+            raise PreprocessingError(
+                "未检测到清晰的毛笔字主体，请重新对准作品后再试",
+                error_type="not_calligraphy"
+            )
         
-        if num_components > self.precheck_config.get("max_meaningful_components", 60):
+        if (
+            num_components > self.precheck_config.get("max_meaningful_components", 60)
+            and not dominant_central_character
+        ):
             raise PreprocessingError(
                 "检测到较多零散笔画或背景噪点，请尽量对准单个字并保持画面干净后重试",
                 error_type="too_fragmented"
@@ -247,7 +275,7 @@ class PreprocessingService:
             y_spread = np.std(y_coords) / h
             
             # 放宽到 0.7（原 0.45），允许更分散的布局
-            if x_spread > 0.7 and y_spread > 0.7:
+            if x_spread > 0.7 and y_spread > 0.7 and not dominant_central_character:
                 raise PreprocessingError(
                     "内容分布过于分散，请对准单个汉字",
                     error_type="scattered_content"
@@ -260,6 +288,104 @@ class PreprocessingService:
             f"最小面积阈值={min_component_area}"
         )
     
+    def _find_dominant_central_component(self, binary: np.ndarray):
+        mask = (binary == 0).astype(np.uint8)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        if num_labels <= 1:
+            return None
+
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        if areas.size == 0:
+            return None
+
+        dominant_index = int(np.argmax(areas)) + 1
+        dominant_area = float(stats[dominant_index, cv2.CC_STAT_AREA])
+        total_ink = float(np.sum(areas))
+        if total_ink <= 0:
+            return None
+
+        h, w = binary.shape
+        center_x = float(centroids[dominant_index][0])
+        center_y = float(centroids[dominant_index][1])
+        normalized_dx = (center_x - (w / 2.0)) / max(1.0, w / 2.0)
+        normalized_dy = (center_y - (h / 2.0)) / max(1.0, h / 2.0)
+        center_distance = float(np.hypot(normalized_dx, normalized_dy))
+
+        return {
+            "label": dominant_index,
+            "area": dominant_area,
+            "ink_share": dominant_area / total_ink,
+            "center_distance": center_distance,
+            "stats": stats[dominant_index],
+        }
+
+    def _extract_primary_subject(self, binary: np.ndarray) -> np.ndarray:
+        dominant = self._find_dominant_central_component(binary)
+        if not dominant:
+            return binary
+
+        if dominant["ink_share"] < self.precheck_config.get("min_dominant_ink_share", 0.42):
+            return binary
+
+        mask = (binary == 0).astype(np.uint8)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        if num_labels <= 1:
+            return binary
+
+        x = int(dominant["stats"][cv2.CC_STAT_LEFT])
+        y = int(dominant["stats"][cv2.CC_STAT_TOP])
+        w_box = int(dominant["stats"][cv2.CC_STAT_WIDTH])
+        h_box = int(dominant["stats"][cv2.CC_STAT_HEIGHT])
+        dominant_area = max(1.0, dominant["area"])
+        margin = max(18, int(max(w_box, h_box) * 0.18))
+        expanded_left = x - margin
+        expanded_top = y - margin
+        expanded_right = x + w_box + margin
+        expanded_bottom = y + h_box + margin
+
+        keep_mask = np.zeros_like(mask, dtype=np.uint8)
+        total_kept = 0.0
+
+        for label in range(1, num_labels):
+            area = float(stats[label, cv2.CC_STAT_AREA])
+            if area < max(12.0, dominant_area * 0.02):
+                continue
+
+            comp_x = int(stats[label, cv2.CC_STAT_LEFT])
+            comp_y = int(stats[label, cv2.CC_STAT_TOP])
+            comp_w = int(stats[label, cv2.CC_STAT_WIDTH])
+            comp_h = int(stats[label, cv2.CC_STAT_HEIGHT])
+            comp_center_x = float(centroids[label][0])
+            comp_center_y = float(centroids[label][1])
+
+            overlaps_focus = not (
+                comp_x + comp_w < expanded_left
+                or comp_x > expanded_right
+                or comp_y + comp_h < expanded_top
+                or comp_y > expanded_bottom
+            )
+            inside_focus = (
+                expanded_left <= comp_center_x <= expanded_right
+                and expanded_top <= comp_center_y <= expanded_bottom
+            )
+            sizable_companion = area >= dominant_area * 0.28
+
+            if overlaps_focus or inside_focus or sizable_companion or label == dominant["label"]:
+                keep_mask[labels == label] = 1
+                total_kept += area
+
+        total_ink = float(np.sum(stats[1:, cv2.CC_STAT_AREA]))
+        if total_ink <= 0 or total_kept / total_ink < 0.55:
+            return binary
+
+        focused = np.where(keep_mask > 0, 0, 255).astype(np.uint8)
+        focused = cv2.morphologyEx(
+            focused,
+            cv2.MORPH_CLOSE,
+            np.ones((3, 3), dtype=np.uint8),
+        )
+        return focused
+
     def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
         """
         透视校正 - 基于Canny边缘检测和霍夫变换

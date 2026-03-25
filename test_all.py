@@ -40,6 +40,21 @@ def create_mock_calligraphy_image():
     
     return img
 
+
+def create_annotated_calligraphy_image():
+    """Create a dominant central character with small edge annotations."""
+    img = np.ones((420, 420, 3), dtype=np.uint8) * 242
+
+    cv2.line(img, (90, 320), (200, 110), (18, 18, 18), 28)
+    cv2.line(img, (150, 150), (255, 255), (18, 18, 18), 22)
+    cv2.line(img, (240, 90), (240, 330), (18, 18, 18), 18)
+    cv2.ellipse(img, (295, 190), (55, 42), 0, 0, 360, (18, 18, 18), -1)
+
+    for text, pos in [("A", (34, 62)), ("B", (330, 68)), ("C", (34, 372)), ("D", (334, 360))]:
+        cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, 1.0, (30, 30, 30), 3, cv2.LINE_AA)
+
+    return img
+
 # ============ 第1轮：核心服务测试 ============
 print("\n" + "="*50)
 print("第1轮：核心服务测试")
@@ -106,7 +121,26 @@ try:
                 log_test("预处理服务 - 非汉字拦截", False, f"异常类型不符合预期: {e.error_type}")
     except Exception as e:
         log_test("预处理服务 - 非汉字拦截", False, f"未知错误: {e}")
-         
+
+    try:
+        annotated_img = create_annotated_calligraphy_image()
+        processed, _ = preprocessing_service.preprocess(annotated_img, save_processed=False)
+        total_ink = int(np.sum(processed == 0))
+        center_ink = int(np.sum(processed[90:330, 90:330] == 0))
+        edge_ink = int(np.sum(processed[:70, :] == 0) + np.sum(processed[-70:, :] == 0))
+        if total_ink > 0 and center_ink > edge_ink * 4 and edge_ink / max(1, total_ink) < 0.15:
+            log_test("预处理服务 - 注释教学图兼容", True, "中心主体字会被优先保留")
+        else:
+            log_test(
+                "预处理服务 - 注释教学图兼容",
+                False,
+                f"center_ink={center_ink}, edge_ink={edge_ink}, total_ink={total_ink}",
+            )
+    except PreprocessingError as e:
+        log_test("预处理服务 - 注释教学图兼容", False, str(e))
+    except Exception as e:
+        log_test("预处理服务 - 注释教学图兼容", False, f"未知错误: {e}")
+
 except Exception as e:
     log_test("预处理服务 - 导入", False, str(e))
 
