@@ -4,6 +4,7 @@
 #   ./deploy_rpi.sh
 #   MODEL_SOURCE=/path/to/siamese_calligraphy.onnx ./deploy_rpi.sh
 #   RUN_SELF_TEST=1 ./deploy_rpi.sh
+#   INSTALL_KIOSK=1 ./deploy_rpi.sh
 #   START_APP=1 ./deploy_rpi.sh
 
 set -euo pipefail
@@ -58,11 +59,16 @@ sudo apt-get install -y \
     espeak-ng \
     portaudio19-dev \
     libespeak1 \
-    spi-tools
+    spi-tools \
+    xinit \
+    x11-xserver-utils \
+    openbox \
+    xserver-xorg
 
 install_optional_pkg python3-picamera2
 install_optional_pkg python3-libcamera
 install_optional_pkg libcamera-apps
+install_optional_pkg unclutter
 
 sudo raspi-config nonint do_spi 0 2>/dev/null || true
 sudo usermod -a -G spi "$USER" 2>/dev/null || true
@@ -93,9 +99,15 @@ if [ "${RUN_SELF_TEST:-0}" = "1" ]; then
     MPLBACKEND=Agg python test_all.py
 fi
 
-echo "[7/7] Deployment finished."
+if [ "${INSTALL_KIOSK:-0}" = "1" ]; then
+    echo "[7/7] Installing kiosk startup flow..."
+    bash scripts/install_kiosk.sh
+else
+    echo "[7/7] Deployment finished."
+fi
 echo "Activate env: source venv/bin/activate"
 echo "Run app:      python main.py"
+echo "Install kiosk: INSTALL_KIOSK=1 ./deploy_rpi.sh"
 
 if [ "${START_APP:-0}" = "1" ]; then
     python main.py

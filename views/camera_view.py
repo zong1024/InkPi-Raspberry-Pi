@@ -137,6 +137,10 @@ class CameraView(QWidget):
         guide_title.setFont(app_font(15, QFont.Weight.Bold))
         guide_layout.addWidget(guide_title)
 
+        self.guide_badge = QLabel("拍摄前检查")
+        self.guide_badge.setObjectName("chipLabel")
+        guide_layout.addWidget(self.guide_badge, alignment=Qt.AlignmentFlag.AlignLeft)
+
         for text in [
             "1. 只保留一个汉字，避免整页一起入镜。",
             "2. 使用浅色背景并尽量减少阴影。",
@@ -154,6 +158,12 @@ class CameraView(QWidget):
         self.source_label = QLabel("输入来源：摄像头")
         self.source_label.setObjectName("mutedLabel")
         guide_layout.addWidget(self.source_label)
+
+        self.action_hint = QLabel("准备好后点击“拍照并评测”，系统会先检查画面里是否真的有单个毛笔字。")
+        self.action_hint.setObjectName("sectionSubtitle")
+        self.action_hint.setWordWrap(True)
+        self.action_hint.setFont(app_font(10))
+        guide_layout.addWidget(self.action_hint)
 
         self.side_layout.addWidget(self.guide_card)
 
@@ -230,21 +240,50 @@ class CameraView(QWidget):
         self.camera_state.style().unpolish(self.camera_state)
         self.camera_state.style().polish(self.camera_state)
 
+    def _set_action_hint(self, text: str, badge: str | None = None) -> None:
+        self.action_hint.setText(text)
+        if badge:
+            self.guide_badge.setText(badge)
+
+    def _build_retry_guidance(self, exc: PreprocessingError) -> str:
+        error_guidance = {
+            "too_dark": "把纸张移到更亮的地方，再让镜头正对作品后重拍。",
+            "too_bright": "避开顶灯反光或窗边强光，让纸面亮但不过曝。",
+            "low_contrast": "请换一张更清晰的作品，或让墨迹和背景更分离。",
+            "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
+            "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
+            "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
+            "too_fragmented": "画面里内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
+            "scattered_content": "请靠近一点，让目标汉字更集中地落在取景框中央。",
+        }
+        return error_guidance.get(exc.error_type, "请按照取景框重新对准单个汉字后再试一次。")
+
+    def _handle_preprocessing_failure(self, exc: PreprocessingError, dialog_title: str) -> None:
+        retry_guidance = self._build_retry_guidance(exc)
+        self._set_camera_state("需重拍", "error")
+        self.status_label.setText(str(exc))
+        self._set_action_hint(retry_guidance, badge="重拍建议")
+        speech_service.speak_error(str(exc))
+        QMessageBox.warning(self, dialog_title, f"{exc}\n\n建议：{retry_guidance}")
+
     def _start_camera(self) -> None:
         self._set_camera_state("连接中", "working")
         self.status_label.setText("正在尝试连接树莓派摄像头...")
         self.source_label.setText("输入来源：摄像头")
+        self._set_action_hint("正在连接相机，请稍等一秒；看到实时画面后再开始拍照。", "连接中")
 
         if not camera_service.open():
             self.preview_label.setText("相机暂时不可用\n你仍然可以载入图片完成评测。")
             self.btn_capture.setEnabled(False)
             self._set_camera_state("离线", "error")
             self.status_label.setText("未能打开摄像头，建议检查连接或直接使用图片评测。")
+            self._set_action_hint("如果评委现场相机异常，可以先用“载入图片评测”继续演示流程。", "相机异常")
             return
 
         self.btn_capture.setEnabled(True)
         self._set_camera_state("在线", "ready")
         self.status_label.setText("相机已就绪，请将单个汉字放到取景框中央。")
+        self._set_action_hint("让单个汉字落在参考框中央，尽量不要把整页纸一起拍进来。", "拍摄中")
 
         self.preview_thread = PreviewThread(camera_service)
         self.preview_thread.frame_ready.connect(self._update_preview)
@@ -329,6 +368,7 @@ class CameraView(QWidget):
         self.btn_capture.setEnabled(False)
         self._set_camera_state("评测中", "working")
         self.status_label.setText("正在预处理图像并生成评测结果...")
+        self._set_action_hint("系统正在检查画面里是否是清晰的单个毛笔字，并生成评测结果。", "评测中")
 
         timestamp = int(time.time() * 1000)
         original_path = IMAGES_DIR / f"original_{timestamp}.jpg"
@@ -338,16 +378,15 @@ class CameraView(QWidget):
             result = self._run_evaluation(self.current_frame, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("评测完成，正在打开结果页。")
+            self._set_action_hint("这次结果已经生成。你可以继续拍下一张，或者直接向评委讲解评分维度。", "评测完成")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
-            self._set_camera_state("需重拍", "error")
-            self.status_label.setText(str(exc))
-            speech_service.speak_error(str(exc))
-            QMessageBox.warning(self, "图像质量问题", str(exc))
+            self._handle_preprocessing_failure(exc, "请调整拍摄画面")
             self.btn_capture.setEnabled(True)
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
             self.status_label.setText("评测流程中断，请查看错误信息。")
+            self._set_action_hint("评测流程意外中断。可以先回到首页再重新进入拍照页。", "系统异常")
             QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
 
@@ -379,6 +418,7 @@ class CameraView(QWidget):
         self.source_label.setText(f"输入来源：图片 · {Path(file_path).name}")
         self._set_camera_state("图片模式", "working")
         self.status_label.setText("正在使用载入的图片进行评测...")
+        self._set_action_hint("系统会先检查这张图片里是不是单个毛笔字，再进入评分。", "图片模式")
 
         display_frame = self._add_guide_overlay(image)
         height, width, channels = display_frame.shape
@@ -402,15 +442,14 @@ class CameraView(QWidget):
             result = self._run_evaluation(image, original_path)
             self._set_camera_state("完成", "ready")
             self.status_label.setText("图片评测完成，正在打开结果页。")
+            self._set_action_hint("图片评测已完成。若要继续演示，建议换一张不同书体或不同得分的作品。", "评测完成")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
-            self._set_camera_state("需调整", "error")
-            self.status_label.setText(str(exc))
-            speech_service.speak_error(str(exc))
-            QMessageBox.warning(self, "图像质量问题", str(exc))
+            self._handle_preprocessing_failure(exc, "图片内容不符合评测条件")
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
             self.status_label.setText("评测流程中断，请查看错误信息。")
+            self._set_action_hint("图片评测中断。建议换一张更干净、更居中的作品图片。", "系统异常")
             QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)
