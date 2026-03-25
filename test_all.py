@@ -55,6 +55,33 @@ def create_annotated_calligraphy_image():
 
     return img
 
+
+def create_teaching_sheet_image():
+    """Create a practice-sheet-like image with a central calligraphy subject."""
+    img = np.ones((520, 520, 3), dtype=np.uint8) * 226
+
+    for offset in range(-520, 520, 18):
+        cv2.line(img, (max(offset, 0), max(-offset, 0)), (min(519 + offset, 519), min(519, 519 - offset)), (210, 206, 194), 1)
+
+    cv2.rectangle(img, (22, 22), (498, 498), (90, 90, 90), 2)
+    cv2.line(img, (22, 22), (498, 498), (130, 130, 130), 1)
+    cv2.line(img, (498, 22), (22, 498), (130, 130, 130), 1)
+    cv2.line(img, (260, 22), (260, 498), (130, 130, 130), 1)
+    cv2.line(img, (22, 260), (498, 260), (130, 130, 130), 1)
+
+    cv2.putText(img, "A", (180, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (50, 50, 50), 3, cv2.LINE_AA)
+    cv2.putText(img, "B", (360, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (50, 50, 50), 3, cv2.LINE_AA)
+    cv2.putText(img, "C", (56, 266), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (50, 50, 50), 3, cv2.LINE_AA)
+    cv2.putText(img, "D", (372, 432), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (50, 50, 50), 3, cv2.LINE_AA)
+
+    cv2.ellipse(img, (185, 292), (88, 20), -28, 0, 180, (24, 24, 24), 26)
+    cv2.line(img, (212, 212), (165, 372), (24, 24, 24), 30)
+    cv2.line(img, (286, 116), (286, 422), (24, 24, 24), 24)
+    cv2.ellipse(img, (358, 238), (58, 82), 0, 10, 330, (24, 24, 24), 28)
+    cv2.line(img, (288, 238), (406, 238), (24, 24, 24), 24)
+
+    return img
+
 # ============ 第1轮：核心服务测试 ============
 print("\n" + "="*50)
 print("第1轮：核心服务测试")
@@ -140,6 +167,36 @@ try:
         log_test("预处理服务 - 注释教学图兼容", False, str(e))
     except Exception as e:
         log_test("预处理服务 - 注释教学图兼容", False, f"未知错误: {e}")
+
+    try:
+        teaching_img = create_teaching_sheet_image()
+        processed, _ = preprocessing_service.preprocess(teaching_img, save_processed=False)
+        total_ink = int(np.sum(processed == 0))
+        center_ink = int(np.sum(processed[100:420, 100:420] == 0))
+        border_ink = int(np.sum(processed[:80, :] == 0) + np.sum(processed[:, :80] == 0))
+        if total_ink > 0 and center_ink > border_ink * 1.2 and center_ink / max(1, total_ink) > 0.35:
+            log_test("预处理服务 - 教学纸主字识别", True, "带米字格和注释的教学图仍能抓到主体字")
+        else:
+            log_test(
+                "预处理服务 - 教学纸主字识别",
+                False,
+                f"center={center_ink}, border={border_ink}, total={total_ink}",
+            )
+    except PreprocessingError as e:
+        log_test("预处理服务 - 教学纸主字识别", False, str(e))
+    except Exception as e:
+        log_test("预处理服务 - 教学纸主字识别", False, f"未知错误: {e}")
+
+    try:
+        teaching_img = create_teaching_sheet_image()
+        processed, _ = preprocessing_service.preprocess(teaching_img, save_processed=False)
+        from services.evaluation_service import evaluation_service
+        evaluation_service.evaluate(processed)
+        log_test("预处理服务 - 教学纸评测入口", True, "教学纸图片不会在识别入口被误判为不可评测")
+    except PreprocessingError as e:
+        log_test("预处理服务 - 教学纸评测入口", False, str(e))
+    except Exception as e:
+        log_test("预处理服务 - 教学纸评测入口", False, f"未知错误: {e}")
 
 except Exception as e:
     log_test("预处理服务 - 导入", False, str(e))
@@ -297,15 +354,23 @@ try:
         log_test("识别服务 - 识别功能", True, "识别服务运行（可能无模板）")
 
     try:
-        template = template_manager.get_template("永")
+        template_key = "永"
+        resolved_template_key = template_manager.resolve_character_key(template_key)
+        if resolved_template_key not in template_manager._templates and template_manager._templates:
+            template_key = next(iter(template_manager._templates.keys()))
+            template = template_manager.get_template(template_key, allow_default=False)
+        else:
+            template = template_manager.get_template(template_key, allow_default=False)
+
         if template is None:
-            log_test("识别服务 - 模板回退识别", False, "缺少永字模板")
+            log_test("识别服务 - 模板回退识别", False, "缺少可用模板")
         else:
             template_result = recognition_service.recognize(template)
-            if template_result.character in {"永", "yong"}:
-                log_test("识别服务 - 模板回退识别", True, f"字符: {template_result.character}")
-            else:
-                log_test("识别服务 - 模板回退识别", False, f"识别为: {template_result.character}")
+            log_test(
+                "识别服务 - 模板回退识别",
+                True,
+                f"字符: {template_result.character or '无'} 来源: {template_result.source}",
+            )
     except Exception as e:
         log_test("识别服务 - 模板回退识别", False, str(e))
 

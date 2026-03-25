@@ -148,10 +148,31 @@ class PreprocessingService:
             )
         
         # 3. 增强版：书法特征验证
-        self._validate_calligraphy_features(otsu_binary, ink_ratio)
+        precheck_binary = self._build_precheck_binary(image)
+        precheck_ink_ratio = np.mean(precheck_binary == 0)
+        self._validate_calligraphy_features(precheck_binary, precheck_ink_ratio)
         
         self.logger.debug("图像预检通过")
-    
+
+    def _build_precheck_binary(self, image: np.ndarray) -> np.ndarray:
+        """Build a lightweight cleaned binary for precheck validation."""
+        if len(image.shape) == 2:
+            working = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        else:
+            working = image.copy()
+
+        resized = self._resize(working)
+        grid_removed, _ = self._remove_red_grid(resized)
+        gray = self._to_grayscale(grid_removed)
+        binary = self._adaptive_threshold(gray)
+        binary = self._median_blur(binary)
+        binary = cv2.morphologyEx(
+            binary,
+            cv2.MORPH_OPEN,
+            np.ones((5, 5), dtype=np.uint8),
+        )
+        return self._extract_primary_subject(binary)
+
     def _validate_calligraphy_features(self, binary: np.ndarray, ink_ratio: float) -> None:
         """
         书法特征验证 - 区分书法和杂物

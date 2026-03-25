@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import DATA_DIR, MODEL_CONFIG
 from models.recognition_result import RecognitionResult
+from services.preprocessing_service import preprocessing_service
 from services.siamese_engine import siamese_engine
 from services.template_manager import template_manager
 
@@ -223,10 +224,12 @@ class RecognitionService:
 
     def _prepare_binary(self, image: np.ndarray) -> np.ndarray:
         gray = self._to_grayscale(image)
-        resized = cv2.resize(gray, (224, 224), interpolation=cv2.INTER_AREA)
+        cleaned = preprocessing_service._build_precheck_binary(gray)
+        resized = cv2.resize(cleaned, (224, 224), interpolation=cv2.INTER_AREA)
         _, binary = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         if np.mean(binary == 0) > 0.5:
             binary = 255 - binary
+        binary = preprocessing_service._extract_primary_subject(binary)
         return binary
 
     def _looks_like_single_character(self, binary: np.ndarray) -> bool:
@@ -246,11 +249,10 @@ class RecognitionService:
         area = float(cv2.contourArea(largest))
         x, y, w, h = cv2.boundingRect(largest)
         bbox_fill = area / max(1, w * h)
-        if bbox_fill > 0.88:
-            return False
-
         edges = cv2.Canny(binary, 40, 120)
         edge_to_ink = float(np.sum(edges > 0)) / max(1, np.sum(binary == 0))
+        if bbox_fill > 0.88 and (components <= 2 or edge_to_ink < 0.08):
+            return False
         return edge_to_ink >= 0.05
 
     def _meaningful_components(self, binary: np.ndarray) -> int:
