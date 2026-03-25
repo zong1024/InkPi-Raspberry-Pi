@@ -1,0 +1,85 @@
+.top-card,
+.result-card,
+.empty-card,
+.error-card {
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+}
+
+.top-row,
+.result-top,
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.meta-row {
+  margin-top: 20rpx;
+  align-items: center;
+}
+
+.logout-btn {
+  margin: 0;
+  padding: 0 28rpx;
+  line-height: 72rpx;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: #efe1ce;
+  color: #805538;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.score-badge {
+  min-width: 136rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 28rpx;
+  background: #f7ede1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-number {
+  font-size: 56rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-label {
+  font-size: 22rpx;
+  margin-top: 8rpx;
+}
+
+.result-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.character {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #30261b;
+}
+
+.feedback-line {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #6c5b48;
+}
+
+.error-text {
+  color: #b13d31;
+  font-size: 26rpx;
+  line-height: 1.6;
+}

@@ -1,0 +1,38 @@
+<view class="page-shell login-page">
+  <view class="card login-card">
+    <view class="login-head">
+      <text class="inkpi-mark">InkPi</text>
+      <text class="section-title">查看树莓派评测历史</text>
+      <text class="section-subtitle">登录后即可实时查看最新评测结果。默认演示账号已预填。</text>
+    </view>
+
+    <view class="form-item">
+      <text class="label">账号</text>
+      <input
+        class="input"
+        placeholder="请输入账号"
+        value="{{username}}"
+        data-field="username"
+        bindinput="onInput"
+      />
+    </view>
+
+    <view class="form-item">
+      <text class="label">密码</text>
+      <input
+        class="input"
+        password
+        placeholder="请输入密码"
+        value="{{password}}"
+        data-field="password"
+        bindinput="onInput"
+      />
+    </view>
+
+    <text wx:if="{{error}}" class="error-text">{{error}}</text>
+
+    <button class="primary-btn login-btn" loading="{{loading}}" bindtap="onLogin">
+      登录查看结果
+    </button>
+  </view>
+</view>

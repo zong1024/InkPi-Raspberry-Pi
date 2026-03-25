@@ -1,0 +1,37 @@
+<view class="page-shell">
+  <view wx:if="{{error}}" class="card error-card">
+    <text class="error-text">{{error}}</text>
+  </view>
+
+  <view wx:if="{{result}}" class="card hero-card">
+    <text class="section-subtitle">评测详情</text>
+    <view class="hero-top">
+      <view>
+        <text class="character">{{result.character_name || '未识别'}}</text>
+        <text class="section-subtitle">{{result.style || '未分类'}} / {{result.timestamp}}</text>
+      </view>
+      <view class="score-badge">
+        <text class="score-number">{{result.total_score}}</text>
+        <text class="score-unit">分</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{result}}" class="card dimension-card">
+    <text class="section-title">四维评分</text>
+    <view wx:for="{{dimensions}}" wx:key="name" class="dimension-row">
+      <view class="dimension-head">
+        <text>{{item.name}}</text>
+        <text>{{item.value}}</text>
+      </view>
+      <view class="bar-track">
+        <view class="bar-fill" style="width: {{item.value}}%;"></view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{result}}" class="card feedback-card">
+    <text class="section-title">评语建议</text>
+    <text class="feedback-text">{{result.feedback}}</text>
+  </view>
+</view>

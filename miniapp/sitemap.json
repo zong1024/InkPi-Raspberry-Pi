@@ -1,0 +1,9 @@
+{
+  "desc": "InkPi sitemap",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

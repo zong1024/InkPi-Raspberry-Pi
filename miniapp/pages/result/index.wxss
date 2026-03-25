@@ -1,0 +1,83 @@
+.hero-card,
+.dimension-card,
+.feedback-card,
+.error-card {
+  margin-bottom: 24rpx;
+  padding: 28rpx;
+  box-sizing: border-box;
+}
+
+.hero-top {
+  margin-top: 20rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20rpx;
+}
+
+.character {
+  display: block;
+  font-size: 42rpx;
+  font-weight: 800;
+  color: #2f2419;
+  margin-bottom: 12rpx;
+}
+
+.score-badge {
+  min-width: 150rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, #f6e3ce, #efd4b3);
+  color: #7e4f2f;
+  text-align: center;
+}
+
+.score-number {
+  font-size: 58rpx;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.score-unit {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+}
+
+.dimension-row {
+  margin-top: 24rpx;
+}
+
+.dimension-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 26rpx;
+  color: #524130;
+  margin-bottom: 10rpx;
+}
+
+.bar-track {
+  height: 18rpx;
+  border-radius: 999rpx;
+  background: #efe4d6;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #b56f3f, #864b2d);
+}
+
+.feedback-text,
+.error-text {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 26rpx;
+  line-height: 1.8;
+  color: #6c5b48;
+}
+
+.error-text {
+  color: #b13d31;
+}

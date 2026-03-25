@@ -1,0 +1,13 @@
+{
+  "appid": "touristappid",
+  "projectname": "InkPiMiniApp",
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true,
+    "enhance": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.5.5",
+  "condition": {}
+}

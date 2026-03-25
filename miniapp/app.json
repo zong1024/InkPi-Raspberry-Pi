@@ -1,0 +1,16 @@
+{
+  "pages": [
+    "pages/login/index",
+    "pages/history/index",
+    "pages/result/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "InkPi 云端结果",
+    "navigationBarBackgroundColor": "#f4ede2",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f8f5ef",
+    "backgroundTextStyle": "light"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

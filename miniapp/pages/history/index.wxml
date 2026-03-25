@@ -1,0 +1,39 @@
+<view class="page-shell">
+  <view class="card top-card">
+    <view class="top-row">
+      <view>
+        <text class="section-title">云端评测历史</text>
+        <text class="section-subtitle">树莓派上传成功后，这里会自动刷新最新结果。</text>
+      </view>
+      <button class="secondary-btn logout-btn" bindtap="logout">退出</button>
+    </view>
+
+    <view class="meta-row">
+      <text class="user-chip">{{user.display_name || user.username}}</text>
+      <text class="section-subtitle">最近刷新：{{lastUpdated || '暂未刷新'}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="card error-card">
+    <text class="error-text">{{error}}</text>
+  </view>
+
+  <view wx:if="{{!results.length && !loading}}" class="card empty-card">
+    <text class="section-title">还没有历史结果</text>
+    <text class="section-subtitle">树莓派完成一次评测并上传后，这里就会出现新的记录。</text>
+  </view>
+
+  <view wx:for="{{results}}" wx:key="id" class="card result-card" data-id="{{item.id}}" bindtap="openDetail">
+    <view class="result-top">
+      <view class="score-badge" style="color: {{item.scoreColor}};">
+        <text class="score-number">{{item.total_score}}</text>
+        <text class="score-label">分</text>
+      </view>
+      <view class="result-meta">
+        <text class="character">{{item.character_name || '未识别'}}</text>
+        <text class="section-subtitle">{{item.style || '未分类'}} / {{item.timestamp}}</text>
+        <text class="feedback-line">{{item.feedback}}</text>
+      </view>
+    </view>
+  </view>
+</view>
