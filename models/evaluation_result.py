@@ -34,6 +34,8 @@ class EvaluationResult:
             "image_path": self.image_path,
             "processed_image_path": self.processed_image_path,
             "character_name": self.character_name,
+            "style": self.style,
+            "style_confidence": self.style_confidence,
         }
     
     def to_json(self) -> str:
@@ -58,6 +60,8 @@ class EvaluationResult:
             image_path=data.get("image_path"),
             processed_image_path=data.get("processed_image_path"),
             character_name=data.get("character_name"),
+            style=data.get("style"),
+            style_confidence=data.get("style_confidence"),
         )
     
     def __str__(self) -> str:

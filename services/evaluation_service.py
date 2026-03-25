@@ -25,8 +25,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import EVALUATION_CONFIG, FEEDBACK_TEMPLATES
 from models.evaluation_result import EvaluationResult
-from services.recognition_service import recognition_service
-from services.style_classification_service import style_classification_service
+from services.recognition_flow_service import recognition_flow_service
 from services.siamese_engine import siamese_engine
 from services.evaluation_service_v3 import hybrid_evaluation_service
 
@@ -66,41 +65,29 @@ class EvaluationService:
         """
         self.logger.info("开始毛笔字评测分析...")
         
-        # 汉字识别（如果启用且未提供字符名称）
-        recognized_char = None
-        recognition_confidence = 0.0
-        if (
-            enable_recognition
-            and character_name is None
-            and recognition_service.is_model_loaded()
-        ):
-            try:
-                recognition_result = recognition_service.recognize(processed_image)
-                recognized_char = recognition_result.character
-                recognition_confidence = recognition_result.confidence
-                self.logger.info(f"汉字识别: {recognized_char} (置信度: {recognition_confidence:.2%})")
-            except Exception as e:
-                self.logger.warning(f"汉字识别失败: {e}")
-        
-        # 使用识别结果或提供的字符名称
-        final_character = character_name or (
-            recognized_char if recognition_confidence >= 0.5 else None
-        )
-        
-        # 书法风格分类
-        style = None
-        style_confidence = None
-        if style_classification_service.is_model_loaded():
-            try:
-                style, confidence, _ = style_classification_service.classify(processed_image)
-                style_confidence = confidence
-                self.logger.info(f"风格分类: {style} (置信度: {confidence:.2%})")
-            except Exception as e:
-                self.logger.warning(f"风格分类失败: {e}")
+        recognition_info = None
+        final_character = character_name
+        recognition_confidence = 1.0 if character_name else 0.0
+        effective_style = template_style or "楷书"
+        style_confidence = 1.0 if template_style else None
 
-        effective_style = style or template_style or "楷书"
-        if style is None:
-            self.logger.info("风格分类模型不可用，回退到模板风格: %s", effective_style)
+        if enable_recognition or character_name is not None:
+            recognition_info = recognition_flow_service.analyze(
+                processed_image,
+                requested_character=character_name,
+                requested_style=template_style,
+            )
+            final_character = recognition_info.character_name
+            recognition_confidence = recognition_info.recognition_confidence
+            effective_style = recognition_info.style or effective_style
+            style_confidence = recognition_info.style_confidence
+            self.logger.info(
+                "识别流水线完成: 字符=%s 置信度=%.2f 风格=%s 来源=%s",
+                final_character,
+                recognition_confidence,
+                effective_style,
+                recognition_info.recognition_source or "n/a",
+            )
 
         if prefer_hybrid and siamese_engine.is_model_loaded():
             texture_input = self._prepare_texture_image(

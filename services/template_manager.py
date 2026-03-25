@@ -50,7 +50,8 @@ class TemplateManager:
         "隶书": "lishu",
         "篆书": "zhuanshu",
     }
-    
+    STYLE_DISPLAY_NAMES = {value: key for key, value in STYLE_ALIASES.items()}
+
     def __new__(cls, *args, **kwargs):
         """单例模式"""
         if cls._instance is None:
@@ -198,6 +199,12 @@ class TemplateManager:
         reverse_aliases = {value: key for key, value in self.CHARACTER_ALIASES.items()}
         return reverse_aliases.get(character_key, character_key)
 
+    def to_display_style(self, style_key: str) -> str:
+        """将模板风格键转换为中文展示名称。"""
+        if not style_key:
+            return "楷书"
+        return self.STYLE_DISPLAY_NAMES.get(str(style_key).strip(), str(style_key).strip())
+
     def iter_templates(self, style: str = None) -> List[Dict]:
         """遍历模板元数据，支持按风格筛选。"""
         normalized_style = self.resolve_style_key(style) if style else None
@@ -209,6 +216,27 @@ class TemplateManager:
                     results.append(template)
 
         return results
+
+    def iter_character_templates(self, character: str, style: str = None) -> List[Dict]:
+        """遍历指定字符的模板。"""
+        normalized_char = self.resolve_character_key(character)
+        normalized_style = self.resolve_style_key(style) if style else None
+        results = []
+
+        for template in self._templates.get(normalized_char, []):
+            if normalized_style is None or self.resolve_style_key(template["style"]) == normalized_style:
+                results.append(template)
+
+        return results
+
+    def list_all_styles(self) -> List[str]:
+        """列出模板库中的全部风格键。"""
+        styles = {
+            self.resolve_style_key(template["style"])
+            for templates in self._templates.values()
+            for template in templates
+        }
+        return sorted(style for style in styles if style)
     
     def _generate_default_template(self, character: str) -> Optional[np.ndarray]:
         """

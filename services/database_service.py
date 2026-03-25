@@ -44,9 +44,19 @@ class DatabaseService:
                 timestamp TEXT NOT NULL,
                 image_path TEXT,
                 processed_image_path TEXT,
-                character_name TEXT
+                character_name TEXT,
+                style TEXT,
+                style_confidence REAL
             )
         """)
+
+        # 历史版本数据库补充字段
+        cursor.execute(f"PRAGMA table_info({self.table_name})")
+        existing_columns = {row[1] for row in cursor.fetchall()}
+        if "style" not in existing_columns:
+            cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN style TEXT")
+        if "style_confidence" not in existing_columns:
+            cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN style_confidence REAL")
         
         # 创建索引
         cursor.execute(f"""
@@ -75,8 +85,9 @@ class DatabaseService:
         cursor.execute(f"""
             INSERT INTO {self.table_name} 
             (total_score, structure_score, stroke_score, balance_score, rhythm_score,
-             feedback, timestamp, image_path, processed_image_path, character_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             feedback, timestamp, image_path, processed_image_path, character_name,
+             style, style_confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             result.total_score,
             result.detail_scores.get("结构", 0),
@@ -87,7 +98,9 @@ class DatabaseService:
             result.timestamp.isoformat(),
             result.image_path,
             result.processed_image_path,
-            result.character_name
+            result.character_name,
+            result.style,
+            result.style_confidence,
         ))
         
         record_id = cursor.lastrowid
@@ -117,7 +130,7 @@ class DatabaseService:
         cursor.execute(f"""
             SELECT id, total_score, structure_score, stroke_score, balance_score, 
                    rhythm_score, feedback, timestamp, image_path, processed_image_path, 
-                   character_name
+                   character_name, style, style_confidence
             FROM {self.table_name}
             WHERE id = ?
         """, (record_id,))
@@ -146,7 +159,7 @@ class DatabaseService:
         cursor.execute(f"""
             SELECT id, total_score, structure_score, stroke_score, balance_score, 
                    rhythm_score, feedback, timestamp, image_path, processed_image_path, 
-                   character_name
+                   character_name, style, style_confidence
             FROM {self.table_name}
             ORDER BY timestamp DESC
             LIMIT ? OFFSET ?
@@ -190,7 +203,7 @@ class DatabaseService:
         cursor.execute(f"""
             SELECT id, total_score, structure_score, stroke_score, balance_score, 
                    rhythm_score, feedback, timestamp, image_path, processed_image_path, 
-                   character_name
+                   character_name, style, style_confidence
             FROM {self.table_name}
             WHERE timestamp >= ? AND timestamp <= ?
             ORDER BY timestamp DESC
@@ -217,7 +230,7 @@ class DatabaseService:
         cursor.execute(f"""
             SELECT id, total_score, structure_score, stroke_score, balance_score, 
                    rhythm_score, feedback, timestamp, image_path, processed_image_path, 
-                   character_name
+                   character_name, style, style_confidence
             FROM {self.table_name}
             WHERE character_name = ?
             ORDER BY timestamp DESC
@@ -344,7 +357,7 @@ class DatabaseService:
         (
             id_, total_score, structure_score, stroke_score, balance_score,
             rhythm_score, feedback, timestamp, image_path, processed_image_path,
-            character_name
+            character_name, style, style_confidence
         ) = row
         
         # 解析时间戳
@@ -365,6 +378,8 @@ class DatabaseService:
             image_path=image_path,
             processed_image_path=processed_image_path,
             character_name=character_name,
+            style=style,
+            style_confidence=style_confidence,
         )
     
     def _cleanup_old_records(self):

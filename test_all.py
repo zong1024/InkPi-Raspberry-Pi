@@ -154,7 +154,9 @@ try:
         total_score=85,
         detail_scores={"结构": 82, "笔画": 88, "平衡": 85, "韵律": 85},
         feedback="测试反馈",
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
+        style="楷书",
+        style_confidence=1.0,
     )
     
     # 保存记录
@@ -169,6 +171,12 @@ try:
             log_test("数据库服务 - 查询记录", True, f"记录数: {len(records)}")
         else:
             log_test("数据库服务 - 查询记录", False, "查询结果为空")
+
+        fetched = database_service.get_by_id(record_id)
+        if fetched and fetched.style == test_result.style:
+            log_test("数据库服务 - 风格持久化", True, f"风格: {fetched.style}")
+        else:
+            log_test("数据库服务 - 风格持久化", False, "style 字段未正确读写")
             
         # 删除测试记录
         database_service.delete(record_id)
@@ -242,6 +250,7 @@ except Exception as e:
 print(">>> 测试汉字识别服务...")
 try:
     from services.recognition_service import recognition_service
+    from services.template_manager import template_manager
     
     # 测试识别（可能返回空结果）
     mock_img = create_mock_calligraphy_image()
@@ -252,6 +261,29 @@ try:
         log_test("识别服务 - 识别功能", True, f"字符: {result.character or '无'}")
     except:
         log_test("识别服务 - 识别功能", True, "识别服务运行（可能无模板）")
+
+    try:
+        template = template_manager.get_template("永")
+        if template is None:
+            log_test("识别服务 - 模板回退识别", False, "缺少永字模板")
+        else:
+            template_result = recognition_service.recognize(template)
+            if template_result.character in {"永", "yong"}:
+                log_test("识别服务 - 模板回退识别", True, f"字符: {template_result.character}")
+            else:
+                log_test("识别服务 - 模板回退识别", False, f"识别为: {template_result.character}")
+    except Exception as e:
+        log_test("识别服务 - 模板回退识别", False, str(e))
+
+    try:
+        blank = np.ones((224, 224), dtype=np.uint8) * 255
+        blank_result = recognition_service.recognize(blank)
+        if not blank_result.character:
+            log_test("识别服务 - 空白拒识", True, "空白图像不会被误识别")
+        else:
+            log_test("识别服务 - 空白拒识", False, f"误识别为: {blank_result.character}")
+    except Exception as e:
+        log_test("识别服务 - 空白拒识", False, str(e))
         
 except Exception as e:
     log_test("识别服务 - 导入", False, str(e))

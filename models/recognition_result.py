@@ -29,6 +29,9 @@ class RecognitionResult:
     
     # 图像路径（可选）
     image_path: Optional[str] = None
+
+    # 结果来源（onnx / template / fallback 等）
+    source: Optional[str] = None
     
     def __str__(self) -> str:
         return f"RecognitionResult(character='{self.character}', confidence={self.confidence:.2%})"
@@ -41,7 +44,8 @@ class RecognitionResult:
             "candidates": self.candidates,
             "inference_time_ms": self.inference_time_ms,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
-            "image_path": self.image_path
+            "image_path": self.image_path,
+            "source": self.source,
         }
     
     @classmethod
@@ -53,7 +57,8 @@ class RecognitionResult:
             candidates=data.get("candidates", []),
             inference_time_ms=data.get("inference_time_ms", 0.0),
             timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else datetime.now(),
-            image_path=data.get("image_path")
+            image_path=data.get("image_path"),
+            source=data.get("source"),
         )
     
     def is_confident(self, threshold: float = 0.8) -> bool:
