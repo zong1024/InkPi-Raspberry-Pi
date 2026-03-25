@@ -58,13 +58,13 @@ class RecognitionFlowService:
             candidates = recognition_result.candidates
             recognition_source = recognition_result.source or ""
 
-            if not character_name and candidates:
-                fallback_character, fallback_confidence = candidates[0]
-                character_name = fallback_character or None
-                recognition_confidence = float(fallback_confidence)
-                recognition_source = f"{recognition_source or 'candidate'}:best_effort"
 
         if not character_name:
+            if candidates and recognition_source == "template_ambiguous":
+                raise PreprocessingError(
+                    "识别结果不稳定，当前字形与多个内置字模板过于接近，请换成系统支持的字或手动指定评测字。",
+                    error_type="ambiguous_character",
+                )
             raise PreprocessingError(
                 "未检测到可评测的单个汉字，请重新对准作品后再试。",
                 error_type="not_calligraphy",

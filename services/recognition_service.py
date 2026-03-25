@@ -65,6 +65,9 @@ class RecognitionService:
         self.min_template_score = 57.0
         self.min_character_confidence = 0.46
         self.min_candidate_gap = 4.0
+        self.min_top2_gap = 0.8
+        self.min_top3_gap = 1.2
+        self.strong_match_score = 88.0
 
     def _init_onnx_session(self) -> None:
         """Initialize the ONNX runtime session if the optional model exists."""
@@ -191,6 +194,18 @@ class RecognitionService:
         best_key, (best_score, best_style) = ordered[0]
         confidence = self._score_to_confidence(best_score, ordered)
         gap = best_score - (ordered[1][1][0] if len(ordered) > 1 else 0.0)
+        third_gap = best_score - (ordered[2][1][0] if len(ordered) > 2 else 0.0)
+
+        if (
+            (gap < self.min_top2_gap or third_gap < self.min_top3_gap)
+            and best_score < self.strong_match_score
+        ):
+            return RecognitionResult(
+                character="",
+                confidence=float(confidence),
+                candidates=top_candidates,
+                source="template_ambiguous",
+            )
 
         if best_score < self.min_template_score or (gap < self.min_candidate_gap and confidence < self.min_character_confidence):
             return RecognitionResult(
