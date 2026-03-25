@@ -150,7 +150,14 @@ class PreprocessingService:
         # 3. 增强版：书法特征验证
         precheck_binary = self._build_precheck_binary(image)
         precheck_ink_ratio = np.mean(precheck_binary == 0)
-        self._validate_calligraphy_features(precheck_binary, precheck_ink_ratio)
+        try:
+            self._validate_calligraphy_features(precheck_binary, precheck_ink_ratio)
+        except PreprocessingError as exc:
+            if exc.error_type in {"not_calligraphy", "too_fragmented", "scattered_content"}:
+                self.logger.debug("Clean precheck fallback to Otsu validation: %s", exc)
+                self._validate_calligraphy_features(otsu_binary, ink_ratio)
+            else:
+                raise
         
         self.logger.debug("图像预检通过")
 

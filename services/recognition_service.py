@@ -224,8 +224,13 @@ class RecognitionService:
 
     def _prepare_binary(self, image: np.ndarray) -> np.ndarray:
         gray = self._to_grayscale(image)
-        cleaned = preprocessing_service._build_precheck_binary(gray)
-        resized = cv2.resize(cleaned, (224, 224), interpolation=cv2.INTER_AREA)
+        unique_values = np.unique(gray)
+        if len(unique_values) <= 2 and set(unique_values.tolist()).issubset({0, 255}):
+            cleaned = preprocessing_service._extract_primary_subject(gray)
+            resized = cv2.resize(cleaned, (224, 224), interpolation=cv2.INTER_NEAREST)
+        else:
+            cleaned = preprocessing_service._build_precheck_binary(gray)
+            resized = cv2.resize(cleaned, (224, 224), interpolation=cv2.INTER_AREA)
         _, binary = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         if np.mean(binary == 0) > 0.5:
             binary = 255 - binary
@@ -238,7 +243,7 @@ class RecognitionService:
             return False
 
         components = self._meaningful_components(binary)
-        if components == 0 or components > 18:
+        if components == 0:
             return False
 
         contours, _ = cv2.findContours(255 - binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -251,7 +256,9 @@ class RecognitionService:
         bbox_fill = area / max(1, w * h)
         edges = cv2.Canny(binary, 40, 120)
         edge_to_ink = float(np.sum(edges > 0)) / max(1, np.sum(binary == 0))
-        if bbox_fill > 0.88 and (components <= 2 or edge_to_ink < 0.08):
+        if bbox_fill > 0.95 and edge_to_ink < 0.08:
+            return False
+        if components > 120 and edge_to_ink < 0.12:
             return False
         return edge_to_ink >= 0.05
 
