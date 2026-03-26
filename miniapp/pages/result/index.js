@@ -33,7 +33,7 @@ Page({
       }));
       this.setData({ result, dimensions });
     } catch (error) {
-      this.setData({ error: '加载详情失败，请返回历史页重试。' });
+      this.setData({ error: '加载详情失败，请返回历史页后重试。' });
     } finally {
       this.setData({ loading: false });
     }

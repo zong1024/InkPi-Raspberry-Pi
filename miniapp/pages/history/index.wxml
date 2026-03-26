@@ -32,7 +32,7 @@
       <view class="result-meta">
         <text class="character">{{item.character_name || '未识别'}}</text>
         <text class="section-subtitle">{{item.style || '未分类'}} / {{item.timestamp}}</text>
-        <text class="feedback-line">{{item.feedback}}</text>
+        <text class="feedback-line">{{item.feedback || '暂无评语'}}</text>
       </view>
     </view>
   </view>

@@ -3,7 +3,7 @@
     <view class="login-head">
       <text class="inkpi-mark">InkPi</text>
       <text class="section-title">查看树莓派评测历史</text>
-      <text class="section-subtitle">登录后即可实时查看最新评测结果。默认演示账号已预填。</text>
+      <text class="section-subtitle">登录后即可实时查看最新评测结果，默认演示账号已预填。</text>
     </view>
 
     <view class="form-item">

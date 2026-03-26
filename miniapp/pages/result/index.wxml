@@ -32,6 +32,6 @@
 
   <view wx:if="{{result}}" class="card feedback-card">
     <text class="section-title">评语建议</text>
-    <text class="feedback-text">{{result.feedback}}</text>
+    <text class="feedback-text">{{result.feedback || '暂无评语'}}</text>
   </view>
 </view>

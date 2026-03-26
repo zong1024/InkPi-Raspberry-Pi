@@ -65,7 +65,7 @@ Page({
         lastUpdated: this.formatTime(new Date()),
       });
     } catch (error) {
-      this.setData({ error: '拉取历史结果失败，请检查后端服务是否启动。' });
+      this.setData({ error: '拉取历史结果失败，请检查后端服务是否已经启动。' });
     } finally {
       this.setData({ loading: false });
     }
