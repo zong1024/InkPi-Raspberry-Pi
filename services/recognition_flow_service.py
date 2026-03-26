@@ -39,6 +39,13 @@ class RecognitionFlowService:
         self.logger = logging.getLogger(__name__)
         self.default_style = "楷书"
 
+    def _supported_character_text(self) -> str:
+        supported = [
+            template_manager.to_display_character(char_key)
+            for char_key in template_manager.list_available_chars()
+        ]
+        return "、".join(supported) if supported else "当前字库为空"
+
     def analyze(
         self,
         image: np.ndarray,
@@ -62,13 +69,21 @@ class RecognitionFlowService:
 
             if recognition_result.status == "ambiguous":
                 raise PreprocessingError(
-                    "识别结果不稳定，当前字形与多个内置评测字模板过于接近，请换成系统支持的字或手动指定评测字。",
+                    (
+                        "识别结果不稳定，当前字形与多个内置评测字模板过于接近。"
+                        f"当前支持：{self._supported_character_text()}。"
+                        "请换成系统支持的字，或先在首页手动指定评测字。"
+                    ),
                     error_type="ambiguous_character",
                 )
 
             if recognition_result.status == "unsupported":
                 raise PreprocessingError(
-                    "当前作品是毛笔字，但不在系统当前内置的评测字库中，请改拍受支持的字或手动指定评测字。",
+                    (
+                        "当前作品是毛笔字，但不在系统当前内置的评测字库中。"
+                        f"当前支持：{self._supported_character_text()}。"
+                        "请改拍受支持的字，或先在首页手动指定评测字。"
+                    ),
                     error_type="unsupported_character",
                 )
 

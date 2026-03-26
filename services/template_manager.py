@@ -42,6 +42,7 @@ class TemplateManager:
         "人": "ren",
         "大": "da",
         "小": "xiao",
+        "神": "shen",
     }
     STYLE_ALIASES = {
         "楷书": "kaishu",
@@ -265,7 +266,7 @@ class TemplateManager:
     
     def list_available_chars(self) -> List[str]:
         """列出所有可用的字符"""
-        return list(self._templates.keys())
+        return sorted(self._templates.keys())
     
     def list_available_styles(self, character: str) -> List[str]:
         """列出指定字符可用的风格"""
