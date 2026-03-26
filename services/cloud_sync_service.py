@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -18,6 +19,7 @@ class CloudSyncService:
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self._bootstrap_env_from_file()
         self.enabled = bool(CLOUD_CONFIG.get("enabled", False))
         self.backend_url = str(
             CLOUD_CONFIG.get("backend_url") or os.environ.get("INKPI_CLOUD_BACKEND_URL", "")
@@ -31,6 +33,26 @@ class CloudSyncService:
         self.timeout = float(
             CLOUD_CONFIG.get("sync_timeout") or os.environ.get("INKPI_CLOUD_SYNC_TIMEOUT", 2.5)
         )
+
+    def _bootstrap_env_from_file(self) -> None:
+        """Load `.inkpi/cloud.env` so manual `python main.py` launches still sync to cloud."""
+
+        env_path = Path(__file__).resolve().parent.parent / ".inkpi" / "cloud.env"
+        if not env_path.exists():
+            return
+
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key:
+                    os.environ.setdefault(key, value)
+        except Exception as exc:  # noqa: BLE001
+            self.logger.debug("Skip loading cloud env file %s: %s", env_path, exc)
 
     @property
     def is_ready(self) -> bool:
