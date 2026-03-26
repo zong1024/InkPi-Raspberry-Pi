@@ -5,10 +5,10 @@
     "pages/result/index"
   ],
   "window": {
-    "navigationBarTitleText": "InkPi 云端结果",
-    "navigationBarBackgroundColor": "#f4ede2",
+    "navigationBarTitleText": "InkPi 云端卷宗",
+    "navigationBarBackgroundColor": "#f5efe5",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f8f5ef",
+    "backgroundColor": "#f6f0e8",
     "backgroundTextStyle": "light"
   },
   "style": "v2",

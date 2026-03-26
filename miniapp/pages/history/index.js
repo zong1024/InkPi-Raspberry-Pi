@@ -2,13 +2,62 @@ const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 const { POLL_INTERVAL } = require('../../config');
 
+function getScorePalette(score) {
+  if (score >= 85) {
+    return {
+      scoreColor: '#3f8451',
+      scoreSoft: 'rgba(224, 241, 226, 0.96)',
+    };
+  }
+  if (score >= 70) {
+    return {
+      scoreColor: '#ab6d2f',
+      scoreSoft: 'rgba(247, 232, 208, 0.96)',
+    };
+  }
+  return {
+    scoreColor: '#b34b3e',
+    scoreSoft: 'rgba(252, 227, 221, 0.96)',
+  };
+}
+
+function getGrade(score) {
+  if (score >= 90) return '优秀';
+  if (score >= 80) return '良好';
+  if (score >= 70) return '稳定';
+  if (score >= 60) return '继续练习';
+  return '需强化';
+}
+
+function summarizeDimensions(detailScores) {
+  const order = ['结构', '笔画', '平衡', '韵律'];
+  return order
+    .filter((name) => Object.prototype.hasOwnProperty.call(detailScores || {}, name))
+    .map((name) => ({
+      name,
+      value: detailScores[name],
+    }));
+}
+
+function buildFeedbackPreview(text) {
+  if (!text) return '暂无评语';
+  return text.length > 42 ? `${text.slice(0, 42)}...` : text;
+}
+
 Page({
   data: {
     loading: true,
     results: [],
     user: null,
+    userLabel: 'InkPi 演示账号',
     error: '',
     lastUpdated: '',
+    summary: {
+      total: 0,
+      latestScore: '--',
+      average: '--',
+      deviceCount: 0,
+    },
   },
 
   onShow() {
@@ -17,7 +66,10 @@ Page({
       wx.reLaunch({ url: '/pages/login/index' });
       return;
     }
-    this.setData({ user });
+    this.setData({
+      user,
+      userLabel: (user && (user.display_name || user.username)) || 'InkPi 演示账号',
+    });
     this.loadResults();
     this.startPolling();
   },
@@ -55,17 +107,40 @@ Page({
 
     try {
       const data = await api.getHistory(50);
-      const results = (data.items || []).map((item) => ({
-        ...item,
-        scoreColor: item.total_score >= 85 ? '#3d8c4b' : item.total_score >= 70 ? '#b06b2d' : '#b04236',
-      }));
+      const results = (data.items || []).map((item) => {
+        const palette = getScorePalette(item.total_score || 0);
+        return {
+          ...item,
+          ...palette,
+          grade: getGrade(item.total_score || 0),
+          characterLabel: item.character_name || '未识别',
+          styleLabel: item.style || '未分类',
+          deviceLabel: item.device_name || 'InkPi 树莓派',
+          feedbackPreview: buildFeedbackPreview(item.feedback),
+          dimensionPreview: summarizeDimensions(item.detail_scores),
+        };
+      });
+
+      const total = results.length;
+      const average =
+        total > 0
+          ? Math.round(results.reduce((sum, item) => sum + (item.total_score || 0), 0) / total)
+          : '--';
+      const deviceCount = new Set(results.map((item) => item.deviceLabel)).size;
+
       this.setData({
         results,
         error: '',
         lastUpdated: this.formatTime(new Date()),
+        summary: {
+          total,
+          latestScore: total > 0 ? results[0].total_score : '--',
+          average,
+          deviceCount,
+        },
       });
     } catch (error) {
-      this.setData({ error: '拉取历史结果失败，请检查后端服务是否已经启动。' });
+      this.setData({ error: '拉取历史结果失败，请检查云端服务是否已经启动。' });
     } finally {
       this.setData({ loading: false });
     }

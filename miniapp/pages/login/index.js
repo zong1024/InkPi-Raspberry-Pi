@@ -1,10 +1,15 @@
 const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 
+const DEMO_ACCOUNT = {
+  username: 'demo',
+  password: 'demo123456',
+};
+
 Page({
   data: {
-    username: 'demo',
-    password: 'demo123456',
+    username: DEMO_ACCOUNT.username,
+    password: DEMO_ACCOUNT.password,
     loading: false,
     error: '',
   },
@@ -20,10 +25,18 @@ Page({
     this.setData({ [field]: event.detail.value, error: '' });
   },
 
+  fillDemo() {
+    this.setData({
+      username: DEMO_ACCOUNT.username,
+      password: DEMO_ACCOUNT.password,
+      error: '',
+    });
+  },
+
   async onLogin() {
     const { username, password } = this.data;
     if (!username || !password) {
-      this.setData({ error: '请输入账号和密码' });
+      this.setData({ error: '请输入账号和密码后再登录。' });
       return;
     }
 
@@ -34,7 +47,7 @@ Page({
       getApp().globalData.user = data.user;
       wx.reLaunch({ url: '/pages/history/index' });
     } catch (error) {
-      this.setData({ error: '登录失败，请检查账号密码或后端地址' });
+      this.setData({ error: '登录失败，请检查账号密码或云端服务地址。' });
     } finally {
       this.setData({ loading: false });
     }

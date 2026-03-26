@@ -1,15 +1,44 @@
 <view class="page-shell login-page">
-  <view class="card login-card">
-    <view class="login-head">
-      <text class="inkpi-mark">InkPi</text>
-      <text class="section-title">查看树莓派评测历史</text>
-      <text class="section-subtitle">登录后即可实时查看最新评测结果，默认演示账号已预填。</text>
+  <view class="page-orb page-orb-a"></view>
+  <view class="page-orb page-orb-b"></view>
+
+  <view class="login-hero">
+    <text class="eyebrow">InkPi Cloud</text>
+    <text class="hero-brand">云端卷宗</text>
+    <text class="hero-copy">
+      树莓派端完成评测后，结果会自动上传到云端。登录后即可查看每次得分、书体与评语建议。
+    </text>
+
+    <view class="hero-points">
+      <view class="hero-point">
+        <text class="hero-point-title">实时同步</text>
+        <text class="hero-point-text">无需拷图，历史结果自动刷新。</text>
+      </view>
+      <view class="hero-point">
+        <text class="hero-point-title">移动查看</text>
+        <text class="hero-point-text">评委和演示人员都能直接查看成绩单。</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="paper-panel login-panel">
+    <view class="panel-head">
+      <text class="panel-title">登录查看评测记录</text>
+      <text class="panel-subtitle">演示账号已经预填，也可以点击下方按钮一键填入。</text>
     </view>
 
-    <view class="form-item">
-      <text class="label">账号</text>
+    <view class="demo-strip">
+      <view class="demo-meta">
+        <text class="demo-label">演示账号</text>
+        <text class="demo-value">demo / demo123456</text>
+      </view>
+      <button class="ghost-btn demo-btn" bindtap="fillDemo">填入账号</button>
+    </view>
+
+    <view class="form-group">
+      <text class="field-label">账号</text>
       <input
-        class="input"
+        class="field-input"
         placeholder="请输入账号"
         value="{{username}}"
         data-field="username"
@@ -17,10 +46,10 @@
       />
     </view>
 
-    <view class="form-item">
-      <text class="label">密码</text>
+    <view class="form-group">
+      <text class="field-label">密码</text>
       <input
-        class="input"
+        class="field-input"
         password
         placeholder="请输入密码"
         value="{{password}}"
@@ -29,10 +58,10 @@
       />
     </view>
 
-    <text wx:if="{{error}}" class="error-text">{{error}}</text>
+    <text wx:if="{{error}}" class="login-error">{{error}}</text>
 
     <button class="primary-btn login-btn" loading="{{loading}}" bindtap="onLogin">
-      登录查看结果
+      进入评测卷宗
     </button>
   </view>
 </view>

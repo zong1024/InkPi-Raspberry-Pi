@@ -1,37 +1,51 @@
-<view class="page-shell">
-  <view wx:if="{{error}}" class="card error-card">
-    <text class="error-text">{{error}}</text>
-  </view>
+<view class="page-shell result-page">
+  <view class="page-orb page-orb-a"></view>
+  <view class="page-orb page-orb-b"></view>
 
-  <view wx:if="{{result}}" class="card hero-card">
-    <text class="section-subtitle">评测详情</text>
-    <view class="hero-top">
-      <view>
-        <text class="character">{{result.character_name || '未识别'}}</text>
-        <text class="section-subtitle">{{result.style || '未分类'}} / {{result.timestamp}}</text>
+  <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="notice">正在加载成绩单...</view>
+
+  <view wx:if="{{result}}" class="paper-panel detail-hero">
+    <view class="detail-top">
+      <view class="detail-copy">
+        <text class="eyebrow">InkPi Result</text>
+        <text class="detail-character">{{result.characterLabel}}</text>
+        <text class="detail-meta">{{result.styleLabel}} / {{result.timestamp}}</text>
       </view>
-      <view class="score-badge">
-        <text class="score-number">{{result.total_score}}</text>
-        <text class="score-unit">分</text>
+
+      <view class="score-plaque" style="background: {{result.scoreSoft}}; color: {{result.scoreColor}};">
+        <text class="score-plaque-value">{{result.total_score}}</text>
+        <text class="score-plaque-unit">总分</text>
+      </view>
+    </view>
+
+    <view class="detail-foot">
+      <text class="detail-grade" style="color: {{result.scoreColor}};">{{result.grade}}</text>
+      <view class="chip-row">
+        <text class="meta-chip">{{result.deviceLabel}}</text>
+        <text class="meta-chip">书体 {{result.styleLabel}}</text>
       </view>
     </view>
   </view>
 
-  <view wx:if="{{result}}" class="card dimension-card">
-    <text class="section-title">四维评分</text>
-    <view wx:for="{{dimensions}}" wx:key="name" class="dimension-row">
-      <view class="dimension-head">
-        <text>{{item.name}}</text>
-        <text>{{item.value}}</text>
+  <view wx:if="{{result}}" class="paper-panel metrics-panel">
+    <text class="panel-title">四维评分</text>
+    <text class="panel-subtitle">结构、笔画、平衡与韵律会共同构成本次成绩单。</text>
+
+    <view wx:for="{{dimensions}}" wx:key="name" class="metric-row">
+      <view class="metric-head">
+        <text class="metric-name">{{item.name}}</text>
+        <text class="metric-value">{{item.value}} 分</text>
       </view>
-      <view class="bar-track">
-        <view class="bar-fill" style="width: {{item.value}}%;"></view>
+      <view class="metric-track">
+        <view class="metric-fill" style="width: {{item.value}}%; background: {{item.color}};"></view>
       </view>
+      <text class="metric-note">{{item.note}}</text>
     </view>
   </view>
 
-  <view wx:if="{{result}}" class="card feedback-card">
-    <text class="section-title">评语建议</text>
-    <text class="feedback-text">{{result.feedback || '暂无评语'}}</text>
+  <view wx:if="{{result}}" class="paper-panel feedback-panel">
+    <text class="panel-title">评语建议</text>
+    <text class="feedback-quote">{{result.feedback || '暂无评语'}}</text>
   </view>
 </view>

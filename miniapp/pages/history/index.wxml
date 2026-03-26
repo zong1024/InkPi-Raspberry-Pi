@@ -1,38 +1,83 @@
-<view class="page-shell">
-  <view class="card top-card">
-    <view class="top-row">
-      <view>
-        <text class="section-title">云端评测历史</text>
-        <text class="section-subtitle">树莓派上传成功后，这里会自动刷新最新结果。</text>
+<view class="page-shell history-page">
+  <view class="page-orb page-orb-a"></view>
+  <view class="page-orb page-orb-b"></view>
+
+  <view class="paper-panel hero-sheet">
+    <view class="hero-head">
+      <view class="hero-copy">
+        <text class="eyebrow">InkPi Archive</text>
+        <text class="hero-title">评测卷宗</text>
+        <text class="hero-subtitle">
+          树莓派上传完成后，这里会自动刷新最新成绩。每一条记录都可以展开查看完整评分与评语。
+        </text>
       </view>
-      <button class="secondary-btn logout-btn" bindtap="logout">退出</button>
+      <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
     </view>
 
-    <view class="meta-row">
-      <text class="user-chip">{{user.display_name || user.username}}</text>
-      <text class="section-subtitle">最近刷新：{{lastUpdated || '暂未刷新'}}</text>
+    <view class="hero-meta">
+      <text class="user-seal">{{userLabel}}</text>
+      <view class="chip-row">
+        <text class="meta-chip">最近刷新 {{lastUpdated || '暂未同步'}}</text>
+        <text class="meta-chip">设备 {{summary.deviceCount}}</text>
+      </view>
     </view>
   </view>
 
-  <view wx:if="{{error}}" class="card error-card">
-    <text class="error-text">{{error}}</text>
+  <view class="summary-strip">
+    <view class="summary-item">
+      <text class="summary-label">总记录</text>
+      <text class="summary-value">{{summary.total}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="summary-label">最近得分</text>
+      <text class="summary-value">{{summary.latestScore}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="summary-label">平均得分</text>
+      <text class="summary-value">{{summary.average}}</text>
+    </view>
   </view>
 
-  <view wx:if="{{!results.length && !loading}}" class="card empty-card">
-    <text class="section-title">还没有历史结果</text>
-    <text class="section-subtitle">树莓派完成一次评测并上传后，这里就会出现新的记录。</text>
+  <view class="section-head">
+    <text class="section-title">最新记录</text>
+    <text class="section-note">下拉刷新，或等待自动同步</text>
   </view>
 
-  <view wx:for="{{results}}" wx:key="id" class="card result-card" data-id="{{item.id}}" bindtap="openDetail">
-    <view class="result-top">
-      <view class="score-badge" style="color: {{item.scoreColor}};">
-        <text class="score-number">{{item.total_score}}</text>
-        <text class="score-label">分</text>
+  <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="notice">正在同步最新评测记录...</view>
+
+  <view wx:if="{{!results.length && !loading}}" class="paper-panel empty-panel">
+    <text class="panel-title">还没有评测记录</text>
+    <text class="panel-subtitle">
+      树莓派完成一次评测并成功上传后，这里就会出现新的成绩单。
+    </text>
+  </view>
+
+  <view
+    wx:for="{{results}}"
+    wx:key="id"
+    class="paper-panel record-sheet"
+    data-id="{{item.id}}"
+    bindtap="openDetail"
+  >
+    <view class="record-stamp" style="background: {{item.scoreSoft}}; color: {{item.scoreColor}};">
+      <text class="record-char">{{item.characterLabel}}</text>
+      <text class="record-style">{{item.styleLabel}}</text>
+    </view>
+
+    <view class="record-body">
+      <view class="record-score-line">
+        <text class="record-score" style="color: {{item.scoreColor}};">{{item.total_score}}</text>
+        <text class="record-grade">{{item.grade}}</text>
       </view>
-      <view class="result-meta">
-        <text class="character">{{item.character_name || '未识别'}}</text>
-        <text class="section-subtitle">{{item.style || '未分类'}} / {{item.timestamp}}</text>
-        <text class="feedback-line">{{item.feedback || '暂无评语'}}</text>
+
+      <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}}</text>
+      <text class="record-feedback">{{item.feedbackPreview}}</text>
+
+      <view class="record-dimensions">
+        <text wx:for="{{item.dimensionPreview}}" wx:key="name" class="dimension-pill">
+          {{item.name}} {{item.value}}
+        </text>
       </view>
     </view>
   </view>
