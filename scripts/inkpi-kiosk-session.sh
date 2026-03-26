@@ -1,8 +1,12 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+set -euo pipefail
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-PROJECT_DIR="$(CDPATH= cd -- "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ "${INKPI_UI_MODE:-webui}" = "webui" ]; then
+    exec "${PROJECT_DIR}/scripts/inkpi-webui-kiosk-session.sh"
+fi
 
 xset s off
 xset -dpms

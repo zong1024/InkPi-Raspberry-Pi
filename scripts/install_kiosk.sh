@@ -36,6 +36,7 @@ EOF
 mv "${PROFILE_TMP}" "${PROFILE_PATH}"
 chown "${TARGET_USER}:${TARGET_USER}" "${PROFILE_PATH}"
 chmod +x "${PROJECT_DIR}/scripts/inkpi-launch.sh" "${PROJECT_DIR}/scripts/inkpi-kiosk-session.sh"
+chmod +x "${PROJECT_DIR}/scripts/inkpi-webui-launch.sh" "${PROJECT_DIR}/scripts/inkpi-webui-kiosk-session.sh"
 
 echo "InkPi kiosk startup has been installed for ${TARGET_USER}."
 echo "On the next tty1 login or reboot, the app will launch fullscreen automatically."

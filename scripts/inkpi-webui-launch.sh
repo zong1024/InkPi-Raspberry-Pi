@@ -16,13 +16,6 @@ if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
 fi
 
 export PYTHONUNBUFFERED=1
-export QT_AUTO_SCREEN_SCALE_FACTOR=0
-export QT_SCALE_FACTOR=1
+export INKPI_UI_MODE=webui
 
-UI_MODE="${INKPI_UI_MODE:-webui}"
-
-if [ "${UI_MODE}" = "webui" ]; then
-    exec python -m web_ui.app
-fi
-
-exec python main.py
+exec python -m web_ui.app

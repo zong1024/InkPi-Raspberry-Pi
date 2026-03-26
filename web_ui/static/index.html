@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InkPi WebUI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="side-rail">
+      <div class="brand-block">
+        <p class="brand-kicker">InkPi Local Console</p>
+        <h1>InkPi</h1>
+        <p class="brand-copy">把树莓派评测台做成一张可操作的数字作品笺。</p>
+      </div>
+
+      <nav class="nav-group">
+        <button class="nav-button is-active" data-view="overview">总览</button>
+        <button class="nav-button" data-view="capture">拍照评测</button>
+        <button class="nav-button" data-view="history">历史记录</button>
+      </nav>
+
+      <section class="rail-panel">
+        <div class="rail-label">当前模式</div>
+        <div class="selection-card">
+          <p id="selectedCharacterLabel">自动识别</p>
+          <span id="selectionModePill" class="status-pill">自动模式</span>
+        </div>
+      </section>
+
+      <section class="rail-panel">
+        <div class="rail-label">字库选择</div>
+        <div id="characterGrid" class="character-grid"></div>
+      </section>
+
+      <section class="rail-panel">
+        <div class="rail-label">设备状态</div>
+        <div class="device-stack">
+          <div class="device-row">
+            <span>摄像头</span>
+            <strong id="cameraStatusText">检测中</strong>
+          </div>
+          <div class="device-row">
+            <span>记录数</span>
+            <strong id="recordCountText">0</strong>
+          </div>
+          <div class="device-row">
+            <span>平均分</span>
+            <strong id="averageScoreText">0</strong>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="workspace-header">
+        <div>
+          <p class="page-kicker" id="pageKicker">演示主控台</p>
+          <h2 id="pageTitle">评测总览</h2>
+        </div>
+        <div class="header-meta">
+          <span id="modePill" class="status-pill">本地 WebUI</span>
+          <span id="timePill" class="soft-pill">--:--</span>
+        </div>
+      </header>
+
+      <section id="globalBanner" class="global-banner is-hidden"></section>
+
+      <section class="view is-active" data-view-panel="overview">
+        <div class="hero-panel">
+          <div class="hero-copy">
+            <p class="hero-kicker">Kiosk-first Demo</p>
+            <h3>先锁定评测字，再拍一张干净的作品。</h3>
+            <p class="hero-text">
+              这版 WebUI 直接复用树莓派本地算法、数据库和云同步。评委只需要选择目标字、拍照评测、查看结果。
+            </p>
+            <div class="hero-actions">
+              <button class="primary-action" data-jump="capture">进入拍照页</button>
+              <button class="ghost-action" data-jump="history">查看历史记录</button>
+            </div>
+          </div>
+          <div class="hero-stats">
+            <div class="stat-block">
+              <span>最近成绩</span>
+              <strong id="latestScoreText">--</strong>
+            </div>
+            <div class="stat-block">
+              <span>识别字</span>
+              <strong id="latestCharacterText">--</strong>
+            </div>
+            <div class="stat-block">
+              <span>书体</span>
+              <strong id="latestStyleText">--</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="overview-grid">
+          <article class="ink-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">四维均值</p>
+                <h3>本地成绩面板</h3>
+              </div>
+            </div>
+            <div id="detailAverages" class="metric-columns"></div>
+          </article>
+
+          <article class="ink-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">最近评测</p>
+                <h3>当次演示摘要</h3>
+              </div>
+            </div>
+            <div id="latestResultCard" class="result-summary empty-state">
+              暂无评测结果，先去拍一张作品。
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" data-view-panel="capture">
+        <div class="capture-layout">
+          <article class="preview-stage">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Live Preview</p>
+                <h3>实时取景</h3>
+              </div>
+              <span id="captureStatusPill" class="status-pill">待机</span>
+            </div>
+
+            <div class="preview-frame">
+              <img id="cameraPreview" alt="摄像头取景">
+              <div class="preview-overlay">
+                <div class="guide-square"></div>
+                <div class="guide-caption" id="guideCaption">AUTO</div>
+              </div>
+            </div>
+
+            <p class="preview-note">
+              只保留一个汉字，尽量让主体占取景区六成以上，避免整页练习纸和边框一起入镜。
+            </p>
+          </article>
+
+          <aside class="capture-sidebar">
+            <article class="ink-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-kicker">当前目标</p>
+                  <h3 id="captureTargetTitle">自动识别</h3>
+                </div>
+              </div>
+              <p id="captureTargetCopy" class="panel-copy">
+                当前未锁定评测字，系统会先尝试识别，再决定是否进入评分。
+              </p>
+            </article>
+
+            <article class="ink-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-kicker">操作</p>
+                  <h3>拍照与导入</h3>
+                </div>
+              </div>
+              <div class="action-stack">
+                <button id="captureButton" class="primary-action pulse-action">拍照并评测</button>
+                <button id="uploadButton" class="secondary-action">导入图片评测</button>
+                <input id="fileInput" type="file" accept="image/*" hidden>
+              </div>
+            </article>
+
+            <article class="ink-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-kicker">失败提示</p>
+                  <h3>重新拍摄建议</h3>
+                </div>
+              </div>
+              <div id="guidancePanel" class="guidance-copy">
+                画面太暗、反光太强、内容过碎或字形与多个内置模板过近时，系统会直接提示重拍，不会乱猜。
+              </div>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" data-view-panel="history">
+        <div class="history-layout">
+          <article class="history-list-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Archive</p>
+                <h3>历史记录</h3>
+              </div>
+              <button id="refreshHistoryButton" class="ghost-action small-action">刷新</button>
+            </div>
+            <div id="historyList" class="history-list"></div>
+          </article>
+
+          <article class="history-detail-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Record Detail</p>
+                <h3>结果详情</h3>
+              </div>
+            </div>
+            <div id="historyDetail" class="detail-panel empty-state">
+              选择左侧一条记录查看完整得分、风格和建议。
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="historyItemTemplate">
+    <button class="history-item">
+      <div class="history-main">
+        <strong class="history-char"></strong>
+        <span class="history-style"></span>
+      </div>
+      <div class="history-meta">
+        <span class="history-score"></span>
+        <span class="history-time"></span>
+      </div>
+    </button>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
