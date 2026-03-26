@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://192.168.0.171:5001';
+const API_BASE_URL = 'http://home.zongtech.xyz:23333';
 const POLL_INTERVAL = 10000;
 
 module.exports = {
