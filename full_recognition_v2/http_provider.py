@@ -6,6 +6,7 @@ import logging
 import os
 from pathlib import Path
 from typing import List
+import json
 
 import cv2
 import requests
@@ -86,7 +87,7 @@ class HttpOcrCandidateProvider(CandidateProvider):
                 timeout=self.timeout,
             )
             response.raise_for_status()
-            payload = response.json()
+            payload = json.loads(response.content.decode("utf-8"))
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("Remote OCR request failed: %s", exc)
             return []

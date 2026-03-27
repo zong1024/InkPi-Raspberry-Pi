@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 import unittest
@@ -21,14 +22,15 @@ class RemoteOcrProviderTest(unittest.TestCase):
             timeout=1.0,
         )
 
-        fake_response = Mock()
-        fake_response.json.return_value = {
+        payload = {
             "ok": True,
             "items": [
-                {"key": "神", "display": "神", "score": 0.91, "provider": "remote_ocr"},
-                {"key": "水", "display": "水", "score": 0.72, "provider": "remote_ocr"},
+                {"key": "shen", "display": "神", "score": 0.91, "provider": "remote_ocr"},
+                {"key": "shui", "display": "水", "score": 0.72, "provider": "remote_ocr"},
             ],
         }
+        fake_response = Mock()
+        fake_response.content = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         fake_response.raise_for_status.return_value = None
 
         image = np.ones((128, 128), dtype=np.uint8) * 255
@@ -61,11 +63,17 @@ class RemoteOcrProviderTest(unittest.TestCase):
                     },
                     clear=False,
                 ),
-                patch("full_recognition_v2.http_provider.Path.resolve", return_value=project_root / "full_recognition_v2" / "http_provider.py"),
+                patch(
+                    "full_recognition_v2.http_provider.Path.resolve",
+                    return_value=project_root / "full_recognition_v2" / "http_provider.py",
+                ),
             ):
                 provider = HttpOcrCandidateProvider()
 
-            self.assertEqual(provider.endpoint, "http://env.example:5001/api/device/full-recognition/candidates")
+            self.assertEqual(
+                provider.endpoint,
+                "http://env.example:5001/api/device/full-recognition/candidates",
+            )
             self.assertEqual(provider.device_key, "env-device-key")
 
 
