@@ -57,15 +57,40 @@ Next provider to build:
 
 Current status:
 
-- The provider wrapper has been added in
+- The provider now performs real OCR candidate extraction in
   [paddle_provider.py](C:/Users/zongrui/Documents/2/full_recognition_v2/paddle_provider.py)
+- It runs PaddleOCR over both the original image and the extracted single-character ROI
+- It ignores multi-character annotation text and prefers large, centered, single-character detections
 - It is optional and degrades cleanly when PaddleOCR is not installed
-- The current demo runtime does not depend on it
+- The current demo runtime still does not depend on it
 
 Reason:
 
 - PaddleOCR has official large-vocabulary OCR pipelines and broad Chinese character support.
 - It is a much better front-end for "full character coverage" than pure local template matching.
+
+## First real experiment
+
+The first server-side PaddleOCR experiment has already been completed on the V100 box.
+
+Environment notes:
+
+- Server install issue was caused by dead proxy environment variables pointing `pip` to `192.168.0.130:10808`
+- Direct internet access works after temporarily unsetting those proxy variables
+- Paddle stack that installed successfully:
+  - `paddlepaddle-gpu==3.2.0`
+  - `paddleocr==3.4.0`
+
+Observed behavior on real teaching-paper samples:
+
+- The sample `"水"` image produced a clear `水` detection on both the full image and the extracted ROI
+- The sample `"神"` image produced a clear `神` detection as well
+- Annotation text around the character was also detected, which confirmed the need for the new single-character filtering logic now built into the provider
+
+That means the direction is no longer hypothetical:
+
+- OCR can already recover arbitrary Chinese character candidates from your real calligraphy photos
+- The remaining work is to merge those candidates with local reranking and open-set rejection more tightly
 
 ## Data plan
 
