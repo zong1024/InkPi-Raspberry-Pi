@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from functools import wraps
 from pathlib import Path
+import threading
 from typing import Any, Callable
 
 import cv2
@@ -39,6 +40,25 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         app.config["DEFAULT_DISPLAY_NAME"],
     )
     app.extensions["cloud_db"] = db
+
+    def load_full_ocr_provider():
+        provider = app.extensions.get("full_ocr_provider")
+        if provider is not None:
+            return provider or None
+
+        try:
+            from full_recognition_v2.paddle_provider import PaddleOcrCandidateProvider
+
+            provider = PaddleOcrCandidateProvider(
+                device=os.environ.get("INKPI_FULL_OCR_DEVICE", "gpu:0")
+            )
+            if not provider.available:
+                provider = False
+        except Exception:
+            provider = False
+
+        app.extensions["full_ocr_provider"] = provider
+        return provider or None
 
     def json_error(message: str, status_code: int):
         return jsonify({"ok": False, "error": message}), status_code
@@ -132,20 +152,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if image is None:
             return json_error("invalid_image", 400)
 
-        provider = app.extensions.get("full_ocr_provider")
-        if provider is None:
-            try:
-                from full_recognition_v2.paddle_provider import PaddleOcrCandidateProvider
-
-                provider = PaddleOcrCandidateProvider(
-                    device=os.environ.get("INKPI_FULL_OCR_DEVICE", "gpu:0")
-                )
-                if not provider.available:
-                    provider = False
-            except Exception:
-                provider = False
-            app.extensions["full_ocr_provider"] = provider
-
+        provider = load_full_ocr_provider()
         if not provider:
             return json_error("ocr_unavailable", 503)
 
@@ -184,6 +191,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         result = db.upsert_result(payload, device_name=device_name)
         return jsonify({"ok": True, "result": result})
 
+    if not app.config.get("TESTING"):
+        threading.Thread(target=load_full_ocr_provider, daemon=True, name="inkpi-ocr-warmup").start()
     return app
 
 

@@ -37,7 +37,7 @@ class HttpOcrCandidateProvider(CandidateProvider):
             or os.getenv("INKPI_CLOUD_DEVICE_KEY")
             or ""
         ).strip()
-        self.timeout = float(timeout or os.getenv("INKPI_FULL_OCR_TIMEOUT", "4.0"))
+        self.timeout = float(timeout or os.getenv("INKPI_FULL_OCR_TIMEOUT", "12.0"))
 
     @property
     def available(self) -> bool:
