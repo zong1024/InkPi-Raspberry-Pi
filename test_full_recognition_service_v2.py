@@ -161,6 +161,45 @@ class FullRecognitionServiceV2Test(unittest.TestCase):
                 template_manager._templates = original_templates
                 template_manager._cache = original_cache
 
+    def test_bootstrap_template_rolls_back_unusable_saved_template(self) -> None:
+        image = cv2.imread(str(self._template_path("shui_kaishu_standard.png")), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        service = FullRecognitionService(
+            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["龙"])])
+        )
+
+        original_dir = template_manager.template_dir
+        original_templates = copy.deepcopy(template_manager._templates)
+        original_cache = dict(template_manager._cache)
+        original_load_image = template_manager.load_image
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                template_manager.template_dir = Path(temp_dir)
+                template_manager._templates = {}
+                template_manager._cache = {}
+
+                def fake_load_image(path, flags=0):
+                    result = original_load_image(path, flags)
+                    if result is None:
+                        return None
+                    if str(path).endswith("_bootstrap.png"):
+                        return np.ones_like(result) * 255
+                    return result
+
+                template_manager.load_image = fake_load_image  # type: ignore[method-assign]
+
+                result = service.bootstrap_template(image, min_confidence=0.5)
+                self.assertFalse(result.created)
+                self.assertIn("回滚", result.message)
+                self.assertFalse(any(Path(temp_dir).glob("*.png")))
+            finally:
+                template_manager.template_dir = original_dir
+                template_manager._templates = original_templates
+                template_manager._cache = original_cache
+                template_manager.load_image = original_load_image  # type: ignore[method-assign]
+
 
 if __name__ == "__main__":
     unittest.main()

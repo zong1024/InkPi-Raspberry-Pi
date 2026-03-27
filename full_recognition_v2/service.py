@@ -201,6 +201,7 @@ class FullRecognitionService:
             style=style_key,
             calligrapher=calligrapher,
         )
+        template_path = Path(self._template_path(character_display, style_key, calligrapher))
         if not created:
             return TemplateBootstrapResult(
                 created=False,
@@ -212,12 +213,24 @@ class FullRecognitionService:
                 message="模板文件写入失败。",
             )
 
+        if not self._validate_saved_template(template_path):
+            self._discard_template(character_display, style_key, calligrapher, template_path)
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=character_key,
+                character_display=character_display,
+                template_path=None,
+                before_status=before.status,
+                after_status=None,
+                message="生成出的模板主体不稳定，已自动回滚。",
+            )
+
         after = self.analyze(image)
         return TemplateBootstrapResult(
             created=True,
             character_key=template_manager.resolve_character_key(character_display),
             character_display=character_display,
-            template_path=self._template_path(character_display, style_key, calligrapher),
+            template_path=str(template_path),
             before_status=before.status,
             after_status=after.status,
             message="模板已生成并加入本地模板库。",
@@ -269,6 +282,42 @@ class FullRecognitionService:
             if candidate.display == character_display or candidate.key == character_display:
                 return candidate.confidence
         return 0.0
+
+    def _validate_saved_template(self, path: Path) -> bool:
+        """Ensure the saved template can be loaded back and still exposes a stable subject."""
+        image = template_manager.load_image(path, 0)
+        if image is None:
+            return False
+        return character_geometry_service.extract_subject(image) is not None
+
+    def _discard_template(self, character: str, style: str, calligrapher: str, path: Path) -> None:
+        """Remove a newly created template file and in-memory index entry."""
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+        normalized_char = template_manager.resolve_character_key(character)
+        entries = template_manager._templates.get(normalized_char, [])
+        template_manager._templates[normalized_char] = [
+            item
+            for item in entries
+            if not (
+                item.get("char") == character
+                and template_manager.resolve_style_key(item.get("style", "")) == template_manager.resolve_style_key(style)
+                and item.get("calligrapher") == calligrapher
+            )
+        ]
+        if not template_manager._templates[normalized_char]:
+            template_manager._templates.pop(normalized_char, None)
+
+        prefix = f"{normalized_char}_{template_manager.resolve_style_key(style)}_"
+        template_manager._cache = {
+            key: value
+            for key, value in template_manager._cache.items()
+            if not (key.startswith(prefix) and key.endswith(calligrapher))
+        }
 
     def _present(self, decision: RecognitionDecision) -> FullRecognitionAnalysis:
         candidates = [
