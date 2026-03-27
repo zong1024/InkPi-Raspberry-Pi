@@ -16,6 +16,9 @@ from full_recognition_v2.providers import ScriptedCandidateProvider
 
 
 class FullRecognitionV2Test(unittest.TestCase):
+    def _template_path(self, name: str) -> Path:
+        return Path(__file__).resolve().parent / "models" / "templates" / name
+
     def test_blank_image_is_rejected(self) -> None:
         pipeline = FullRecognitionPipeline()
         blank = np.ones((224, 224), dtype=np.uint8) * 255
@@ -23,7 +26,7 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertEqual(decision.status, "rejected")
 
     def test_scripted_candidate_matches_shen_template(self) -> None:
-        template_path = Path("C:/Users/zongrui/Documents/2/models/templates/shen_kaishu_standard.png")
+        template_path = self._template_path("shen_kaishu_standard.png")
         image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
         self.assertIsNotNone(image)
 
@@ -35,7 +38,7 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertEqual(decision.character_key, "shen")
 
     def test_competing_candidates_can_be_ambiguous(self) -> None:
-        template_path = Path("C:/Users/zongrui/Documents/2/models/templates/shui_kaishu_standard.png")
+        template_path = self._template_path("shui_kaishu_standard.png")
         image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
         self.assertIsNotNone(image)
 
@@ -50,7 +53,7 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertIsNotNone(pipeline)
 
     def test_paddle_provider_prefers_large_single_character_detections(self) -> None:
-        template_path = Path("C:/Users/zongrui/Documents/2/models/templates/shui_kaishu_standard.png")
+        template_path = self._template_path("shui_kaishu_standard.png")
         image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
         self.assertIsNotNone(image)
 
