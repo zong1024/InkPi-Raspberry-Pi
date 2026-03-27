@@ -106,6 +106,10 @@ class CloudSyncService:
             "character_name": result.character_name,
             "style": result.style,
             "style_confidence": result.style_confidence,
+            "recognition_status": result.recognition_status,
+            "recognition_confidence": result.recognition_confidence,
+            "score_mode": result.score_mode,
+            "score_explanation": result.score_explanation,
             "image_path": result.image_path,
             "processed_image_path": result.processed_image_path,
         }

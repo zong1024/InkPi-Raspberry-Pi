@@ -101,6 +101,11 @@ class FullRecognitionService:
     def __init__(self, pipeline: FullRecognitionPipeline | None = None) -> None:
         self.pipeline = pipeline or build_default_full_pipeline()
 
+    @property
+    def is_candidate_ready(self) -> bool:
+        """Whether an external OCR candidate source is available."""
+        return self.pipeline._has_external_candidate_provider()
+
     def analyze(self, image: np.ndarray, limit: int = 8) -> FullRecognitionAnalysis:
         """Analyze an image and return a UI-ready interpretation."""
         decision = self.pipeline.analyze(image, limit=limit)

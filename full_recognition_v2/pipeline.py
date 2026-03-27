@@ -88,7 +88,11 @@ class FullRecognitionPipeline:
         limit: int,
     ) -> List[RecognitionCandidate]:
         provider_lookup = {candidate.key: candidate for candidate in provider_candidates}
-        target_keys = set(provider_lookup.keys()) or set(template_manager.list_available_chars())
+        target_keys = set(provider_lookup.keys())
+        if not target_keys and not self._has_external_candidate_provider():
+            target_keys = set(template_manager.list_available_chars())
+        if not target_keys:
+            return []
         best_by_key: Dict[str, RecognitionCandidate] = {}
 
         for key in target_keys:
@@ -296,6 +300,15 @@ class FullRecognitionPipeline:
             and top.rerank_score >= self.config.single_candidate_min_rerank
             and structure >= self.config.single_candidate_min_structure
         )
+
+    def _has_external_candidate_provider(self) -> bool:
+        """Whether the pipeline has at least one non-null OCR candidate source."""
+        for provider in self.providers:
+            if isinstance(provider, NullCandidateProvider):
+                continue
+            if getattr(provider, "available", True):
+                return True
+        return False
 
 
 full_recognition_pipeline = FullRecognitionPipeline()

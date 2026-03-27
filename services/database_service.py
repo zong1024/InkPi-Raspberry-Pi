@@ -58,17 +58,29 @@ class DatabaseService:
                     processed_image_path TEXT,
                     character_name TEXT,
                     style TEXT,
-                    style_confidence REAL
+                    style_confidence REAL,
+                    recognition_status TEXT,
+                    recognition_confidence REAL,
+                    score_mode TEXT,
+                    score_explanation TEXT
                 )
                 """
             )
 
             cursor.execute(f"PRAGMA table_info({self.table_name})")
             existing_columns = {row[1] for row in cursor.fetchall()}
-            if "style" not in existing_columns:
-                cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN style TEXT")
-            if "style_confidence" not in existing_columns:
-                cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN style_confidence REAL")
+            for column_name, column_type in (
+                ("style", "TEXT"),
+                ("style_confidence", "REAL"),
+                ("recognition_status", "TEXT"),
+                ("recognition_confidence", "REAL"),
+                ("score_mode", "TEXT"),
+                ("score_explanation", "TEXT"),
+            ):
+                if column_name not in existing_columns:
+                    cursor.execute(
+                        f"ALTER TABLE {self.table_name} ADD COLUMN {column_name} {column_type}"
+                    )
 
             cursor.execute(
                 f"""
@@ -82,7 +94,6 @@ class DatabaseService:
 
     def save(self, result: EvaluationResult) -> int:
         """Save a result locally and trigger cloud sync in the background."""
-
         with self._managed_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -100,16 +111,20 @@ class DatabaseService:
                     processed_image_path,
                     character_name,
                     style,
-                    style_confidence
+                    style_confidence,
+                    recognition_status,
+                    recognition_confidence,
+                    score_mode,
+                    score_explanation
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.total_score,
-                    result.detail_scores.get("结构", 0),
-                    result.detail_scores.get("笔画", 0),
-                    result.detail_scores.get("平衡", 0),
-                    result.detail_scores.get("韵律", 0),
+                    result.detail_scores.get("结构", result.detail_scores.get("缁撴瀯", 0)),
+                    result.detail_scores.get("笔画", result.detail_scores.get("绗旂敾", 0)),
+                    result.detail_scores.get("平衡", result.detail_scores.get("骞宠　", 0)),
+                    result.detail_scores.get("韵律", result.detail_scores.get("闊靛緥", 0)),
                     result.feedback,
                     result.timestamp.isoformat(),
                     result.image_path,
@@ -117,6 +132,10 @@ class DatabaseService:
                     result.character_name,
                     result.style,
                     result.style_confidence,
+                    result.recognition_status,
+                    result.recognition_confidence,
+                    result.score_mode,
+                    result.score_explanation,
                 ),
             )
             record_id = int(cursor.lastrowid)
@@ -136,83 +155,77 @@ class DatabaseService:
 
     def get_by_id(self, record_id: int) -> Optional[EvaluationResult]:
         """Fetch a single result by id."""
-
         with self._managed_connection() as conn:
             row = conn.execute(
                 f"""
                 SELECT id, total_score, structure_score, stroke_score, balance_score,
                        rhythm_score, feedback, timestamp, image_path, processed_image_path,
-                       character_name, style, style_confidence
+                       character_name, style, style_confidence, recognition_status,
+                       recognition_confidence, score_mode, score_explanation
                 FROM {self.table_name}
                 WHERE id = ?
                 """,
                 (record_id,),
             ).fetchone()
-
         return self._row_to_result(row) if row else None
 
     def get_all(self, limit: int = 100, offset: int = 0) -> list[EvaluationResult]:
         """Fetch evaluation records ordered from newest to oldest."""
-
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT id, total_score, structure_score, stroke_score, balance_score,
                        rhythm_score, feedback, timestamp, image_path, processed_image_path,
-                       character_name, style, style_confidence
+                       character_name, style, style_confidence, recognition_status,
+                       recognition_confidence, score_mode, score_explanation
                 FROM {self.table_name}
                 ORDER BY timestamp DESC
                 LIMIT ? OFFSET ?
                 """,
                 (limit, offset),
             ).fetchall()
-
         return [self._row_to_result(row) for row in rows]
 
     def get_recent(self, count: int = 10) -> list[EvaluationResult]:
         """Fetch the newest records."""
-
         return self.get_all(limit=count)
 
     def get_by_date_range(self, start_date: datetime, end_date: datetime) -> list[EvaluationResult]:
         """Fetch records within a time range."""
-
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT id, total_score, structure_score, stroke_score, balance_score,
                        rhythm_score, feedback, timestamp, image_path, processed_image_path,
-                       character_name, style, style_confidence
+                       character_name, style, style_confidence, recognition_status,
+                       recognition_confidence, score_mode, score_explanation
                 FROM {self.table_name}
                 WHERE timestamp >= ? AND timestamp <= ?
                 ORDER BY timestamp DESC
                 """,
                 (start_date.isoformat(), end_date.isoformat()),
             ).fetchall()
-
         return [self._row_to_result(row) for row in rows]
 
     def get_by_character(self, character: str) -> list[EvaluationResult]:
         """Fetch records for a specific character."""
-
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT id, total_score, structure_score, stroke_score, balance_score,
                        rhythm_score, feedback, timestamp, image_path, processed_image_path,
-                       character_name, style, style_confidence
+                       character_name, style, style_confidence, recognition_status,
+                       recognition_confidence, score_mode, score_explanation
                 FROM {self.table_name}
                 WHERE character_name = ?
                 ORDER BY timestamp DESC
                 """,
                 (character,),
             ).fetchall()
-
         return [self._row_to_result(row) for row in rows]
 
     def delete(self, record_id: int) -> bool:
         """Delete a record by id."""
-
         with self._managed_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (record_id,))
@@ -225,7 +238,6 @@ class DatabaseService:
 
     def get_statistics(self) -> dict:
         """Aggregate statistics for dashboard widgets."""
-
         with self._managed_connection() as conn:
             total_count = conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[0]
             avg_score = conn.execute(f"SELECT AVG(total_score) FROM {self.table_name}").fetchone()[0] or 0
@@ -254,7 +266,6 @@ class DatabaseService:
 
     def get_score_trend(self, limit: int = 30) -> list[dict]:
         """Return ordered score trend data."""
-
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
@@ -281,7 +292,6 @@ class DatabaseService:
 
     def _row_to_result(self, row: sqlite3.Row) -> EvaluationResult:
         """Convert a database row into an EvaluationResult."""
-
         timestamp = row["timestamp"]
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
@@ -302,11 +312,14 @@ class DatabaseService:
             character_name=row["character_name"],
             style=row["style"],
             style_confidence=row["style_confidence"],
+            recognition_status=row["recognition_status"],
+            recognition_confidence=row["recognition_confidence"],
+            score_mode=row["score_mode"],
+            score_explanation=row["score_explanation"],
         )
 
     def _cleanup_old_records(self) -> None:
         """Trim old local records when the table grows too large."""
-
         with self._managed_connection() as conn:
             count = conn.execute(f"SELECT COUNT(*) FROM {self.table_name}").fetchone()[0]
             if count <= self.max_records:

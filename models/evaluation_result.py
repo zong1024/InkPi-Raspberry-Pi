@@ -1,30 +1,34 @@
-"""
-InkPi 书法评测系统 - 评测结果数据模型
-"""
-from dataclasses import dataclass, field
+"""Evaluation result data model."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Dict, Optional
 import json
 
 
 @dataclass
 class EvaluationResult:
-    """评测结果数据类"""
-    
-    total_score: int                              # 总分 (0-100)
-    detail_scores: Dict[str, int]                 # 四维评分
-    feedback: str                                 # 文字反馈
-    timestamp: datetime                           # 评测时间
-    image_path: Optional[str] = None              # 原始图片路径
-    processed_image_path: Optional[str] = None    # 预处理后图片路径
-    character_name: Optional[str] = None          # 字符名称
-    id: Optional[int] = None                      # 数据库ID
-    # 书法风格分类
-    style: Optional[str] = None                   # 书法风格 (楷书/行书/草书/隶书/篆书)
-    style_confidence: Optional[float] = None      # 风格置信度
-    
+    """Single evaluation record."""
+
+    total_score: int
+    detail_scores: Dict[str, int]
+    feedback: str
+    timestamp: datetime
+    image_path: Optional[str] = None
+    processed_image_path: Optional[str] = None
+    character_name: Optional[str] = None
+    id: Optional[int] = None
+    style: Optional[str] = None
+    style_confidence: Optional[float] = None
+    recognition_status: Optional[str] = None
+    recognition_confidence: Optional[float] = None
+    score_mode: Optional[str] = None
+    score_explanation: Optional[str] = None
+
     def to_dict(self) -> dict:
-        """转换为字典格式"""
+        """Convert to a serializable dictionary."""
         return {
             "id": self.id,
             "total_score": self.total_score,
@@ -36,21 +40,25 @@ class EvaluationResult:
             "character_name": self.character_name,
             "style": self.style,
             "style_confidence": self.style_confidence,
+            "recognition_status": self.recognition_status,
+            "recognition_confidence": self.recognition_confidence,
+            "score_mode": self.score_mode,
+            "score_explanation": self.score_explanation,
         }
-    
+
     def to_json(self) -> str:
-        """转换为 JSON 字符串"""
+        """Convert to formatted JSON."""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "EvaluationResult":
-        """从字典创建实例"""
+        """Rebuild from a dictionary."""
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
         elif timestamp is None:
             timestamp = datetime.now()
-            
+
         return cls(
             id=data.get("id"),
             total_score=data["total_score"],
@@ -62,42 +70,46 @@ class EvaluationResult:
             character_name=data.get("character_name"),
             style=data.get("style"),
             style_confidence=data.get("style_confidence"),
+            recognition_status=data.get("recognition_status"),
+            recognition_confidence=data.get("recognition_confidence"),
+            score_mode=data.get("score_mode"),
+            score_explanation=data.get("score_explanation"),
         )
-    
+
     def __str__(self) -> str:
-        """字符串表示"""
+        """Readable representation."""
         scores_str = ", ".join([f"{k}: {v}" for k, v in self.detail_scores.items()])
         return (
             f"EvaluationResult(total={self.total_score}, "
             f"scores={{{scores_str}}}, "
-            f"character={self.character_name})"
+            f"character={self.character_name}, "
+            f"mode={self.score_mode})"
         )
-    
+
     def get_grade(self) -> str:
-        """获取等级评价"""
+        """Human-readable grade."""
         excellent_threshold, good_threshold = self._get_grade_thresholds()
         if self.total_score >= excellent_threshold:
             return "优秀"
-        elif self.total_score >= good_threshold:
+        if self.total_score >= good_threshold:
             return "良好"
-        else:
-            return "需加强"
-    
+        return "需加强"
+
     def get_color(self) -> str:
-        """获取对应颜色（用于UI显示）"""
+        """UI color helper."""
         excellent_threshold, good_threshold = self._get_grade_thresholds()
         if self.total_score >= excellent_threshold:
-            return "#4CAF50"  # 绿色
-        elif self.total_score >= good_threshold:
-            return "#FF9800"  # 橙色
-        else:
-            return "#F44336"  # 红色
+            return "#4CAF50"
+        if self.total_score >= good_threshold:
+            return "#FF9800"
+        return "#F44336"
 
     @staticmethod
     def _get_grade_thresholds() -> tuple[int, int]:
-        """从配置中读取等级阈值，并提供安全回退。"""
+        """Read thresholds from config with a safe fallback."""
         try:
             from config import EVALUATION_CONFIG
+
             return (
                 int(EVALUATION_CONFIG.get("excellent_threshold", 80)),
                 int(EVALUATION_CONFIG.get("good_threshold", 60)),

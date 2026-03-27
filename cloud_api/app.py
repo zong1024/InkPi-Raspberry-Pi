@@ -7,6 +7,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
 
+import cv2
+import numpy as np
 from flask import Flask, jsonify, request
 
 try:
@@ -40,6 +42,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     def json_error(message: str, status_code: int):
         return jsonify({"ok": False, "error": message}), status_code
+
+    def device_key_valid() -> bool:
+        device_key = request.headers.get("X-Device-Key", "").strip()
+        return bool(device_key) and device_key == app.config["DEVICE_KEY"]
 
     def auth_required(fn: Callable):
         @wraps(fn)
@@ -112,10 +118,58 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return json_error("result_not_found", 404)
         return jsonify({"ok": True, "result": result})
 
+    @app.post("/api/device/full-recognition/candidates")
+    def full_recognition_candidates():
+        if not device_key_valid():
+            return json_error("invalid_device_key", 401)
+
+        uploaded = request.files.get("image")
+        if uploaded is None:
+            return json_error("missing_image", 400)
+
+        raw = np.frombuffer(uploaded.read(), dtype=np.uint8)
+        image = cv2.imdecode(raw, cv2.IMREAD_COLOR)
+        if image is None:
+            return json_error("invalid_image", 400)
+
+        provider = app.extensions.get("full_ocr_provider")
+        if provider is None:
+            try:
+                from full_recognition_v2.paddle_provider import PaddleOcrCandidateProvider
+
+                provider = PaddleOcrCandidateProvider(
+                    device=os.environ.get("INKPI_FULL_OCR_DEVICE", "gpu:0")
+                )
+                if not provider.available:
+                    provider = False
+            except Exception:
+                provider = False
+            app.extensions["full_ocr_provider"] = provider
+
+        if not provider:
+            return json_error("ocr_unavailable", 503)
+
+        limit = int(request.form.get("limit", request.args.get("limit", 8)))
+        limit = max(1, min(limit, 16))
+        items = provider.get_candidates(image, limit=limit)
+        return jsonify(
+            {
+                "ok": True,
+                "items": [
+                    {
+                        "key": item.key,
+                        "display": item.display,
+                        "score": item.provider_score,
+                        "provider": item.provider,
+                    }
+                    for item in items
+                ],
+            }
+        )
+
     @app.post("/api/device/results")
     def upload_result():
-        device_key = request.headers.get("X-Device-Key", "").strip()
-        if not device_key or device_key != app.config["DEVICE_KEY"]:
+        if not device_key_valid():
             return json_error("invalid_device_key", 401)
 
         payload = request.get_json(silent=True) or {}

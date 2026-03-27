@@ -79,6 +79,10 @@ class CloudDatabase:
                     character_name TEXT,
                     style TEXT,
                     style_confidence REAL,
+                    recognition_status TEXT,
+                    recognition_confidence REAL,
+                    score_mode TEXT,
+                    score_explanation TEXT,
                     detail_scores_json TEXT NOT NULL,
                     raw_payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -87,6 +91,16 @@ class CloudDatabase:
                 )
                 """
             )
+            cursor.execute("PRAGMA table_info(results)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            for column_name, column_type in (
+                ("recognition_status", "TEXT"),
+                ("recognition_confidence", "REAL"),
+                ("score_mode", "TEXT"),
+                ("score_explanation", "TEXT"),
+            ):
+                if column_name not in existing_columns:
+                    cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
             conn.commit()
 
     def ensure_default_user(self, username: str, password: str, display_name: str) -> None:
@@ -194,6 +208,10 @@ class CloudDatabase:
                         character_name = ?,
                         style = ?,
                         style_confidence = ?,
+                        recognition_status = ?,
+                        recognition_confidence = ?,
+                        score_mode = ?,
+                        score_explanation = ?,
                         detail_scores_json = ?,
                         raw_payload_json = ?,
                         updated_at = ?
@@ -210,6 +228,10 @@ class CloudDatabase:
                         payload.get("character_name"),
                         payload.get("style"),
                         payload.get("style_confidence"),
+                        payload.get("recognition_status"),
+                        payload.get("recognition_confidence"),
+                        payload.get("score_mode"),
+                        payload.get("score_explanation"),
                         encoded_details,
                         encoded_payload,
                         created_at,
@@ -233,12 +255,16 @@ class CloudDatabase:
                         character_name,
                         style,
                         style_confidence,
+                        recognition_status,
+                        recognition_confidence,
+                        score_mode,
+                        score_explanation,
                         detail_scores_json,
                         raw_payload_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
@@ -253,6 +279,10 @@ class CloudDatabase:
                         payload.get("character_name"),
                         payload.get("style"),
                         payload.get("style_confidence"),
+                        payload.get("recognition_status"),
+                        payload.get("recognition_confidence"),
+                        payload.get("score_mode"),
+                        payload.get("score_explanation"),
                         encoded_details,
                         encoded_payload,
                         created_at,
@@ -309,6 +339,10 @@ class CloudDatabase:
             "character_name": row["character_name"],
             "style": row["style"],
             "style_confidence": row["style_confidence"],
+            "recognition_status": row["recognition_status"],
+            "recognition_confidence": row["recognition_confidence"],
+            "score_mode": row["score_mode"],
+            "score_explanation": row["score_explanation"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
