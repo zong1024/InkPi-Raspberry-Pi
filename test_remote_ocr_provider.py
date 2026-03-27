@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -37,6 +40,33 @@ class RemoteOcrProviderTest(unittest.TestCase):
         self.assertEqual(candidates[0].key, "shen")
         self.assertGreater(candidates[0].provider_score, candidates[1].provider_score)
         post.assert_called_once()
+
+    def test_provider_bootstraps_cloud_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+            env_dir = project_root / ".inkpi"
+            env_dir.mkdir(parents=True, exist_ok=True)
+            (env_dir / "cloud.env").write_text(
+                "INKPI_CLOUD_BACKEND_URL=http://env.example:5001\n"
+                "INKPI_CLOUD_DEVICE_KEY=env-device-key\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "INKPI_CLOUD_BACKEND_URL": "",
+                        "INKPI_CLOUD_DEVICE_KEY": "",
+                    },
+                    clear=False,
+                ),
+                patch("full_recognition_v2.http_provider.Path.resolve", return_value=project_root / "full_recognition_v2" / "http_provider.py"),
+            ):
+                provider = HttpOcrCandidateProvider()
+
+            self.assertEqual(provider.endpoint, "http://env.example:5001/api/device/full-recognition/candidates")
+            self.assertEqual(provider.device_key, "env-device-key")
 
 
 if __name__ == "__main__":

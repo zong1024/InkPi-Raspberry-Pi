@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import List
 
 import cv2
@@ -26,6 +27,7 @@ class HttpOcrCandidateProvider(CandidateProvider):
         timeout: float | None = None,
     ) -> None:
         self.logger = logging.getLogger(__name__)
+        self._bootstrap_env_from_file()
         backend_url = os.getenv("INKPI_CLOUD_BACKEND_URL", "").rstrip("/")
         derived_endpoint = f"{backend_url}/api/device/full-recognition/candidates" if backend_url else ""
         self.endpoint = (
@@ -38,6 +40,26 @@ class HttpOcrCandidateProvider(CandidateProvider):
             or ""
         ).strip()
         self.timeout = float(timeout or os.getenv("INKPI_FULL_OCR_TIMEOUT", "12.0"))
+
+    def _bootstrap_env_from_file(self) -> None:
+        """Load `.inkpi/cloud.env` so direct Python launches still see OCR backend config."""
+
+        env_path = Path(__file__).resolve().parent.parent / ".inkpi" / "cloud.env"
+        if not env_path.exists():
+            return
+
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and not os.environ.get(key):
+                    os.environ[key] = value
+        except Exception as exc:  # noqa: BLE001
+            self.logger.debug("Skip loading OCR env file %s: %s", env_path, exc)
 
     @property
     def available(self) -> bool:
