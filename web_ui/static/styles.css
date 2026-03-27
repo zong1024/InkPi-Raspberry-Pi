@@ -716,3 +716,424 @@ input {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 560px), (max-height: 380px) {
+  html,
+  body {
+    height: 100svh;
+    overflow: hidden;
+  }
+
+  body::before {
+    background-size: 22px 22px;
+    opacity: 0.1;
+  }
+
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100svh;
+    min-height: 100svh;
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .side-rail {
+    border-radius: 22px;
+    padding: 8px 10px;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .brand-block {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .brand-block h1 {
+    margin: 0;
+    font-size: 22px;
+  }
+
+  .brand-kicker,
+  .rail-label,
+  .panel-kicker,
+  .hero-kicker {
+    font-size: 9px;
+    letter-spacing: 0.14em;
+  }
+
+  .brand-copy {
+    display: none;
+  }
+
+  .nav-group {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .nav-button {
+    min-height: 40px;
+    padding: 10px 0;
+    border-radius: 14px;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .nav-button.is-active,
+  .nav-button:hover {
+    transform: none;
+  }
+
+  .rail-panel {
+    border-radius: 18px;
+    padding: 10px 12px;
+  }
+
+  .side-rail .rail-panel:last-of-type {
+    display: none;
+  }
+
+  .selection-card {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .selection-card p {
+    font-size: 20px;
+  }
+
+  .status-pill,
+  .soft-pill {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .character-grid {
+    margin-top: 8px;
+    grid-template-columns: repeat(12, 44px);
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .character-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .character-chip {
+    min-width: 44px;
+    min-height: 44px;
+    aspect-ratio: auto;
+    border-radius: 14px;
+    font-size: 18px;
+  }
+
+  .character-chip.is-auto {
+    font-size: 12px;
+  }
+
+  .workspace {
+    min-height: 0;
+    overflow: auto;
+    border-radius: 22px;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .workspace-header {
+    display: none;
+  }
+
+  .global-banner {
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .hero-panel {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .hero-copy h3 {
+    margin: 4px 0 8px;
+    max-width: none;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .hero-text {
+    display: none;
+  }
+
+  .hero-actions {
+    gap: 8px;
+  }
+
+  .primary-action,
+  .ghost-action,
+  .secondary-action {
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 14px;
+    font-size: 13px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .stat-block {
+    padding: 10px;
+    border-radius: 16px;
+  }
+
+  .stat-block span {
+    font-size: 10px;
+  }
+
+  .stat-block strong {
+    margin-top: 4px;
+    font-size: 22px;
+  }
+
+  .overview-grid,
+  .history-layout {
+    margin-top: 8px;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .ink-panel,
+  .preview-stage,
+  .history-list-panel,
+  .history-detail-panel {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .panel-header {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .panel-header h3 {
+    margin-top: 4px;
+    font-size: 16px;
+  }
+
+  .panel-copy,
+  .guidance-copy,
+  .preview-note,
+  .detail-title p,
+  .detail-feedback {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .metric-columns,
+  .detail-metrics {
+    gap: 10px;
+  }
+
+  .metric-row {
+    grid-template-columns: 52px 1fr 36px;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  .metric-track {
+    height: 8px;
+  }
+
+  .summary-score {
+    gap: 10px;
+  }
+
+  .summary-score strong,
+  .detail-score {
+    font-size: 48px;
+  }
+
+  .summary-meta {
+    gap: 6px;
+  }
+
+  .summary-meta span {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .empty-state {
+    min-height: 92px;
+    padding: 12px;
+    border-radius: 18px;
+    font-size: 12px;
+  }
+
+  .capture-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .preview-frame {
+    height: clamp(136px, 42vh, 188px);
+    min-height: 0;
+    border-radius: 18px;
+  }
+
+  .preview-frame img {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .guide-square {
+    inset: 10% 16%;
+  }
+
+  .guide-caption {
+    left: 12px;
+    bottom: 10px;
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+
+  .capture-sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .capture-sidebar .ink-panel:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .action-stack {
+    gap: 8px;
+  }
+
+  .pulse-action {
+    animation-duration: 3.2s;
+  }
+
+  .history-list {
+    max-height: none;
+    gap: 8px;
+  }
+
+  .history-item {
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+
+  .history-char {
+    font-size: 18px;
+  }
+
+  .history-style,
+  .history-time {
+    font-size: 11px;
+  }
+
+  .history-score {
+    font-size: 22px;
+  }
+
+  .detail-title h4 {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 380px), (max-height: 330px) {
+  .side-rail {
+    padding: 6px 8px;
+  }
+
+  .brand-kicker {
+    display: none;
+  }
+
+  .nav-button {
+    min-height: 36px;
+    font-size: 12px;
+  }
+
+  .rail-panel {
+    padding: 8px 10px;
+  }
+
+  .selection-card p {
+    font-size: 18px;
+  }
+
+  .workspace {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .hero-panel,
+  .ink-panel,
+  .preview-stage,
+  .history-list-panel,
+  .history-detail-panel {
+    padding: 10px;
+  }
+
+  .hero-copy h3 {
+    font-size: 18px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stat-block {
+    padding: 8px;
+  }
+
+  .stat-block strong {
+    font-size: 18px;
+  }
+
+  .primary-action,
+  .ghost-action,
+  .secondary-action {
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .preview-frame {
+    height: 132px;
+  }
+
+  .capture-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .capture-sidebar .ink-panel:last-child {
+    grid-column: auto;
+  }
+
+  .summary-score strong,
+  .detail-score {
+    font-size: 40px;
+  }
+
+  .detail-title h4 {
+    font-size: 24px;
+  }
+}
