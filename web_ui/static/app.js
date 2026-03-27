@@ -144,7 +144,7 @@ async function updateSelectionRemote(character) {
     state.bootstrap.selection = selection;
     renderCharacterGrid(state.bootstrap.characters, selection);
     updateSelection(selection);
-    showBanner(selection.locked ? `已锁定评测字：${selection.display}` : "已切回自动识别模式。");
+    showBanner(selection.locked ? `已锁定评测字：${selection.display}` : "已切回自动 OCR 模式。");
   } catch (error) {
     showBanner(`设置评测字失败：${error.message}`, true);
   }
@@ -152,11 +152,11 @@ async function updateSelectionRemote(character) {
 
 function updateSelection(selection) {
   els.selectedCharacterLabel.textContent = selection.display;
-  els.selectionModePill.textContent = selection.locked ? "锁定模式" : "自动模式";
+  els.selectionModePill.textContent = selection.locked ? "手动锁定" : "自动 OCR";
   els.captureTargetTitle.textContent = selection.display;
   els.captureTargetCopy.textContent = selection.locked
-    ? `当前已锁定评测字“${selection.display}”，系统将直接按该字进入评分。`
-    : "当前未锁定评测字，系统会先尝试识别，再决定是否进入评测。";
+    ? `当前已锁定评测字“${selection.display}”，系统将跳过自动识别，直接按该字进入评分。`
+    : "当前未锁定评测字，系统会先自动识别字符，再决定进入模板评分、通用评分或提示重拍。";
   els.guideCaption.textContent = selection.locked ? `TARGET ${selection.display}` : "AUTO";
 }
 
@@ -266,8 +266,8 @@ function switchView(view) {
 
   const pageMeta = {
     overview: ["演示主控台", "评测总览"],
-    capture: ["Capture Workspace", "拍照评测"],
-    history: ["Archive Review", "历史记录"],
+    capture: ["自动识别优先", "拍照评测"],
+    history: ["结果归档", "历史记录"],
   };
   const [kicker, title] = pageMeta[view];
   els.pageKicker.textContent = kicker;

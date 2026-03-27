@@ -236,12 +236,12 @@ class HomeView(QWidget):
         selector_header.addWidget(selector_title)
         selector_header.addStretch()
 
-        self.selector_hint = QLabel("当前：自动识别")
+        self.selector_hint = QLabel("当前：自动 OCR")
         self.selector_hint.setObjectName("accentChip")
         selector_header.addWidget(self.selector_hint)
         selector_layout.addLayout(selector_header)
 
-        selector_subtitle = QLabel("比赛演示时建议先锁定要评测的字。这样系统会直接按该字评测，不再自动猜字。")
+        selector_subtitle = QLabel("默认建议直接走自动 OCR。只有在你想连续复测同一个字，或想完全绕过识别波动时，才需要手动锁定。")
         selector_subtitle.setObjectName("sectionSubtitle")
         selector_subtitle.setWordWrap(True)
         selector_layout.addWidget(selector_subtitle)
@@ -252,7 +252,7 @@ class HomeView(QWidget):
         selector_layout.addLayout(self.selector_grid)
         layout.addWidget(selector_card)
 
-        options = [("", "自动识别")]
+        options = [("", "自动 OCR")]
         options.extend(
             (char_key, template_manager.to_display_character(char_key))
             for char_key in template_manager.list_available_chars()
@@ -318,7 +318,7 @@ class HomeView(QWidget):
 
         if self.selected_character_key:
             display = template_manager.to_display_character(self.selected_character_key)
-            self.hero_hint.setText(f"演示模式：已锁定评测字 {display}")
+            self.hero_hint.setText(f"当前已锁定评测字 {display}，后续会跳过自动识别直接评分。")
         self._sync_character_buttons()
 
         clear_layout(self.recent_layout)
@@ -354,11 +354,11 @@ class HomeView(QWidget):
             display = template_manager.to_display_character(normalized)
             self.selector_hint.setText(f"当前：{display}")
             self.btn_start.setText(f"开始评测 {display}")
-            self.hero_hint.setText(f"演示模式：已锁定评测字 {display}")
+            self.hero_hint.setText(f"当前已锁定评测字 {display}，后续会跳过自动识别直接评分。")
         else:
-            self.selector_hint.setText("当前：自动识别")
+            self.selector_hint.setText("当前：自动 OCR")
             self.btn_start.setText("开始评测")
-            self.hero_hint.setText("系统会尝试自动识别当前汉字；比赛演示时建议先锁定评测字。")
+            self.hero_hint.setText("系统会先自动 OCR 识别当前汉字，再决定进入模板评分、通用评分或提示重拍。")
         self._sync_character_buttons()
         if emit_signal:
             self.selected_character_changed.emit(normalized)

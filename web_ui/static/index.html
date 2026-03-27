@@ -12,7 +12,7 @@
       <div class="brand-block">
         <p class="brand-kicker">InkPi Local Console</p>
         <h1>InkPi</h1>
-        <p class="brand-copy">把树莓派评测台做成一张可操作的数字作品笺。</p>
+        <p class="brand-copy">让树莓派评测台变成一张可触达、可解释、可现场演示的书法工作台。</p>
       </div>
 
       <nav class="nav-group">
@@ -22,15 +22,15 @@
       </nav>
 
       <section class="rail-panel">
-        <div class="rail-label">当前模式</div>
+        <div class="rail-label">当前识别模式</div>
         <div class="selection-card">
-          <p id="selectedCharacterLabel">自动识别</p>
-          <span id="selectionModePill" class="status-pill">自动模式</span>
+          <p id="selectedCharacterLabel">自动 OCR</p>
+          <span id="selectionModePill" class="status-pill">自动优先</span>
         </div>
       </section>
 
       <section class="rail-panel">
-        <div class="rail-label">字库选择</div>
+        <div class="rail-label">可选锁定字</div>
         <div id="characterGrid" class="character-grid"></div>
       </section>
 
@@ -70,10 +70,11 @@
       <section class="view is-active" data-view-panel="overview">
         <div class="hero-panel">
           <div class="hero-copy">
-            <p class="hero-kicker">Kiosk-first Demo</p>
-            <h3>先锁定评测字，再拍一张干净的作品。</h3>
+            <p class="hero-kicker">Auto OCR First</p>
+            <h3>默认先自动识别，再决定走模板评分还是通用评分。</h3>
             <p class="hero-text">
-              这版 WebUI 直接复用树莓派本地算法、数据库和云同步。评委只需要选择目标字、拍照评测、查看结果。
+              这版 WebUI 直接复用树莓派本地算法、数据库和云同步链路。
+              正常使用时不需要先选字；只有在你想重复评测同一个字，或想绕过识别波动时，才需要手动锁定。
             </p>
             <div class="hero-actions">
               <button class="primary-action" data-jump="capture">进入拍照页</button>
@@ -141,7 +142,7 @@
             </div>
 
             <p class="preview-note">
-              只保留一个汉字，尽量让主体占取景区六成以上，避免整页练习纸和边框一起入镜。
+              尽量只保留一个字，让主体占取景框的大部分；如果画面里有整页练习纸、边框或大块注释，自动识别会更容易犹豫。
             </p>
           </article>
 
@@ -150,11 +151,11 @@
               <div class="panel-header">
                 <div>
                   <p class="panel-kicker">当前目标</p>
-                  <h3 id="captureTargetTitle">自动识别</h3>
+                  <h3 id="captureTargetTitle">自动 OCR</h3>
                 </div>
               </div>
               <p id="captureTargetCopy" class="panel-copy">
-                当前未锁定评测字，系统会先尝试识别，再决定是否进入评分。
+                当前未锁定评测字。系统会先自动识别字符，再决定进入模板评分、通用评分，或提示重拍。
               </p>
             </article>
 
@@ -176,11 +177,11 @@
               <div class="panel-header">
                 <div>
                   <p class="panel-kicker">失败提示</p>
-                  <h3>重新拍摄建议</h3>
+                  <h3>重拍建议</h3>
                 </div>
               </div>
               <div id="guidancePanel" class="guidance-copy">
-                画面太暗、反光太强、内容过碎或字形与多个内置模板过近时，系统会直接提示重拍，不会乱猜。
+                自动识别拿不准时，系统会明确告诉你是“主体不够干净”“字形过近”还是“当前无法稳定识别”，而不是硬猜一个错字。
               </div>
             </article>
           </aside>
@@ -208,7 +209,7 @@
               </div>
             </div>
             <div id="historyDetail" class="detail-panel empty-state">
-              选择左侧一条记录查看完整得分、风格和建议。
+              选择左侧一条记录，查看完整得分、识别状态和反馈建议。
             </div>
           </article>
         </div>

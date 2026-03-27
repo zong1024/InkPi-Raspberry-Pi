@@ -145,7 +145,7 @@ class CameraView(QWidget):
         self.guide_badge.setObjectName("chipLabel")
         guide_layout.addWidget(self.guide_badge, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        self.target_status = QLabel("当前评测字：自动识别")
+        self.target_status = QLabel("当前评测字：自动 OCR")
         self.target_status.setObjectName("accentChip")
         guide_layout.addWidget(self.target_status, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -183,7 +183,7 @@ class CameraView(QWidget):
         action_layout.setContentsMargins(16, 16, 16, 16)
         action_layout.setSpacing(8)
 
-        self.action_target = QLabel("本次按自动识别模式评测")
+        self.action_target = QLabel("本次按自动 OCR 模式评测")
         self.action_target.setObjectName("mutedLabel")
         self.action_target.setWordWrap(True)
         action_layout.addWidget(self.action_target)
@@ -233,8 +233,8 @@ class CameraView(QWidget):
                 "锁定评测字",
             )
         else:
-            self.target_status.setText("当前评测字：自动识别")
-            self.action_target.setText("本次按自动识别模式评测。演示时建议先回首页锁定评测字。")
+            self.target_status.setText("当前评测字：自动 OCR")
+            self.action_target.setText("本次按自动 OCR 模式评测。系统会先识别字符，再决定进入模板评分、通用评分或提示重拍。")
             self.btn_capture.setText("拍照并评测")
             self.btn_load.setText("载入图片评测")
             self._set_action_hint(
@@ -309,8 +309,8 @@ class CameraView(QWidget):
             "empty_shot": "把单个汉字移到取景框中央，尽量占满参考框的六成以上。",
             "obstruction": "移开手、桌面杂物和纸张边缘，只保留要评测的字。",
             "not_calligraphy": "当前画面不像单个毛笔字。请重新对准作品，避免拍到色块、边框或空白纸面。",
-            "ambiguous_character": "当前字形与多个内置评测字模板过于接近。建议回首页手动锁定评测字后再拍。",
-            "unsupported_character": "当前作品是毛笔字，但不在系统当前内置的评测字库中。请改拍受支持的字，或手动指定评测字。",
+            "ambiguous_character": "自动识别拿到了多个接近候选，当前还不能稳定确定字符。建议让主体更完整、更居中；如果你本来就在复测同一个字，也可以手动锁定后再拍。",
+            "unsupported_character": "当前作品像毛笔字，但系统暂时没法稳定识别出字符。请尽量只保留单字主体，减少整页练习纸和注释干扰后重拍。",
             "too_fragmented": "画面里的内容太散。请只保留一个字，尽量不要把整页一起拍进去。",
             "scattered_content": "请再靠近一点，让目标汉字更集中地落在取景框中央。",
         }

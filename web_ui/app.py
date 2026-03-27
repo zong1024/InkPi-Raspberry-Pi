@@ -43,8 +43,8 @@ GUIDANCE_BY_ERROR = {
     "empty_shot": "请只保留一个汉字，并让主体尽量落在画面中央。",
     "obstruction": "请移开手部、桌面杂物和纸张边框，只保留作品主体。",
     "not_calligraphy": "当前画面不像单个毛笔字，请重新对准作品后再试。",
-    "ambiguous_character": "当前字形与多个内置模板过于接近，建议先锁定评测字再拍。",
-    "unsupported_character": "当前作品像毛笔字，但不在系统当前支持的字库中。",
+    "ambiguous_character": "自动识别拿到了多个接近候选，当前还不能稳定确定具体字符。建议让主体更完整，或在需要复测同一字时手动锁定。",
+    "unsupported_character": "当前画面像毛笔字，但系统暂时没法稳定识别出字符。请尽量只保留单字主体并重新拍摄。",
     "too_fragmented": "画面内容过于零散，请更靠近作品并避免把整张练习纸拍进去。",
     "scattered_content": "主体过散，请把待测字放到取景区中央后重试。",
 }
@@ -272,7 +272,7 @@ def _serialize_selection() -> dict[str, Any]:
         key = state.selected_character
     return {
         "key": key,
-        "display": template_manager.to_display_character(key) if key else "自动识别",
+        "display": template_manager.to_display_character(key) if key else "自动 OCR",
         "locked": bool(key),
     }
 
