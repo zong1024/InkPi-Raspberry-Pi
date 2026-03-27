@@ -163,6 +163,11 @@ class RecognitionFlowService:
                     error_type="not_calligraphy",
                 )
 
+            raise PreprocessingError(
+                analysis.message or "全字识别暂未稳定，请调整取景后重试。",
+                error_type="unsupported_character",
+            )
+
         return self._recognize_with_legacy_matcher(image)
 
     def _recognize_with_legacy_matcher(self, image: np.ndarray) -> RecognitionFlowResult:

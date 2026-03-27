@@ -155,7 +155,7 @@ class HybridEvaluationService:
         best_score = -1.0
 
         for template_info in template_manager.iter_templates(template_style):
-            template = cv2.imread(template_info["path"], cv2.IMREAD_GRAYSCALE)
+            template = template_manager.load_image(template_info["path"], cv2.IMREAD_GRAYSCALE)
             if template is None:
                 continue
 
