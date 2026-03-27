@@ -326,9 +326,10 @@ class TemplateManager:
         if not file_path.exists():
             return None
         try:
-            data = np.fromfile(str(file_path), dtype=np.uint8)
-            if data.size == 0:
+            raw = file_path.read_bytes()
+            if not raw:
                 return None
+            data = np.frombuffer(raw, dtype=np.uint8)
             image = cv2.imdecode(data, flags)
             if image is not None:
                 return image
@@ -344,7 +345,7 @@ class TemplateManager:
         try:
             ok, encoded = cv2.imencode(extension, image)
             if ok:
-                encoded.tofile(str(file_path))
+                file_path.write_bytes(encoded.tobytes())
                 return file_path.exists()
         except Exception:
             pass

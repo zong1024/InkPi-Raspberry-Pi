@@ -135,11 +135,11 @@ class FullRecognitionV2Test(unittest.TestCase):
         image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
         self.assertIsNotNone(image)
 
-        pipeline = FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["黄"])])
+        pipeline = FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["龙"])])
         decision = pipeline.analyze(image)
 
         self.assertEqual(decision.status, "untemplated")
-        self.assertEqual(decision.character_display, "黄")
+        self.assertEqual(decision.character_display, "龙")
 
 
 if __name__ == "__main__":

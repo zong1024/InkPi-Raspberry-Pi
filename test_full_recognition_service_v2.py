@@ -12,7 +12,11 @@ import numpy as np
 
 from full_recognition_v2.pipeline import FullRecognitionPipeline
 from full_recognition_v2.providers import ScriptedCandidateProvider
-from full_recognition_v2.service import FullRecognitionService
+from full_recognition_v2.service import (
+    FullRecognitionAnalysis,
+    FullRecognitionCandidateView,
+    FullRecognitionService,
+)
 from services.template_manager import template_manager
 
 
@@ -39,14 +43,14 @@ class FullRecognitionServiceV2Test(unittest.TestCase):
         self.assertIsNotNone(image)
 
         service = FullRecognitionService(
-            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["黄"])])
+            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["龙"])])
         )
         analysis = service.analyze(image)
 
         self.assertEqual(analysis.status, "untemplated")
         self.assertFalse(analysis.score_ready)
         self.assertEqual(analysis.next_action, "add_template")
-        self.assertEqual(analysis.character_display, "黄")
+        self.assertEqual(analysis.character_display, "龙")
 
     def test_rejected_analysis_requests_retry(self) -> None:
         blank = np.ones((224, 224), dtype=np.uint8) * 255
@@ -62,7 +66,7 @@ class FullRecognitionServiceV2Test(unittest.TestCase):
         self.assertIsNotNone(image)
 
         service = FullRecognitionService(
-            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["黄"])])
+            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["龙"])])
         )
 
         original_dir = template_manager.template_dir
@@ -86,6 +90,72 @@ class FullRecognitionServiceV2Test(unittest.TestCase):
                 after = service.analyze(image)
                 self.assertEqual(after.status, "matched")
                 self.assertTrue(after.score_ready)
+            finally:
+                template_manager.template_dir = original_dir
+                template_manager._templates = original_templates
+                template_manager._cache = original_cache
+
+    def test_bootstrap_template_can_promote_strong_unsupported_candidate(self) -> None:
+        image = cv2.imread(str(self._template_path("shui_kaishu_standard.png")), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        service = FullRecognitionService()
+
+        before = FullRecognitionAnalysis(
+            status="unsupported",
+            character_key=None,
+            character_display=None,
+            confidence=0.41,
+            score_ready=False,
+            template_ready=False,
+            title="Unsupported",
+            message="Need bootstrap",
+            next_action="review",
+            candidates=[
+                FullRecognitionCandidateView(key="黄", display="黄", confidence=0.91, source="paddleocr"),
+                FullRecognitionCandidateView(key="朝", display="朝", confidence=0.73, source="paddleocr"),
+            ],
+        )
+        after = FullRecognitionAnalysis(
+            status="matched",
+            character_key="黄",
+            character_display="黄",
+            confidence=0.88,
+            score_ready=True,
+            template_ready=True,
+            title="Matched",
+            message="Ready",
+            next_action="score",
+            candidates=[
+                FullRecognitionCandidateView(key="黄", display="黄", confidence=0.91, source="paddleocr")
+            ],
+        )
+
+        analyze_calls: list[int] = []
+
+        def fake_analyze(_image, limit: int = 8):
+            del limit
+            analyze_calls.append(1)
+            return before if len(analyze_calls) == 1 else after
+
+        service.analyze = fake_analyze  # type: ignore[method-assign]
+        service.extract_template_seed = lambda _image: image  # type: ignore[method-assign]
+
+        original_dir = template_manager.template_dir
+        original_templates = copy.deepcopy(template_manager._templates)
+        original_cache = dict(template_manager._cache)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                template_manager.template_dir = Path(temp_dir)
+                template_manager._templates = {}
+                template_manager._cache = {}
+
+                result = service.bootstrap_template(image, min_confidence=0.82)
+                self.assertTrue(result.created)
+                self.assertEqual(result.character_display, "黄")
+                self.assertEqual(result.after_status, "matched")
+                self.assertTrue(Path(result.template_path).exists())
             finally:
                 template_manager.template_dir = original_dir
                 template_manager._templates = original_templates

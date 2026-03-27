@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import cv2
 import numpy as np
 
 from full_recognition_v2.factory import build_default_full_pipeline
@@ -109,7 +108,7 @@ class FullRecognitionService:
 
     def analyze_path(self, path: str | Path, limit: int = 8) -> FullRecognitionAnalysis:
         """Load an image from disk and analyze it."""
-        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+        image = template_manager.load_image(path, 0)
         if image is None:
             return FullRecognitionAnalysis(
                 status="load_error",
@@ -134,7 +133,11 @@ class FullRecognitionService:
     ) -> TemplateBootstrapResult:
         """Create a new local template from a high-confidence recognized character image."""
         before = self.analyze(image)
-        character_display = force_character or before.character_display
+        character_display = self._resolve_bootstrap_character(
+            before,
+            min_confidence=min_confidence,
+            force_character=force_character,
+        )
         character_key = template_manager.resolve_character_key(character_display) if character_display else None
 
         if not character_display:
@@ -148,7 +151,7 @@ class FullRecognitionService:
                 message="当前图片还没有足够稳定的字符结果，无法自动建模板。",
             )
 
-        if before.template_ready and not force_character:
+        if before.template_ready and not force_character and before.character_display == character_display:
             return TemplateBootstrapResult(
                 created=False,
                 character_key=character_key,
@@ -159,7 +162,8 @@ class FullRecognitionService:
                 message="当前字符已经有可用模板，无需重复生成。",
             )
 
-        if before.confidence < min_confidence and not force_character:
+        bootstrap_confidence = self._bootstrap_confidence(before, character_display)
+        if bootstrap_confidence < min_confidence and not force_character:
             return TemplateBootstrapResult(
                 created=False,
                 character_key=character_key,
@@ -183,7 +187,14 @@ class FullRecognitionService:
             )
 
         style_key = template_manager.resolve_style_key(style)
-        template_image = template_manager.create_template_from_user_image(seed, character_display, style_key)
+        subject = character_geometry_service.extract_subject(seed)
+        if subject is None:
+            subject = character_geometry_service.extract_subject(image)
+        if subject is not None:
+            template_image = subject.binary
+        else:
+            template_image = template_manager.create_template_from_user_image(seed, character_display, style_key)
+
         created = template_manager.add_template(
             template_image,
             character=character_display,
@@ -225,6 +236,39 @@ class FullRecognitionService:
         if subject is not None:
             return subject.binary
         return None
+
+    def _resolve_bootstrap_character(
+        self,
+        analysis: FullRecognitionAnalysis,
+        min_confidence: float,
+        force_character: Optional[str] = None,
+    ) -> Optional[str]:
+        """Pick the safest character label to turn into a new local template."""
+        if force_character:
+            return force_character
+
+        if analysis.character_display and analysis.confidence >= min_confidence:
+            return analysis.character_display
+
+        if analysis.status != "unsupported" or not analysis.candidates:
+            return None
+
+        top = analysis.candidates[0]
+        second = analysis.candidates[1] if len(analysis.candidates) > 1 else None
+        gap_top2 = top.confidence - (second.confidence if second else 0.0)
+        if top.confidence >= min_confidence and gap_top2 >= 0.08:
+            return top.display
+        return None
+
+    def _bootstrap_confidence(self, analysis: FullRecognitionAnalysis, character_display: str) -> float:
+        """Estimate how trustworthy the chosen bootstrap label is."""
+        if analysis.character_display == character_display:
+            return analysis.confidence
+
+        for candidate in analysis.candidates:
+            if candidate.display == character_display or candidate.key == character_display:
+                return candidate.confidence
+        return 0.0
 
     def _present(self, decision: RecognitionDecision) -> FullRecognitionAnalysis:
         candidates = [

@@ -54,6 +54,9 @@ Planned stages:
 7. Template bootstrap
    High-confidence `untemplated` characters can be converted into new local templates automatically,
    so the system can grow from "recognized" to "scorable" without hand-cropping every sample.
+   The latest bootstrap flow also accepts high-confidence `unsupported` results when OCR has a clear
+   single-character winner, which lets the isolated branch keep expanding its local scoring library
+   without polluting the current demo runtime.
 
 ## Provider plan
 
@@ -75,6 +78,7 @@ Current status:
   [service.py](C:/Users/zongrui/Documents/2/full_recognition_v2/service.py)
 - The batch bootstrap entrypoint now lives in
   [bootstrap_templates.py](C:/Users/zongrui/Documents/2/full_recognition_v2/bootstrap_templates.py)
+- High-confidence OCR-only results can now be auto-promoted into local templates during batch bootstrap
 - It runs PaddleOCR over both the original image and the extracted single-character ROI
 - It ignores multi-character annotation text and prefers large, centered, single-character detections
 - It is optional and degrades cleanly when PaddleOCR is not installed

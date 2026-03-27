@@ -7,9 +7,8 @@ import json
 from pathlib import Path
 from typing import Iterable, List
 
-import cv2
-
 from full_recognition_v2.service import FullRecognitionService
+from services.template_manager import template_manager
 
 
 def iter_images(root: Path) -> Iterable[Path]:
@@ -34,7 +33,7 @@ def bootstrap_directory(
     report: List[dict] = []
 
     for image_path in iter_images(source):
-        image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+        image = template_manager.load_image(image_path, 0)
         if image is None:
             report.append(
                 {
@@ -47,7 +46,7 @@ def bootstrap_directory(
             continue
 
         analysis = service.analyze(image)
-        if analysis.status != "untemplated":
+        if analysis.status not in {"untemplated", "unsupported"}:
             report.append(
                 {
                     "file": str(image_path),
