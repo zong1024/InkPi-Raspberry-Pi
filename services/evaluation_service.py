@@ -53,8 +53,9 @@ class EvaluationService:
         score_explanation = "已使用本地模板和结构对比模型评分。"
 
         if enable_recognition or character_name is not None:
+            recognition_input = texture_image if texture_image is not None else processed_image
             recognition_info = recognition_flow_service.analyze(
-                processed_image,
+                recognition_input,
                 requested_character=character_name,
                 requested_style=template_style,
             )
