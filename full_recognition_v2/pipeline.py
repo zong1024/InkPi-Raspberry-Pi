@@ -29,6 +29,12 @@ class NextGenConfig:
     single_candidate_min_provider: float = 0.48
     single_candidate_min_rerank: float = 79.0
     single_candidate_min_structure: float = 72.0
+    generic_provider_min: float = 0.88
+    generic_provider_gap: float = 0.08
+    generic_min_rerank: float = 55.0
+    generic_single_provider_min: float = 0.50
+    generic_single_min_rerank: float = 55.0
+    generic_single_min_structure: float = 35.0
     rerank_weight: float = 0.82
     provider_weight: float = 0.18
 
@@ -319,11 +325,18 @@ class FullRecognitionPipeline:
         second: RecognitionCandidate | None,
     ) -> bool:
         """Allow strong OCR-only winners to fall back to generic scoring."""
+        structure = float(top.evidence.get("structure", 0.0))
         provider_gap = top.provider_score - (second.provider_score if second else 0.0)
+        if second is None:
+            return (
+                top.provider_score >= self.config.generic_single_provider_min
+                and top.rerank_score >= self.config.generic_single_min_rerank
+                and structure >= self.config.generic_single_min_structure
+            )
         return (
-            top.provider_score >= 0.88
-            and provider_gap >= 0.08
-            and top.rerank_score >= 68.0
+            top.provider_score >= self.config.generic_provider_min
+            and provider_gap >= self.config.generic_provider_gap
+            and top.rerank_score >= self.config.generic_min_rerank
         )
 
     def _has_external_candidate_provider(self) -> bool:
