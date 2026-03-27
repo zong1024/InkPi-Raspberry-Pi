@@ -12,6 +12,8 @@ import numpy as np
 from full_recognition_v2.factory import build_default_full_pipeline
 from full_recognition_v2.pipeline import FullRecognitionPipeline
 from full_recognition_v2.types import RecognitionDecision
+from services.character_geometry_service import character_geometry_service
+from services.template_manager import template_manager
 
 
 @dataclass
@@ -69,6 +71,31 @@ class FullRecognitionAnalysis:
         }
 
 
+@dataclass
+class TemplateBootstrapResult:
+    """Outcome of turning an analyzed image into a new local template."""
+
+    created: bool
+    character_key: Optional[str]
+    character_display: Optional[str]
+    template_path: Optional[str]
+    before_status: str
+    after_status: Optional[str]
+    message: str
+
+    def to_dict(self) -> dict:
+        """Serialize to a plain dictionary."""
+        return {
+            "created": self.created,
+            "character_key": self.character_key,
+            "character_display": self.character_display,
+            "template_path": self.template_path,
+            "before_status": self.before_status,
+            "after_status": self.after_status,
+            "message": self.message,
+        }
+
+
 class FullRecognitionService:
     """Thin adapter that turns pipeline decisions into product-level semantics."""
 
@@ -96,6 +123,108 @@ class FullRecognitionService:
                 next_action="retry",
             )
         return self.analyze(image, limit=limit)
+
+    def bootstrap_template(
+        self,
+        image: np.ndarray,
+        style: str = "kaishu",
+        calligrapher: str = "bootstrap",
+        min_confidence: float = 0.82,
+        force_character: Optional[str] = None,
+    ) -> TemplateBootstrapResult:
+        """Create a new local template from a high-confidence recognized character image."""
+        before = self.analyze(image)
+        character_display = force_character or before.character_display
+        character_key = template_manager.resolve_character_key(character_display) if character_display else None
+
+        if not character_display:
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=None,
+                character_display=None,
+                template_path=None,
+                before_status=before.status,
+                after_status=None,
+                message="当前图片还没有足够稳定的字符结果，无法自动建模板。",
+            )
+
+        if before.template_ready and not force_character:
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=character_key,
+                character_display=character_display,
+                template_path=self._template_path(character_display, style, calligrapher),
+                before_status=before.status,
+                after_status=before.status,
+                message="当前字符已经有可用模板，无需重复生成。",
+            )
+
+        if before.confidence < min_confidence and not force_character:
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=character_key,
+                character_display=character_display,
+                template_path=None,
+                before_status=before.status,
+                after_status=None,
+                message="识别置信度还不够高，暂时不自动建模板。",
+            )
+
+        seed = self.extract_template_seed(image)
+        if seed is None:
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=character_key,
+                character_display=character_display,
+                template_path=None,
+                before_status=before.status,
+                after_status=None,
+                message="未能从图片中提取到稳定的主字区域，无法生成模板。",
+            )
+
+        style_key = template_manager.resolve_style_key(style)
+        template_image = template_manager.create_template_from_user_image(seed, character_display, style_key)
+        created = template_manager.add_template(
+            template_image,
+            character=character_display,
+            style=style_key,
+            calligrapher=calligrapher,
+        )
+        if not created:
+            return TemplateBootstrapResult(
+                created=False,
+                character_key=character_key,
+                character_display=character_display,
+                template_path=None,
+                before_status=before.status,
+                after_status=None,
+                message="模板文件写入失败。",
+            )
+
+        after = self.analyze(image)
+        return TemplateBootstrapResult(
+            created=True,
+            character_key=template_manager.resolve_character_key(character_display),
+            character_display=character_display,
+            template_path=self._template_path(character_display, style_key, calligrapher),
+            before_status=before.status,
+            after_status=after.status,
+            message="模板已生成并加入本地模板库。",
+        )
+
+    def extract_template_seed(self, image: np.ndarray) -> np.ndarray | None:
+        """Extract a seed crop that is suitable for new template generation."""
+        for provider in self.pipeline.providers:
+            extractor = getattr(provider, "extract_template_seed", None)
+            if callable(extractor):
+                seed = extractor(image)
+                if seed is not None:
+                    return seed
+
+        subject = character_geometry_service.extract_subject(image)
+        if subject is not None:
+            return subject.binary
+        return None
 
     def _present(self, decision: RecognitionDecision) -> FullRecognitionAnalysis:
         candidates = [
@@ -185,6 +314,9 @@ class FullRecognitionService:
             candidates=candidates,
             diagnostics=decision.diagnostics,
         )
+
+    def _template_path(self, character: str, style: str, calligrapher: str) -> str:
+        return str(template_manager.template_dir / f"{character}_{style}_{calligrapher}.png")
 
 
 full_recognition_service = FullRecognitionService()

@@ -93,7 +93,7 @@ class FullRecognitionPipeline:
 
         for key in target_keys:
             for template_info in template_manager.iter_character_templates(key):
-                template = cv2.imread(template_info["path"], cv2.IMREAD_GRAYSCALE)
+                template = template_manager.load_image(template_info["path"], cv2.IMREAD_GRAYSCALE)
                 if template is None:
                     continue
 

@@ -51,6 +51,10 @@ Planned stages:
    - `retry`
    - `review`
 
+7. Template bootstrap
+   High-confidence `untemplated` characters can be converted into new local templates automatically,
+   so the system can grow from "recognized" to "scorable" without hand-cropping every sample.
+
 ## Provider plan
 
 Current isolated code already supports pluggable candidate providers:
@@ -69,6 +73,8 @@ Current status:
   [paddle_provider.py](C:/Users/zongrui/Documents/2/full_recognition_v2/paddle_provider.py)
 - The application-facing wrapper now lives in
   [service.py](C:/Users/zongrui/Documents/2/full_recognition_v2/service.py)
+- The batch bootstrap entrypoint now lives in
+  [bootstrap_templates.py](C:/Users/zongrui/Documents/2/full_recognition_v2/bootstrap_templates.py)
 - It runs PaddleOCR over both the original image and the extracted single-character ROI
 - It ignores multi-character annotation text and prefers large, centered, single-character detections
 - It is optional and degrades cleanly when PaddleOCR is not installed

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +13,7 @@ import numpy as np
 from full_recognition_v2.pipeline import FullRecognitionPipeline
 from full_recognition_v2.providers import ScriptedCandidateProvider
 from full_recognition_v2.service import FullRecognitionService
+from services.template_manager import template_manager
 
 
 class FullRecognitionServiceV2Test(unittest.TestCase):
@@ -53,6 +56,40 @@ class FullRecognitionServiceV2Test(unittest.TestCase):
         self.assertEqual(analysis.status, "rejected")
         self.assertEqual(analysis.next_action, "retry")
         self.assertFalse(analysis.score_ready)
+
+    def test_bootstrap_template_turns_untemplated_into_matched(self) -> None:
+        image = cv2.imread(str(self._template_path("shui_kaishu_standard.png")), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        service = FullRecognitionService(
+            FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["黄"])])
+        )
+
+        original_dir = template_manager.template_dir
+        original_templates = copy.deepcopy(template_manager._templates)
+        original_cache = dict(template_manager._cache)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            try:
+                template_manager.template_dir = Path(temp_dir)
+                template_manager._templates = {}
+                template_manager._cache = {}
+
+                before = service.analyze(image)
+                self.assertEqual(before.status, "untemplated")
+
+                result = service.bootstrap_template(image, min_confidence=0.5)
+                self.assertTrue(result.created)
+                self.assertEqual(result.after_status, "matched")
+                self.assertTrue(Path(result.template_path).exists())
+
+                after = service.analyze(image)
+                self.assertEqual(after.status, "matched")
+                self.assertTrue(after.score_ready)
+            finally:
+                template_manager.template_dir = original_dir
+                template_manager._templates = original_templates
+                template_manager._cache = original_cache
 
 
 if __name__ == "__main__":

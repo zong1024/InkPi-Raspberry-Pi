@@ -123,6 +123,17 @@ class PaddleOcrCandidateProvider(CandidateProvider):
             for key, score in ordered[:limit]
         ]
 
+    def extract_template_seed(self, image: np.ndarray) -> np.ndarray | None:
+        """Extract a grayscale crop suitable for seeding a new local template."""
+        loose_roi = self._extract_loose_roi(image)
+        if loose_roi is not None:
+            return loose_roi
+
+        subject = character_geometry_service.extract_subject(image)
+        if subject is not None:
+            return subject.binary
+        return None
+
     def _collect_detections(self, image: np.ndarray) -> List[OcrDetection]:
         subject = character_geometry_service.extract_subject(image)
         variants: list[tuple[str, np.ndarray]] = [("full", image)]

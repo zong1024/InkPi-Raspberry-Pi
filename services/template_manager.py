@@ -160,7 +160,7 @@ class TemplateManager:
         
         # 加载图像
         try:
-            image = cv2.imread(template_info["path"], cv2.IMREAD_GRAYSCALE)
+            image = self.load_image(template_info["path"], cv2.IMREAD_GRAYSCALE)
             if image is not None:
                 self._cache[cache_key] = image
                 return image
@@ -299,7 +299,8 @@ class TemplateManager:
             filepath = self.template_dir / filename
             
             # 保存图像
-            cv2.imwrite(str(filepath), image)
+            if not self.save_image(filepath, image):
+                raise ValueError(f"failed to save template image: {filepath}")
             
             # 更新索引
             if character not in self._templates:
@@ -318,6 +319,36 @@ class TemplateManager:
         except Exception as e:
             self.logger.error(f"添加字帖失败: {e}")
             return False
+
+    def load_image(self, path: str | Path, flags: int = cv2.IMREAD_GRAYSCALE) -> Optional[np.ndarray]:
+        """Load an image with Unicode-path support on Windows."""
+        file_path = Path(path)
+        if not file_path.exists():
+            return None
+        try:
+            data = np.fromfile(str(file_path), dtype=np.uint8)
+            if data.size == 0:
+                return None
+            image = cv2.imdecode(data, flags)
+            if image is not None:
+                return image
+        except Exception:
+            pass
+        return cv2.imread(str(file_path), flags)
+
+    def save_image(self, path: str | Path, image: np.ndarray) -> bool:
+        """Save an image with Unicode-path support on Windows."""
+        file_path = Path(path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        extension = file_path.suffix.lower() or ".png"
+        try:
+            ok, encoded = cv2.imencode(extension, image)
+            if ok:
+                encoded.tofile(str(file_path))
+                return file_path.exists()
+        except Exception:
+            pass
+        return bool(cv2.imwrite(str(file_path), image))
     
     def create_template_from_user_image(
         self,
