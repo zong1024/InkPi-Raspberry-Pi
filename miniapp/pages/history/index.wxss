@@ -130,14 +130,28 @@
   align-items: center;
 }
 
+.record-char-wrap {
+  width: 100%;
+  min-height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .record-char {
+  display: block;
+  width: 1.3em;
+  text-align: center;
   font-size: 48rpx;
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.08;
 }
 
 .record-style {
+  display: block;
   margin-top: 12rpx;
+  width: 100%;
+  text-align: center;
   font-size: 22rpx;
 }
 

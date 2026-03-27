@@ -61,7 +61,9 @@
     bindtap="openDetail"
   >
     <view class="record-stamp" style="background: {{item.scoreSoft}}; color: {{item.scoreColor}};">
-      <text class="record-char">{{item.characterLabel}}</text>
+      <view class="record-char-wrap">
+        <text class="record-char">{{item.characterLabel}}</text>
+      </view>
       <text class="record-style">{{item.styleLabel}}</text>
     </view>
 

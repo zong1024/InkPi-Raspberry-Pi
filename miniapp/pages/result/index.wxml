@@ -9,7 +9,9 @@
     <view class="detail-top">
       <view class="detail-copy">
         <text class="eyebrow">InkPi Result</text>
-        <text class="detail-character">{{result.characterLabel}}</text>
+        <view class="detail-character-wrap">
+          <text class="detail-character">{{result.characterLabel}}</text>
+        </view>
         <text class="detail-meta">{{result.styleLabel}} / {{result.timestamp}}</text>
       </view>
 

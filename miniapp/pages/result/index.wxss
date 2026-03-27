@@ -21,11 +21,21 @@
   flex: 1;
 }
 
+.detail-character-wrap {
+  margin-top: 18rpx;
+  width: 1.4em;
+  min-height: 1.24em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .detail-character {
   display: block;
-  margin-top: 18rpx;
+  width: 100%;
+  text-align: center;
   font-size: 70rpx;
-  line-height: 1.02;
+  line-height: 1.08;
   font-weight: 800;
   color: #2d2219;
 }
