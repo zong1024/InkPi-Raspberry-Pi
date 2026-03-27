@@ -13,6 +13,8 @@ from full_recognition_v2.factory import build_default_full_pipeline
 from full_recognition_v2.paddle_provider import PaddleOcrCandidateProvider
 from full_recognition_v2.pipeline import FullRecognitionPipeline
 from full_recognition_v2.providers import ScriptedCandidateProvider
+from full_recognition_v2.types import RecognitionCandidate
+from services.character_geometry_service import character_geometry_service
 
 
 class FullRecognitionV2Test(unittest.TestCase):
@@ -100,6 +102,33 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertGreaterEqual(len(candidates), 2)
         self.assertEqual(candidates[0].key, "shui")
         self.assertGreater(candidates[0].provider_score, candidates[1].provider_score)
+
+    def test_single_strong_candidate_can_match(self) -> None:
+        template_path = self._template_path("shui_kaishu_standard.png")
+        image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        subject = character_geometry_service.extract_subject(image)
+        self.assertIsNotNone(subject)
+
+        pipeline = FullRecognitionPipeline()
+        decision = pipeline._decide(
+            subject,
+            [
+                RecognitionCandidate(
+                    key="shui",
+                    display="水",
+                    provider_score=0.87,
+                    rerank_score=80.2,
+                    final_score=81.1,
+                    provider="paddleocr",
+                    evidence={"structure": 79.5},
+                )
+            ],
+        )
+
+        self.assertEqual(decision.status, "matched")
+        self.assertEqual(decision.character_key, "shui")
 
 
 if __name__ == "__main__":

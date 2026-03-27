@@ -25,6 +25,10 @@ class NextGenConfig:
     min_gap_top2: float = 3.0
     min_gap_top3: float = 4.0
     min_provider_bonus: float = 0.0
+    single_candidate_accept_score: float = 76.0
+    single_candidate_min_provider: float = 0.48
+    single_candidate_min_rerank: float = 79.0
+    single_candidate_min_structure: float = 72.0
     rerank_weight: float = 0.82
     provider_weight: float = 0.18
 
@@ -185,6 +189,17 @@ class FullRecognitionPipeline:
                 roi_bbox=subject.bbox,
             )
 
+        if second is None and self._is_single_candidate_match(top):
+            return RecognitionDecision(
+                status="matched",
+                character_key=top.key,
+                character_display=top.display,
+                confidence=max(confidence, 0.62),
+                candidates=candidates,
+                diagnostics=diagnostics,
+                roi_bbox=subject.bbox,
+            )
+
         if gap_top2 < self.config.min_gap_top2 or gap_top3 < self.config.min_gap_top3:
             return RecognitionDecision(
                 status="ambiguous",
@@ -221,6 +236,15 @@ class FullRecognitionPipeline:
         gap3_term = np.clip(gap_top3 / 10.0, 0.0, 1.0)
         provider_term = np.clip(top.provider_score, 0.0, 1.0)
         return float(score_term * 0.5 + gap_term * 0.2 + gap3_term * 0.15 + provider_term * 0.15)
+
+    def _is_single_candidate_match(self, top: RecognitionCandidate) -> bool:
+        structure = float(top.evidence.get("structure", 0.0))
+        return (
+            top.final_score >= self.config.single_candidate_accept_score
+            and top.provider_score >= self.config.single_candidate_min_provider
+            and top.rerank_score >= self.config.single_candidate_min_rerank
+            and structure >= self.config.single_candidate_min_structure
+        )
 
 
 full_recognition_pipeline = FullRecognitionPipeline()
