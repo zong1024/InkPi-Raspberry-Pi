@@ -223,6 +223,18 @@ class FullRecognitionPipeline:
                 roi_bbox=subject.bbox,
             )
 
+        if self._should_generic_score_from_ocr(top, second):
+            return RecognitionDecision(
+                status="untemplated",
+                character_key=top.key,
+                character_display=top.display,
+                confidence=max(confidence, min(0.94, top.provider_score * 0.9)),
+                candidates=candidates,
+                reason="已通过全字 OCR 稳定识别字符，但当前模板证据不足，建议转入通用评分。",
+                diagnostics=diagnostics,
+                roi_bbox=subject.bbox,
+            )
+
         return RecognitionDecision(
             status="unsupported",
             character_key=None,
@@ -299,6 +311,19 @@ class FullRecognitionPipeline:
             and top.provider_score >= self.config.single_candidate_min_provider
             and top.rerank_score >= self.config.single_candidate_min_rerank
             and structure >= self.config.single_candidate_min_structure
+        )
+
+    def _should_generic_score_from_ocr(
+        self,
+        top: RecognitionCandidate,
+        second: RecognitionCandidate | None,
+    ) -> bool:
+        """Allow strong OCR-only winners to fall back to generic scoring."""
+        provider_gap = top.provider_score - (second.provider_score if second else 0.0)
+        return (
+            top.provider_score >= 0.88
+            and provider_gap >= 0.08
+            and top.rerank_score >= 68.0
         )
 
     def _has_external_candidate_provider(self) -> bool:

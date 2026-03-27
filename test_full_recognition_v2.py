@@ -141,6 +141,33 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertEqual(decision.status, "untemplated")
         self.assertEqual(decision.character_display, "龙")
 
+    def test_strong_single_ocr_winner_can_fall_back_to_generic_scoring(self) -> None:
+        template_path = self._template_path("shui_kaishu_standard.png")
+        image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        subject = character_geometry_service.extract_subject(image)
+        self.assertIsNotNone(subject)
+
+        pipeline = FullRecognitionPipeline()
+        decision = pipeline._decide(
+            subject,
+            [
+                RecognitionCandidate(
+                    key="三",
+                    display="三",
+                    provider_score=0.9644,
+                    rerank_score=74.58,
+                    final_score=78.51,
+                    provider="remote_ocr",
+                    evidence={"structure": 61.0},
+                )
+            ],
+        )
+
+        self.assertEqual(decision.status, "untemplated")
+        self.assertEqual(decision.character_display, "三")
+
 
 if __name__ == "__main__":
     unittest.main()
