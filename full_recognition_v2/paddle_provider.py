@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 import cv2
 import numpy as np
@@ -128,6 +128,9 @@ class PaddleOcrCandidateProvider(CandidateProvider):
         variants: list[tuple[str, np.ndarray]] = [("full", image)]
         if subject is not None:
             variants.insert(0, ("roi", subject.binary))
+        loose_roi = self._extract_loose_roi(image)
+        if loose_roi is not None:
+            variants.insert(0, ("ocr_roi", loose_roi))
 
         merged: List[OcrDetection] = []
         for source, variant in variants:
@@ -241,7 +244,11 @@ class PaddleOcrCandidateProvider(CandidateProvider):
         # Large, centered, single-character detections are more likely to be the target.
         area_bonus = np.clip((detection.area_share - 0.015) / 0.20, 0.0, 1.0)
         center_bonus = np.clip(1.0 - detection.center_distance, 0.0, 1.0)
-        source_bonus = 1.0 if detection.source == "full" else 1.12
+        source_bonus = {
+            "full": 1.0,
+            "roi": 1.12,
+            "ocr_roi": 1.18,
+        }.get(detection.source, 1.0)
         score = detection.score * source_bonus * (0.45 + area_bonus * 0.30 + center_bonus * 0.25)
         return float(np.clip(score, 0.0, 0.999))
 
@@ -256,3 +263,53 @@ class PaddleOcrCandidateProvider(CandidateProvider):
         target_h = max(320, normalized.shape[0])
         resized = cv2.resize(normalized, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
         return cv2.cvtColor(resized, cv2.COLOR_GRAY2BGR)
+
+    def _extract_loose_roi(self, image: np.ndarray) -> np.ndarray | None:
+        """Build a looser OCR crop so teaching-paper annotations do not dominate the OCR stage."""
+        if len(image.shape) == 2:
+            gray = image.copy()
+        else:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, binary = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary, 8)
+        if num_labels <= 1:
+            return None
+
+        height, width = binary.shape
+        image_area = height * width
+        center_x = width / 2.0
+        center_y = height / 2.0
+        best_label = None
+        best_score = None
+
+        for label in range(1, num_labels):
+            x, y, box_w, box_h, area = stats[label]
+            if area < max(120, int(image_area * 0.0018)):
+                continue
+
+            fill_ratio = area / max(1, box_w * box_h)
+            if fill_ratio <= 0.05:
+                continue
+
+            comp_x, comp_y = centroids[label]
+            center_distance = float(np.hypot(comp_x - center_x, comp_y - center_y))
+            score = area - 0.55 * center_distance + 900.0 * fill_ratio
+            if best_score is None or score > best_score:
+                best_score = score
+                best_label = label
+
+        if best_label is None:
+            return None
+
+        x, y, box_w, box_h, _ = stats[best_label]
+        pad = int(max(box_w, box_h) * 0.20) + 10
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(width, x + box_w + pad)
+        y1 = min(height, y + box_h + pad)
+        crop = gray[y0:y1, x0:x1]
+        if crop.size == 0:
+            return None
+        return crop
