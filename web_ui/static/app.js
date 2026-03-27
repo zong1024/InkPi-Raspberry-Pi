@@ -4,6 +4,7 @@ const state = {
   history: [],
   selectedRecordId: null,
   previewTimer: null,
+  cameraSettings: null,
 };
 
 const els = {
@@ -13,6 +14,8 @@ const els = {
   selectedCharacterLabel: document.getElementById("selectedCharacterLabel"),
   selectionModePill: document.getElementById("selectionModePill"),
   cameraStatusText: document.getElementById("cameraStatusText"),
+  cameraLensText: document.getElementById("cameraLensText"),
+  cameraZoomText: document.getElementById("cameraZoomText"),
   recordCountText: document.getElementById("recordCountText"),
   averageScoreText: document.getElementById("averageScoreText"),
   pageKicker: document.getElementById("pageKicker"),
@@ -27,6 +30,7 @@ const els = {
   latestResultCard: document.getElementById("latestResultCard"),
   captureStatusPill: document.getElementById("captureStatusPill"),
   cameraPreview: document.getElementById("cameraPreview"),
+  guideSquare: document.getElementById("guideSquare"),
   guideCaption: document.getElementById("guideCaption"),
   captureTargetTitle: document.getElementById("captureTargetTitle"),
   captureTargetCopy: document.getElementById("captureTargetCopy"),
@@ -38,6 +42,14 @@ const els = {
   historyDetail: document.getElementById("historyDetail"),
   refreshHistoryButton: document.getElementById("refreshHistoryButton"),
   historyItemTemplate: document.getElementById("historyItemTemplate"),
+  lensPresetGroup: document.getElementById("lensPresetGroup"),
+  lensPresetButtons: [...document.querySelectorAll("[data-lens-mode]")],
+  zoomOutButton: document.getElementById("zoomOutButton"),
+  zoomInButton: document.getElementById("zoomInButton"),
+  zoomSlider: document.getElementById("zoomSlider"),
+  zoomValueText: document.getElementById("zoomValueText"),
+  lensValueText: document.getElementById("lensValueText"),
+  resetViewButton: document.getElementById("resetViewButton"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -60,6 +72,30 @@ function bindEvents() {
   els.uploadButton.addEventListener("click", () => els.fileInput.click());
   els.fileInput.addEventListener("change", handleUpload);
   els.refreshHistoryButton.addEventListener("click", loadHistory);
+
+  els.lensPresetButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      void updateCameraSettings({ lens_mode: button.dataset.lensMode });
+    });
+  });
+
+  els.zoomOutButton.addEventListener("click", () => {
+    void updateCameraSettings({ zoom_delta: -1 });
+  });
+  els.zoomInButton.addEventListener("click", () => {
+    void updateCameraSettings({ zoom_delta: 1 });
+  });
+  els.zoomSlider.addEventListener("input", () => {
+    const zoom = Number(els.zoomSlider.value) / 10;
+    syncZoomReadout({ ...(state.cameraSettings || {}), zoom_ratio: zoom });
+  });
+  els.zoomSlider.addEventListener("change", () => {
+    const zoom = Number(els.zoomSlider.value) / 10;
+    void updateCameraSettings({ zoom_ratio: zoom });
+  });
+  els.resetViewButton.addEventListener("click", () => {
+    void updateCameraSettings({ reset: true });
+  });
 }
 
 async function loadBootstrap() {
@@ -67,9 +103,11 @@ async function loadBootstrap() {
     const data = await fetchJson("/api/bootstrap");
     state.bootstrap = data;
     state.history = data.history || [];
+    state.cameraSettings = data.camera_settings || data.camera?.settings || null;
     renderBootstrap();
     renderHistory();
     renderLatestResult(data.last_result || state.history[0] || null);
+    renderCameraSettings(state.cameraSettings);
     switchView(state.view);
   } catch (error) {
     showBanner(`初始化失败：${error.message}`, true);
@@ -155,9 +193,9 @@ function updateSelection(selection) {
   els.selectionModePill.textContent = selection.locked ? "锁定模式" : "自动模式";
   els.captureTargetTitle.textContent = selection.display;
   els.captureTargetCopy.textContent = selection.locked
-    ? `当前已锁定评测字“${selection.display}”，系统将直接按该字进入评分。`
-    : "当前未锁定评测字，系统会先尝试识别，再决定是否进入评测。";
-  els.guideCaption.textContent = selection.locked ? `TARGET ${selection.display}` : "AUTO";
+    ? `当前已锁定评测字“${selection.display}”，系统会直接按该字进入评分。`
+    : "当前未锁定评测字，系统会先尝试识别，再决定是否进入评分。";
+  updateGuideCaption(selection, state.cameraSettings);
 }
 
 function renderLatestResult(result) {
@@ -223,7 +261,7 @@ async function loadRecordDetail(recordId) {
 function renderHistoryDetail(item) {
   if (!item) {
     els.historyDetail.className = "detail-panel empty-state";
-    els.historyDetail.textContent = "选择左侧一条记录查看完整详情。";
+    els.historyDetail.textContent = "选择左侧一条记录查看完整得分、风格和建议。";
     return;
   }
 
@@ -300,8 +338,65 @@ function refreshCameraFrame() {
     els.captureStatusPill.textContent = "摄像头离线";
   };
   els.cameraPreview.onload = () => {
-    els.captureStatusPill.textContent = "实时在线";
+    els.captureStatusPill.textContent = state.cameraSettings ? `${state.cameraSettings.lens_label} ${state.cameraSettings.total_zoom.toFixed(1)}x` : "实时在线";
   };
+}
+
+async function updateCameraSettings(payload) {
+  try {
+    const settings = await fetchJson("/api/camera/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    state.cameraSettings = settings;
+    renderCameraSettings(settings);
+    refreshCameraFrame();
+    showBanner(`已切换到${settings.lens_label} ${settings.total_zoom.toFixed(1)}x`);
+  } catch (error) {
+    showBanner(`调整取景失败：${error.message}`, true);
+  }
+}
+
+function renderCameraSettings(settings) {
+  if (!settings) {
+    return;
+  }
+  state.cameraSettings = settings;
+  els.cameraLensText.textContent = settings.lens_label;
+  els.cameraZoomText.textContent = `${settings.total_zoom.toFixed(1)}x`;
+  els.zoomValueText.textContent = `${settings.total_zoom.toFixed(1)}x`;
+  els.lensValueText.textContent = `${settings.lens_label} / 数码 ${settings.zoom_ratio.toFixed(1)}x`;
+  syncZoomReadout(settings);
+
+  els.lensPresetButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.lensMode === settings.lens_mode);
+  });
+
+  const guideScale = Number(settings.guide_scale || 0.7);
+  const insetPercent = ((1 - guideScale) * 100) / 2;
+  els.guideSquare.style.inset = `${insetPercent}%`;
+  updateGuideCaption(state.bootstrap?.selection, settings);
+}
+
+function syncZoomReadout(settings) {
+  const zoomRatio = Number(settings.zoom_ratio || 1);
+  els.zoomSlider.min = String(Math.round((settings.zoom_min || 1) * 10));
+  els.zoomSlider.max = String(Math.round((settings.zoom_max || 3) * 10));
+  els.zoomSlider.value = String(Math.round(zoomRatio * 10));
+  els.zoomValueText.textContent = `${Number(settings.total_zoom || zoomRatio).toFixed(1)}x`;
+  if (settings.lens_label) {
+    els.lensValueText.textContent = `${settings.lens_label} / 数码 ${zoomRatio.toFixed(1)}x`;
+  }
+}
+
+function updateGuideCaption(selection, settings) {
+  const prefix = selection?.locked ? `TARGET ${selection.display}` : "AUTO";
+  if (settings?.lens_label && settings?.total_zoom) {
+    els.guideCaption.textContent = `${prefix} · ${settings.lens_label} ${settings.total_zoom.toFixed(1)}x`;
+  } else {
+    els.guideCaption.textContent = prefix;
+  }
 }
 
 async function evaluateCapture() {

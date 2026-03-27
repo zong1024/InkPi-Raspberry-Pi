@@ -77,6 +77,15 @@ CAMERA_CONFIG = {
     "device_index": 0,
     "camera_index": 0,      # 兼容旧服务层命名
     "backend": "auto",      # auto, picamera, opencv, ffmpeg
+    "default_lens_mode": "wide",
+    "zoom_min": 1.0,
+    "zoom_max": 3.0,
+    "zoom_step": 0.2,
+    "lens_modes": {
+        "wide": {"label": "广角", "base_zoom": 1.0, "guide_scale": 0.62},
+        "standard": {"label": "标准", "base_zoom": 1.18, "guide_scale": 0.72},
+        "detail": {"label": "近景", "base_zoom": 1.45, "guide_scale": 0.84},
+    },
     
     # 预览分辨率
     "preview_width": 640,

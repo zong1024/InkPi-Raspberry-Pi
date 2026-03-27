@@ -129,6 +129,7 @@ def create_app() -> Flask:
                 },
                 "selection": _serialize_selection(),
                 "camera": _get_camera_status(),
+                "camera_settings": camera_service.get_view_settings(),
                 "stats": _serialize_stats(stats),
                 "characters": _serialize_character_library(),
                 "history": [_serialize_result(result) for result in recent_results],
@@ -179,6 +180,29 @@ def create_app() -> Flask:
             state.updated_at = time.time()
 
         return jsonify(_serialize_selection())
+
+    @app.get("/api/camera/settings")
+    def get_camera_settings():
+        return jsonify(camera_service.get_view_settings())
+
+    @app.post("/api/camera/settings")
+    def set_camera_settings():
+        payload = request.get_json(silent=True) or {}
+        if payload.get("reset"):
+            settings = camera_service.reset_view_settings()
+        elif "zoom_delta" in payload:
+            settings = camera_service.nudge_zoom(int(payload.get("zoom_delta", 0)))
+            if "lens_mode" in payload:
+                settings = camera_service.set_view_settings(
+                    lens_mode=payload.get("lens_mode"),
+                    zoom_ratio=settings.get("zoom_ratio"),
+                )
+        else:
+            settings = camera_service.set_view_settings(
+                lens_mode=payload.get("lens_mode"),
+                zoom_ratio=payload.get("zoom_ratio"),
+            )
+        return jsonify(settings)
 
     @app.get("/api/camera/frame")
     def camera_frame():
@@ -385,6 +409,7 @@ def _get_camera_status() -> dict[str, Any]:
         "online": bool(snapshot["camera_online"]),
         "message": snapshot["camera_last_error"] or ("摄像头已连接" if snapshot["camera_online"] else "等待连接摄像头"),
         "available": camera_service.available,
+        "settings": camera_service.get_view_settings(),
     }
 
 

@@ -188,6 +188,49 @@ class CameraView(QWidget):
         self.action_target.setWordWrap(True)
         action_layout.addWidget(self.action_target)
 
+        self.zoom_status = QLabel("取景：广角 / 1.0x")
+        self.zoom_status.setObjectName("mutedLabel")
+        self.zoom_status.setWordWrap(True)
+        action_layout.addWidget(self.zoom_status)
+
+        lens_layout = QHBoxLayout()
+        lens_layout.setSpacing(6)
+        self.btn_lens_wide = QPushButton("广角")
+        self.btn_lens_standard = QPushButton("标准")
+        self.btn_lens_detail = QPushButton("近景")
+        for key, button in (
+            ("wide", self.btn_lens_wide),
+            ("standard", self.btn_lens_standard),
+            ("detail", self.btn_lens_detail),
+        ):
+            button.setObjectName("ghostButton")
+            button.setCheckable(True)
+            button.setMinimumHeight(34)
+            button.clicked.connect(lambda checked=False, lens=key: self._set_lens_mode(lens))
+            lens_layout.addWidget(button)
+        action_layout.addLayout(lens_layout)
+
+        zoom_layout = QHBoxLayout()
+        zoom_layout.setSpacing(8)
+        self.btn_zoom_out = QPushButton("-")
+        self.btn_zoom_out.setObjectName("ghostButton")
+        self.btn_zoom_out.setMinimumHeight(34)
+        self.btn_zoom_out.clicked.connect(lambda: self._nudge_zoom(-1))
+        zoom_layout.addWidget(self.btn_zoom_out)
+
+        self.btn_zoom_reset = QPushButton("重置取景")
+        self.btn_zoom_reset.setObjectName("secondaryButton")
+        self.btn_zoom_reset.setMinimumHeight(34)
+        self.btn_zoom_reset.clicked.connect(self._reset_camera_view)
+        zoom_layout.addWidget(self.btn_zoom_reset, stretch=1)
+
+        self.btn_zoom_in = QPushButton("+")
+        self.btn_zoom_in.setObjectName("ghostButton")
+        self.btn_zoom_in.setMinimumHeight(34)
+        self.btn_zoom_in.clicked.connect(lambda: self._nudge_zoom(1))
+        zoom_layout.addWidget(self.btn_zoom_in)
+        action_layout.addLayout(zoom_layout)
+
         self.btn_capture = QPushButton("拍照并评测")
         self.btn_capture.setObjectName("primaryButton")
         self.btn_capture.setMinimumHeight(48)
@@ -217,6 +260,7 @@ class CameraView(QWidget):
         self.side_layout.setStretch(0, 3)
         self.side_layout.setStretch(1, 2)
         self._update_layout_mode()
+        self._refresh_camera_controls()
 
     def set_requested_character(self, character_key: str | None) -> None:
         normalized = template_manager.resolve_character_key(character_key) if character_key else None
@@ -301,6 +345,34 @@ class CameraView(QWidget):
             return None
         return template_manager.to_display_character(self.requested_character)
 
+    def _refresh_camera_controls(self) -> None:
+        settings = camera_service.get_view_settings()
+        self.zoom_status.setText(f"取景：{settings['lens_label']} / {settings['total_zoom']:.1f}x")
+        self.btn_lens_wide.setChecked(settings["lens_mode"] == "wide")
+        self.btn_lens_standard.setChecked(settings["lens_mode"] == "standard")
+        self.btn_lens_detail.setChecked(settings["lens_mode"] == "detail")
+
+    def _set_lens_mode(self, lens_mode: str) -> None:
+        settings = camera_service.set_view_settings(lens_mode=lens_mode)
+        self._refresh_camera_controls()
+        self._set_action_hint(
+            f"当前取景已切到{settings['lens_label']}，可以继续观察画面构图后再拍照。",
+            "镜头模式",
+        )
+
+    def _nudge_zoom(self, direction: int) -> None:
+        settings = camera_service.nudge_zoom(direction)
+        self._refresh_camera_controls()
+        self._set_action_hint(
+            f"当前数码变焦为 {settings['total_zoom']:.1f}x，主体会按新的取景比例进入评测。",
+            "数码变焦",
+        )
+
+    def _reset_camera_view(self) -> None:
+        camera_service.reset_view_settings()
+        self._refresh_camera_controls()
+        self._set_action_hint("取景已重置为默认广角视图。", "取景重置")
+
     def _build_retry_guidance(self, exc: PreprocessingError) -> str:
         error_guidance = {
             "too_dark": "把纸张移到更亮的位置，再让镜头正对作品后重拍。",
@@ -325,6 +397,7 @@ class CameraView(QWidget):
         QMessageBox.warning(self, dialog_title, f"{exc}\n\n建议：{retry_guidance}")
 
     def _start_camera(self) -> None:
+        self._refresh_camera_controls()
         self._set_camera_state("连接中", "working")
         self.status_label.setText("正在尝试连接树莓派摄像头...")
         self.source_label.setText("输入来源：摄像头")
@@ -402,9 +475,10 @@ class CameraView(QWidget):
             cv2.line(overlay, start, mid1, accent, 3)
             cv2.line(overlay, start, mid2, accent, 3)
 
-        caption = "Single Char"
+        settings = camera_service.get_view_settings()
+        caption = f"{settings['lens_label']} {settings['total_zoom']:.1f}x"
         if self.requested_character:
-            caption = f"Target: {self.requested_character.upper()}"
+            caption = f"Target {template_manager.to_display_character(self.requested_character)} · {settings['total_zoom']:.1f}x"
 
         caption_width = max(152, 18 + len(caption) * 10)
         cv2.rectangle(overlay, (x1, y2 + 10), (x1 + caption_width, y2 + 40), (34, 25, 19), -1)

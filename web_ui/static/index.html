@@ -12,7 +12,7 @@
       <div class="brand-block">
         <p class="brand-kicker">InkPi Local Console</p>
         <h1>InkPi</h1>
-        <p class="brand-copy">把树莓派评测台做成一张可操作的数字作品笺。</p>
+        <p class="brand-copy">把树莓派评测台做成一张可直接上手的数字书法控制台。</p>
       </div>
 
       <nav class="nav-group">
@@ -40,6 +40,14 @@
           <div class="device-row">
             <span>摄像头</span>
             <strong id="cameraStatusText">检测中</strong>
+          </div>
+          <div class="device-row">
+            <span>取景模式</span>
+            <strong id="cameraLensText">广角</strong>
+          </div>
+          <div class="device-row">
+            <span>数码变焦</span>
+            <strong id="cameraZoomText">1.0x</strong>
           </div>
           <div class="device-row">
             <span>记录数</span>
@@ -135,7 +143,7 @@
             <div class="preview-frame">
               <img id="cameraPreview" alt="摄像头取景">
               <div class="preview-overlay">
-                <div class="guide-square"></div>
+                <div class="guide-square" id="guideSquare"></div>
                 <div class="guide-caption" id="guideCaption">AUTO</div>
               </div>
             </div>
@@ -156,6 +164,30 @@
               <p id="captureTargetCopy" class="panel-copy">
                 当前未锁定评测字，系统会先尝试识别，再决定是否进入评分。
               </p>
+            </article>
+
+            <article class="ink-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="panel-kicker">Camera Control</p>
+                  <h3>广角与变焦</h3>
+                </div>
+              </div>
+              <div id="lensPresetGroup" class="lens-preset-group">
+                <button class="lens-preset is-active" data-lens-mode="wide" type="button">广角</button>
+                <button class="lens-preset" data-lens-mode="standard" type="button">标准</button>
+                <button class="lens-preset" data-lens-mode="detail" type="button">近景</button>
+              </div>
+              <div class="zoom-control">
+                <button id="zoomOutButton" class="zoom-button" type="button">-</button>
+                <div class="zoom-readout">
+                  <strong id="zoomValueText">1.0x</strong>
+                  <span id="lensValueText">广角</span>
+                </div>
+                <button id="zoomInButton" class="zoom-button" type="button">+</button>
+              </div>
+              <input id="zoomSlider" class="zoom-slider" type="range" min="1" max="30" step="1" value="10">
+              <button id="resetViewButton" class="ghost-action small-action camera-reset" type="button">重置取景</button>
             </article>
 
             <article class="ink-panel">

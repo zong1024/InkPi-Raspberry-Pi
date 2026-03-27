@@ -20,6 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import CAMERA_CONFIG, IMAGE_CONFIG, IS_RASPBERRY_PI
 
 
+DEFAULT_LENS_MODES = {
+    "wide": {"label": "广角", "base_zoom": 1.0, "guide_scale": 0.62},
+    "standard": {"label": "标准", "base_zoom": 1.18, "guide_scale": 0.72},
+    "detail": {"label": "近景", "base_zoom": 1.45, "guide_scale": 0.84},
+}
+
+
 @contextmanager
 def _suppress_opencv_videoio_logs():
     """Temporarily silence noisy native OpenCV video I/O warnings."""
@@ -188,6 +195,13 @@ class CameraService:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.config = CAMERA_CONFIG
+        self._settings_lock = threading.RLock()
+        self._lens_modes = self._normalize_lens_modes(self.config.get("lens_modes"))
+        self._zoom_min = float(self.config.get("zoom_min", 1.0))
+        self._zoom_max = float(self.config.get("zoom_max", 3.0))
+        self._zoom_step = float(self.config.get("zoom_step", 0.2))
+        self._lens_mode = self._resolve_lens_mode(self.config.get("default_lens_mode", "wide"))
+        self._zoom_ratio = 1.0
         
         # 摄像头设备
         self.camera: Optional[cv2.VideoCapture] = None
@@ -319,6 +333,99 @@ class CameraService:
         
         self.logger.debug(f"摄像头配置: {actual_width}x{actual_height} @ {actual_fps}fps")
     
+    def _normalize_lens_modes(self, configured_modes) -> dict:
+        modes = {}
+        source = configured_modes if isinstance(configured_modes, dict) else DEFAULT_LENS_MODES
+        for key, fallback in DEFAULT_LENS_MODES.items():
+            payload = source.get(key, fallback) if isinstance(source, dict) else fallback
+            if not isinstance(payload, dict):
+                payload = fallback
+            modes[key] = {
+                "label": str(payload.get("label", fallback["label"])),
+                "base_zoom": max(1.0, float(payload.get("base_zoom", fallback["base_zoom"]))),
+                "guide_scale": float(np.clip(payload.get("guide_scale", fallback["guide_scale"]), 0.45, 0.9)),
+            }
+        return modes
+
+    def _resolve_lens_mode(self, lens_mode: str | None) -> str:
+        key = str(lens_mode or "wide").strip().lower()
+        if key in self._lens_modes:
+            return key
+        return "wide"
+
+    def _get_effective_zoom(self) -> float:
+        with self._settings_lock:
+            base_zoom = float(self._lens_modes[self._lens_mode]["base_zoom"])
+            zoom_ratio = float(np.clip(self._zoom_ratio, self._zoom_min, self._zoom_max))
+        return max(1.0, base_zoom * zoom_ratio)
+
+    def get_view_settings(self) -> dict:
+        with self._settings_lock:
+            lens_mode = self._lens_mode
+            zoom_ratio = float(np.clip(self._zoom_ratio, self._zoom_min, self._zoom_max))
+            preset = self._lens_modes[lens_mode]
+            presets = [
+                {
+                    "key": key,
+                    "label": value["label"],
+                    "base_zoom": round(float(value["base_zoom"]), 2),
+                    "guide_scale": round(float(value["guide_scale"]), 3),
+                }
+                for key, value in self._lens_modes.items()
+            ]
+        total_zoom = max(1.0, float(preset["base_zoom"]) * zoom_ratio)
+        return {
+            "lens_mode": lens_mode,
+            "lens_label": preset["label"],
+            "zoom_ratio": round(zoom_ratio, 2),
+            "zoom_min": round(self._zoom_min, 2),
+            "zoom_max": round(self._zoom_max, 2),
+            "zoom_step": round(self._zoom_step, 2),
+            "total_zoom": round(total_zoom, 2),
+            "guide_scale": round(float(preset["guide_scale"]), 3),
+            "presets": presets,
+        }
+
+    def set_view_settings(self, lens_mode: str | None = None, zoom_ratio: float | None = None) -> dict:
+        with self._settings_lock:
+            if lens_mode is not None:
+                self._lens_mode = self._resolve_lens_mode(lens_mode)
+            if zoom_ratio is not None:
+                self._zoom_ratio = float(np.clip(float(zoom_ratio), self._zoom_min, self._zoom_max))
+        return self.get_view_settings()
+
+    def nudge_zoom(self, direction: int) -> dict:
+        step = self._zoom_step if direction >= 0 else -self._zoom_step
+        with self._settings_lock:
+            self._zoom_ratio = float(np.clip(self._zoom_ratio + step, self._zoom_min, self._zoom_max))
+        return self.get_view_settings()
+
+    def reset_view_settings(self) -> dict:
+        with self._settings_lock:
+            self._lens_mode = self._resolve_lens_mode(self.config.get("default_lens_mode", "wide"))
+            self._zoom_ratio = 1.0
+        return self.get_view_settings()
+
+    def apply_view_transform(self, frame: np.ndarray) -> np.ndarray:
+        if frame is None:
+            return frame
+
+        zoom = self._get_effective_zoom()
+        if zoom <= 1.01:
+            return frame.copy()
+
+        height, width = frame.shape[:2]
+        crop_width = max(32, int(width / zoom))
+        crop_height = max(32, int(height / zoom))
+        x1 = max(0, (width - crop_width) // 2)
+        y1 = max(0, (height - crop_height) // 2)
+        x2 = min(width, x1 + crop_width)
+        y2 = min(height, y1 + crop_height)
+        cropped = frame[y1:y2, x1:x2]
+        if cropped.size == 0:
+            return frame.copy()
+        return cv2.resize(cropped, (width, height), interpolation=cv2.INTER_LINEAR)
+
     def close(self):
         """关闭摄像头"""
         self.stop_preview()
@@ -351,7 +458,7 @@ class CameraService:
             self.logger.error("捕获图像失败")
             return None
             
-        return frame
+        return self.apply_view_transform(frame)
     
     def capture_high_res(self) -> Optional[np.ndarray]:
         """
@@ -387,7 +494,7 @@ class CameraService:
             return None
             
         self.logger.info(f"捕获高分辨率图像: {frame.shape[1]}x{frame.shape[0]}")
-        return frame
+        return self.apply_view_transform(frame)
     
     def start_preview(self, callback=None):
         """

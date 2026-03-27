@@ -35,6 +35,7 @@ class WebUiSmokeTest(unittest.TestCase):
         self.assertIn("characters", payload)
         self.assertIn("history", payload)
         self.assertIn("selection", payload)
+        self.assertIn("camera_settings", payload)
         response.close()
 
     def test_selection_roundtrip(self) -> None:
@@ -49,6 +50,28 @@ class WebUiSmokeTest(unittest.TestCase):
         self.assertEqual(cleared.status_code, 200)
         self.assertFalse(cleared.get_json()["locked"])
         cleared.close()
+
+    def test_camera_settings_roundtrip(self) -> None:
+        response = self.client.get("/api/camera/settings")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn("lens_mode", payload)
+        self.assertIn("zoom_ratio", payload)
+        response.close()
+
+        updated = self.client.post("/api/camera/settings", json={"lens_mode": "detail", "zoom_ratio": 1.6})
+        self.assertEqual(updated.status_code, 200)
+        updated_payload = updated.get_json()
+        self.assertEqual(updated_payload["lens_mode"], "detail")
+        self.assertAlmostEqual(updated_payload["zoom_ratio"], 1.6, places=1)
+        updated.close()
+
+        reset = self.client.post("/api/camera/settings", json={"reset": True})
+        self.assertEqual(reset.status_code, 200)
+        reset_payload = reset.get_json()
+        self.assertEqual(reset_payload["lens_mode"], "wide")
+        self.assertAlmostEqual(reset_payload["zoom_ratio"], 1.0, places=1)
+        reset.close()
 
 
 if __name__ == "__main__":
