@@ -130,6 +130,17 @@ class FullRecognitionV2Test(unittest.TestCase):
         self.assertEqual(decision.status, "matched")
         self.assertEqual(decision.character_key, "shui")
 
+    def test_untemplated_candidate_surfaces_recognized_character(self) -> None:
+        template_path = self._template_path("shui_kaishu_standard.png")
+        image = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
+        self.assertIsNotNone(image)
+
+        pipeline = FullRecognitionPipeline(providers=[ScriptedCandidateProvider(["黄"])])
+        decision = pipeline.analyze(image)
+
+        self.assertEqual(decision.status, "untemplated")
+        self.assertEqual(decision.character_display, "黄")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,7 @@ Planned stages:
    Output one of:
    - `matched`
    - `ambiguous`
+   - `untemplated`
    - `unsupported`
    - `rejected`
 
@@ -91,6 +92,14 @@ That means the direction is no longer hypothetical:
 
 - OCR can already recover arbitrary Chinese character candidates from your real calligraphy photos
 - The remaining work is to merge those candidates with local reranking and open-set rejection more tightly
+
+An important new implication follows from this:
+
+- Some real photos already contain characters that OCR can identify confidently even when InkPi has no local scoring template for them yet
+- The isolated pipeline should therefore distinguish
+  - "recognized and scorable"
+  - "recognized but not yet templated"
+  - "still ambiguous"
 
 ## Data plan
 

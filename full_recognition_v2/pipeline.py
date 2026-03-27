@@ -59,7 +59,7 @@ class FullRecognitionPipeline:
 
         provider_candidates = self._collect_provider_candidates(image, limit=limit)
         reranked = self._rerank(subject, provider_candidates, limit=limit)
-        return self._decide(subject, reranked)
+        return self._decide(subject, reranked, provider_candidates)
 
     def _collect_provider_candidates(self, image: np.ndarray, limit: int) -> List[RecognitionCandidate]:
         merged: Dict[str, RecognitionCandidate] = {}
@@ -145,8 +145,15 @@ class FullRecognitionPipeline:
         }
         return rerank_score, evidence
 
-    def _decide(self, subject: CharacterSubject, candidates: List[RecognitionCandidate]) -> RecognitionDecision:
+    def _decide(
+        self,
+        subject: CharacterSubject,
+        candidates: List[RecognitionCandidate],
+        provider_candidates: List[RecognitionCandidate] | None = None,
+    ) -> RecognitionDecision:
         if not candidates:
+            if provider_candidates:
+                return self._decide_untemplated(subject, provider_candidates)
             return RecognitionDecision(
                 status="unsupported",
                 character_key=None,
@@ -219,6 +226,50 @@ class FullRecognitionPipeline:
             confidence=confidence,
             candidates=candidates,
             reason="画面像毛笔字，但当前候选集和模板库都无法稳定覆盖。",
+            diagnostics=diagnostics,
+            roi_bbox=subject.bbox,
+        )
+
+    def _decide_untemplated(
+        self,
+        subject: CharacterSubject,
+        provider_candidates: List[RecognitionCandidate],
+    ) -> RecognitionDecision:
+        ordered = sorted(provider_candidates, key=lambda item: item.provider_score, reverse=True)
+        top = ordered[0]
+        second = ordered[1] if len(ordered) > 1 else None
+        gap_top2 = top.provider_score - (second.provider_score if second else 0.0)
+        confidence = float(
+            np.clip(top.provider_score * 0.72 + np.clip(gap_top2 / 0.18, 0.0, 1.0) * 0.22, 0.0, 0.92)
+        )
+
+        diagnostics = {
+            "provider_score": round(top.provider_score, 4),
+            "gap_top2": round(gap_top2, 4),
+            "dominant_share": round(subject.dominant_share, 3),
+            "component_count": float(subject.component_count),
+            "ink_ratio": round(subject.ink_ratio, 3),
+        }
+
+        if top.provider_score >= 0.72 and gap_top2 >= 0.08:
+            return RecognitionDecision(
+                status="untemplated",
+                character_key=top.key,
+                character_display=top.display,
+                confidence=confidence,
+                candidates=ordered,
+                reason="已识别出字符，但当前本地评分模板库还没有覆盖它。",
+                diagnostics=diagnostics,
+                roi_bbox=subject.bbox,
+            )
+
+        return RecognitionDecision(
+            status="ambiguous",
+            character_key=None,
+            character_display=None,
+            confidence=confidence,
+            candidates=ordered,
+            reason="OCR 候选不够稳定，暂时无法确认模板外字符。",
             diagnostics=diagnostics,
             roi_bbox=subject.bbox,
         )
