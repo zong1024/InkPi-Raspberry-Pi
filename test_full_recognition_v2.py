@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from full_recognition_v2.factory import build_default_full_pipeline
 from full_recognition_v2.pipeline import FullRecognitionPipeline
 from full_recognition_v2.providers import ScriptedCandidateProvider
 
@@ -41,6 +42,10 @@ class FullRecognitionV2Test(unittest.TestCase):
         )
         decision = pipeline.analyze(image)
         self.assertIn(decision.status, {"matched", "ambiguous"})
+
+    def test_default_factory_builds_pipeline(self) -> None:
+        pipeline = build_default_full_pipeline()
+        self.assertIsNotNone(pipeline)
 
 
 if __name__ == "__main__":

@@ -49,10 +49,18 @@ Current isolated code already supports pluggable candidate providers:
 
 - `NullCandidateProvider`
 - `ScriptedCandidateProvider`
+- `PaddleOcrCandidateProvider`
 
 Next provider to build:
 
 - PaddleOCR-based top-k candidate provider
+
+Current status:
+
+- The provider wrapper has been added in
+  [paddle_provider.py](C:/Users/zongrui/Documents/2/full_recognition_v2/paddle_provider.py)
+- It is optional and degrades cleanly when PaddleOCR is not installed
+- The current demo runtime does not depend on it
 
 Reason:
 
