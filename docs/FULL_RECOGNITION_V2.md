@@ -44,6 +44,13 @@ Planned stages:
 5. Evaluation handoff
    Only after the character decision is trustworthy does the pipeline enter scoring.
 
+6. Application-facing presentation layer
+   A thin service maps low-level pipeline decisions into product states such as:
+   - `score_ready`
+   - `add_template`
+   - `retry`
+   - `review`
+
 ## Provider plan
 
 Current isolated code already supports pluggable candidate providers:
@@ -60,6 +67,8 @@ Current status:
 
 - The provider now performs real OCR candidate extraction in
   [paddle_provider.py](C:/Users/zongrui/Documents/2/full_recognition_v2/paddle_provider.py)
+- The application-facing wrapper now lives in
+  [service.py](C:/Users/zongrui/Documents/2/full_recognition_v2/service.py)
 - It runs PaddleOCR over both the original image and the extracted single-character ROI
 - It ignores multi-character annotation text and prefers large, centered, single-character detections
 - It is optional and degrades cleanly when PaddleOCR is not installed
