@@ -86,8 +86,7 @@ class PreprocessingService:
     
     def prepare_ocr_image(self, image: np.ndarray) -> np.ndarray:
         """Build a lighter OCR crop from the original image."""
-        corrected, _ = self._perspective_correction(image)
-        resized = self._resize(corrected)
+        resized = self._resize(image)
         grid_removed, _ = self._remove_red_grid(resized)
         gray = self._to_grayscale(grid_removed)
         binary = self._adaptive_threshold(gray)
