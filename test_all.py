@@ -128,6 +128,30 @@ class EvaluationServiceTests(unittest.TestCase):
         self.assertLess(score_inputs["score_mean"], 10.0)
 
 
+class QualityScorerCalibrationTests(unittest.TestCase):
+    def test_good_level_scores_are_not_flat(self) -> None:
+        probabilities = np.asarray([0.0005, 0.02, 0.9795], dtype=np.float32)
+        strong = np.asarray([0.46, 1.0, 0.97, 0.55, 0.48, 0.145], dtype=np.float32)
+        weak = np.asarray([0.28, 1.0, 0.80, 1.0, 0.70, 0.18], dtype=np.float32)
+
+        strong_score = quality_scorer_service._calibrate_total_score(  # type: ignore[attr-defined]
+            probabilities=probabilities,
+            quality_level="good",
+            extras=strong,
+            ocr_confidence=0.98,
+        )
+        weak_score = quality_scorer_service._calibrate_total_score(  # type: ignore[attr-defined]
+            probabilities=probabilities,
+            quality_level="good",
+            extras=weak,
+            ocr_confidence=0.80,
+        )
+
+        self.assertGreater(strong_score, weak_score)
+        self.assertGreaterEqual(strong_score, 90)
+        self.assertLessEqual(weak_score, 90)
+
+
 class DatabaseServiceTests(unittest.TestCase):
     def test_database_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

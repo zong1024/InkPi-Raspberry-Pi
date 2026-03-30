@@ -106,17 +106,28 @@ class QualityScorerService:
             probabilities = np.asarray([0.2, 0.6, 0.2], dtype=np.float32)
         probabilities = probabilities / probabilities.sum()
 
-        if raw_score is None:
-            weighted = 0.25 * probabilities[0] + 0.72 * probabilities[min(1, len(probabilities) - 1)] + 0.92 * probabilities[-1]
-            raw_score = float(weighted)
+        best_index = int(np.argmax(probabilities))
+        quality_level = self.labels[best_index] if best_index < len(self.labels) else self.default_level
+        extras = self._extract_quality_features(image).reshape(-1)
 
-        if raw_score <= 1.0:
-            total_score = int(np.clip(round(raw_score * self.score_scale), 0, 100))
+        if raw_score is None:
+            total_score = self._calibrate_total_score(
+                probabilities=probabilities,
+                quality_level=quality_level,
+                extras=extras,
+                ocr_confidence=float(ocr_confidence or 0.0),
+            )
+        elif raw_score <= 1.0:
+            calibrated = self._calibrate_total_score(
+                probabilities=probabilities,
+                quality_level=quality_level,
+                extras=extras,
+                ocr_confidence=float(ocr_confidence or 0.0),
+            )
+            total_score = int(np.clip(round((raw_score * self.score_scale) * 0.35 + calibrated * 0.65), 0, 100))
         else:
             total_score = int(np.clip(round(raw_score), 0, 100))
 
-        best_index = int(np.argmax(probabilities))
-        quality_level = self.labels[best_index] if best_index < len(self.labels) else self.default_level
         return QualityScore(
             total_score=total_score,
             quality_level=quality_level,
@@ -226,6 +237,60 @@ class QualityScorerService:
             dtype=np.float32,
         )
         return features.reshape(1, -1)
+
+    def _calibrate_total_score(
+        self,
+        probabilities: np.ndarray,
+        quality_level: str,
+        extras: np.ndarray,
+        ocr_confidence: float,
+    ) -> int:
+        fg_ratio, _bbox_ratio, center_quality, component_norm, edge_touch, texture_std = [float(x) for x in extras[:6]]
+        prob_values = np.asarray(probabilities, dtype=np.float32).reshape(-1)
+        if prob_values.size == 0:
+            prob_values = np.asarray([0.2, 0.6, 0.2], dtype=np.float32)
+
+        best = float(np.max(prob_values))
+        if prob_values.size > 1:
+            second = float(np.partition(prob_values, -2)[-2])
+        else:
+            second = 0.0
+        margin = max(0.0, best - second)
+
+        feature_quality = (
+            0.28 * self._target_band_score(fg_ratio, target=0.46, tolerance=0.24)
+            + 0.24 * self._normalize_band(center_quality, low=0.72, high=0.99)
+            + 0.16 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
+            + 0.16 * self._target_band_score(edge_touch, target=0.48, tolerance=0.30)
+            + 0.16 * self._target_band_score(texture_std, target=0.145, tolerance=0.055)
+        )
+        confidence_quality = (
+            0.60 * self._normalize_band(best, low=0.55, high=0.995)
+            + 0.25 * self._normalize_band(margin, low=0.10, high=0.90)
+            + 0.15 * self._normalize_band(ocr_confidence, low=0.45, high=0.99)
+        )
+        signal = float(np.clip(0.72 * feature_quality + 0.28 * confidence_quality, 0.0, 1.0))
+
+        ranges = {
+            "bad": (44.0, 68.0),
+            "medium": (66.0, 84.0),
+            "good": (82.0, 98.0),
+        }
+        low, high = ranges.get(quality_level, ranges["medium"])
+        score = low + (high - low) * signal
+        return int(np.clip(round(score), 0, 100))
+
+    @staticmethod
+    def _target_band_score(value: float, target: float, tolerance: float) -> float:
+        if tolerance <= 0:
+            return 0.0
+        return float(np.clip(1.0 - abs(value - target) / tolerance, 0.0, 1.0))
+
+    @staticmethod
+    def _normalize_band(value: float, low: float, high: float) -> float:
+        if high <= low:
+            return 0.0
+        return float(np.clip((value - low) / (high - low), 0.0, 1.0))
 
     @staticmethod
     def _encode_character(character: str) -> float:
