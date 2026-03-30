@@ -305,10 +305,12 @@ class CameraView(QWidget):
 
     def _run_evaluation(self, image: np.ndarray, original_path: Path) -> EvaluationResult:
         processed, processed_path = preprocessing_service.preprocess(image, save_processed=True)
+        ocr_image = preprocessing_service.prepare_ocr_image(image)
         result = evaluation_service.evaluate(
             processed,
             original_image_path=str(original_path),
             processed_image_path=processed_path,
+            ocr_image=ocr_image,
         )
         result.id = database_service.save(result)
         speech_service.speak_score(result.total_score, result.feedback)

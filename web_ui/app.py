@@ -308,10 +308,12 @@ def _evaluate_and_store(image: np.ndarray, source_name: str) -> EvaluationResult
     cv2.imwrite(str(original_path), image)
 
     processed, processed_path = preprocessing_service.preprocess(image, save_processed=True)
+    ocr_image = preprocessing_service.prepare_ocr_image(image)
     result = evaluation_service.evaluate(
         processed,
         original_image_path=str(original_path),
         processed_image_path=processed_path,
+        ocr_image=ocr_image,
     )
     result.id = database_service.save(result)
 

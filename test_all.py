@@ -96,6 +96,37 @@ class EvaluationServiceTests(unittest.TestCase):
             evaluation_service.evaluate(image)
         self.assertEqual(ctx.exception.error_type, "ocr_failed")
 
+    def test_evaluation_prefers_explicit_ocr_image(self) -> None:
+        local_ocr_service._available = True
+        local_ocr_service._ocr = object()
+
+        score_inputs = {}
+
+        def fake_recognize(image):  # type: ignore[override]
+            score_inputs["ocr_mean"] = float(np.mean(image))
+            return OcrRecognition(character="水", confidence=0.91)
+
+        def fake_score(image, character, ocr_confidence=None):  # type: ignore[override]
+            score_inputs["score_mean"] = float(np.mean(image))
+            return QualityScore(
+                total_score=84,
+                quality_level="medium",
+                quality_confidence=0.74,
+                probabilities={"bad": 0.08, "medium": 0.74, "good": 0.18},
+            )
+
+        local_ocr_service.recognize = fake_recognize  # type: ignore[method-assign]
+        quality_scorer_service._session = object()  # type: ignore[assignment]
+        quality_scorer_service.score = fake_score  # type: ignore[method-assign]
+
+        processed_image = np.zeros((64, 64), dtype=np.uint8)
+        ocr_image = np.ones((64, 64), dtype=np.uint8) * 255
+        result = evaluation_service.evaluate(processed_image, ocr_image=ocr_image)
+
+        self.assertEqual(result.character_name, "水")
+        self.assertGreater(score_inputs["ocr_mean"], 200.0)
+        self.assertLess(score_inputs["score_mean"], 10.0)
+
 
 class DatabaseServiceTests(unittest.TestCase):
     def test_database_roundtrip(self) -> None:

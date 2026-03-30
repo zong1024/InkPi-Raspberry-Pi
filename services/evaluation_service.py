@@ -53,6 +53,7 @@ class EvaluationService:
         processed_image: np.ndarray,
         original_image_path: str | None = None,
         processed_image_path: str | None = None,
+        ocr_image: np.ndarray | None = None,
     ) -> EvaluationResult:
         """Run the new OCR + ONNX scoring pipeline."""
 
@@ -65,7 +66,8 @@ class EvaluationService:
                 f"Quality scorer ONNX is unavailable: {quality_scorer_service.model_path}"
             )
 
-        recognition = local_ocr_service.recognize(processed_image)
+        recognition_source = ocr_image if ocr_image is not None else processed_image
+        recognition = local_ocr_service.recognize(recognition_source)
         if recognition is None:
             raise PreprocessingError(
                 "未能稳定识别当前汉字，请重新对准单字作品后再试。",

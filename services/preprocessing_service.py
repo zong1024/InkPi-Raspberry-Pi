@@ -84,6 +84,17 @@ class PreprocessingService:
         self.logger.info("图像预处理完成")
         return focused, processed_path
     
+    def prepare_ocr_image(self, image: np.ndarray) -> np.ndarray:
+        """Build a lighter OCR crop from the original image."""
+        corrected, _ = self._perspective_correction(image)
+        resized = self._resize(corrected)
+        grid_removed, _ = self._remove_red_grid(resized)
+        gray = self._to_grayscale(grid_removed)
+        binary = self._adaptive_threshold(gray)
+        binary = self._median_blur(binary)
+        focused = self._extract_primary_subject(binary)
+        return self._extract_ocr_subject(gray, focused)
+
     def _precheck(self, image: np.ndarray) -> None:
         """
         图像预检与异常拦截 (Fail-Fast 机制)
@@ -413,6 +424,26 @@ class PreprocessingService:
             np.ones((3, 3), dtype=np.uint8),
         )
         return focused
+
+    def _extract_ocr_subject(self, gray: np.ndarray, focused_binary: np.ndarray) -> np.ndarray:
+        """Crop a central grayscale subject for OCR without aggressive binarization."""
+        points = cv2.findNonZero((255 - focused_binary).astype(np.uint8))
+        if points is None:
+            return gray
+
+        x, y, w_box, h_box = cv2.boundingRect(points)
+        pad = max(16, int(max(w_box, h_box) * 0.18))
+        x0 = max(0, x - pad)
+        y0 = max(0, y - pad)
+        x1 = min(gray.shape[1], x + w_box + pad)
+        y1 = min(gray.shape[0], y + h_box + pad)
+
+        crop = gray[y0:y1, x0:x1].copy()
+        if crop.size == 0:
+            return gray
+
+        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
+        return clahe.apply(crop)
 
     def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
         """
