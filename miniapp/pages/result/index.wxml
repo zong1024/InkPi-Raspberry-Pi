@@ -10,7 +10,7 @@
       <view class="detail-copy">
         <text class="eyebrow">InkPi Result</text>
         <text class="detail-character">{{result.characterLabel}}</text>
-        <text class="detail-meta">{{result.styleLabel}} / {{result.timestamp}}</text>
+        <text class="detail-meta">{{result.timestamp}} / {{result.deviceLabel}}</text>
       </view>
 
       <view class="score-plaque" style="background: {{result.scoreSoft}}; color: {{result.scoreColor}};">
@@ -20,25 +20,22 @@
     </view>
 
     <view class="detail-foot">
-      <text class="detail-grade" style="color: {{result.scoreColor}};">{{result.grade}}</text>
+      <text class="detail-grade" style="color: {{result.scoreColor}};">{{result.qualityLabel}}</text>
       <view class="chip-row">
-        <text class="meta-chip">{{result.deviceLabel}}</text>
-        <text class="meta-chip">书体 {{result.styleLabel}}</text>
+        <text class="meta-chip">OCR {{result.ocrText}}</text>
+        <text class="meta-chip">评级 {{result.qualityText}}</text>
       </view>
     </view>
   </view>
 
   <view wx:if="{{result}}" class="paper-panel metrics-panel">
-    <text class="panel-title">四维评分</text>
-    <text class="panel-subtitle">结构、笔画、平衡与韵律会共同构成本次成绩单。</text>
+    <text class="panel-title">本次评测依据</text>
+    <text class="panel-subtitle">当前版本固定使用预处理、官方 OCR 与 ONNX 评分模型的一条链路。</text>
 
-    <view wx:for="{{dimensions}}" wx:key="name" class="metric-row">
-      <view class="metric-head">
-        <text class="metric-name">{{item.name}}</text>
-        <text class="metric-value">{{item.value}} 分</text>
-      </view>
-      <view class="metric-track">
-        <view class="metric-fill" style="width: {{item.value}}%; background: {{item.color}};"></view>
+    <view wx:for="{{metrics}}" wx:key="title" class="metric-card">
+      <view class="metric-top">
+        <text class="metric-name">{{item.title}}</text>
+        <text class="metric-value">{{item.value}}</text>
       </view>
       <text class="metric-note">{{item.note}}</text>
     </view>

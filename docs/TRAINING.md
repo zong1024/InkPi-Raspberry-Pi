@@ -1,170 +1,46 @@
-# InkPi 训练说明
+# 训练说明
 
-## 当前推荐路线
+当前这条分支的训练目标已经变成：
 
-当前项目最推荐的训练主线是：
+- OCR：直接使用官方 PaddleOCR 本地识别
+- 评分：训练单图 ONNX 质量评分模型
 
-1. 使用**字符级书法数据集**
-2. 先整理成 `public_character` 结构
-3. 用 `audit_dataset.py` 做严格审计
-4. 再启动 V100 训练
-5. 导出 `siamese_calligraphy.onnx`
-6. 部署到树莓派
+不再使用旧的模板对比和 Siamese 双图评分主线。
 
-不建议继续把“按风格归类”的旧真实数据直接拿来训练当前 Siamese 主模型，因为它不适合当前的字符匹配任务。
+## 当前训练脚本
 
-## 推荐数据格式
+- [training/build_quality_manifest.py](C:/Users/zongrui/Documents/2/training/build_quality_manifest.py)
+- [training/train_quality_scorer.py](C:/Users/zongrui/Documents/2/training/train_quality_scorer.py)
+- [training/train_quality_scorer.sh](C:/Users/zongrui/Documents/2/training/train_quality_scorer.sh)
 
-训练脚本当前最适配的是：
+## 训练数据
 
-```text
-data/public_character/
-├── originals/
-├── good/
-├── medium/
-└── poor/
-```
+第一版质量评分模型使用真实字符图构建三档清单：
 
-其中：
+- `good`
+- `medium`
+- `bad`
 
-- `originals/`：每个字符的标准模板
-- `good/`：能与模板字符稳定对齐的真实或公开样本
-- `medium/poor/`：如果没有，可以为空
+清单来自真实图片，不使用运行时模板库。
 
-当前训练链路已经支持只有 `good/` 的字符级数据集，只要模板和字符匹配率足够高。
+当前本地仓库中的清单摘要：
 
-## 整理公开字符级数据
+- [training/quality_manifest.summary.json](C:/Users/zongrui/Documents/2/training/quality_manifest.summary.json)
 
-如果原始数据是“按字符分文件夹”的结构，可以先执行：
+## 导出产物
 
-```bash
-python training/prepare_character_dataset.py \
-  --input /path/to/public_dataset \
-  --output data/public_character \
-  --min-images-per-char 4 \
-  --max-images-per-char 24 \
-  --seed 42 \
-  --clear-output
-```
+训练完成后会生成：
 
-## 训练前审计
+- [models/quality_scorer.onnx](C:/Users/zongrui/Documents/2/models/quality_scorer.onnx)
+- [models/quality_scorer.metrics.json](C:/Users/zongrui/Documents/2/models/quality_scorer.metrics.json)
 
-强烈建议先审计：
+## 当前指标
 
-```bash
-python training/audit_dataset.py \
-  --data data/public_character \
-  --strict \
-  --min-match-ratio 0.95 \
-  --min-matched-samples 1000
-```
+当前质量评分模型验证集结果：
 
-审计主要检查：
+- `val_accuracy`: `0.9589`
+- `bad`: `57.72`
+- `medium`: `74.37`
+- `good`: `91.81`
 
-- 模板是否存在
-- 样本是否能按字符名与模板对齐
-- 匹配率是否足够高
-- 训练是否会因为坏数据产生虚高指标
-
-## V100 训练
-
-推荐直接用封装脚本：
-
-```bash
-DATA_SOURCE=public_character \
-DATA_DIR=/path/to/data/public_character \
-EPOCHS=30 \
-BATCH_SIZE=128 \
-NUM_WORKERS=8 \
-USE_PRETRAINED=1 \
-USE_AMP=1 \
-bash training/train_v100.sh
-```
-
-脚本会自动完成：
-
-- CUDA 环境检查
-- Python 依赖安装
-- 数据集准备与审计
-- 训练启动
-- 输出文件检查
-
-## 直接调用训练脚本
-
-如果你需要手工控制参数：
-
-```bash
-python training/train_siamese.py \
-  --data data/public_character \
-  --output models \
-  --epochs 30 \
-  --batch-size 128 \
-  --lr 3e-4 \
-  --weight-decay 1e-5 \
-  --margin 0.0 \
-  --train-ratio 0.8 \
-  --image-size 224 \
-  --embedding-dim 128 \
-  --workers 8 \
-  --seed 42 \
-  --device cuda \
-  --negative-ratio 1 \
-  --min-match-ratio 0.95 \
-  --min-matched-samples 1000 \
-  --pretrained \
-  --amp
-```
-
-## 当前训练逻辑说明
-
-当前版本已经不再推荐“同字质量标签直接映射成损失标签”的旧思路。现在更强调：
-
-- 同字正样本
-- 异字负样本
-- 审计优先
-- 验证集不要被模板衍生样本污染
-
-## 输出文件
-
-训练完成后通常会在 `models/` 下生成：
-
-```text
-siamese_calligraphy_best.pth
-siamese_calligraphy_final.pth
-siamese_calligraphy.onnx
-training_history.json
-```
-
-其中部署到树莓派最关键的是：
-
-- `siamese_calligraphy.onnx`
-
-## 部署到树莓派
-
-你可以用两种方式让树莓派拿到模型：
-
-### 方式 1：部署脚本复制
-
-```bash
-MODEL_SOURCE=/path/to/siamese_calligraphy.onnx RUN_SELF_TEST=1 ./deploy_rpi.sh
-```
-
-### 方式 2：手工放到模型目录
-
-```bash
-cp /path/to/siamese_calligraphy.onnx models/siamese_calligraphy.onnx
-RUN_SELF_TEST=1 ./deploy_rpi.sh
-```
-
-运行时也支持环境变量：
-
-```bash
-export INKPI_SIAMESE_MODEL=/path/to/siamese_calligraphy.onnx
-```
-
-## 注意事项
-
-- 不要同时启动两条训练写同一个 `models/` 目录。
-- 训练未结束前，不要把 `models/` 下的权重当最终结果部署。
-- 树莓派端当前主评测只强依赖 `siamese_calligraphy.onnx`。
-- `ch_recognize_mobile_int8.onnx` 和 `style_classifier_int8.onnx` 属于可选增强模型，缺失时会回退。
+这三组均值已经单调拉开，可以直接作为当前演示版的评分模型。

@@ -21,27 +21,22 @@ function getScorePalette(score) {
   };
 }
 
-function getGrade(score) {
-  if (score >= 90) return '优秀';
-  if (score >= 80) return '良好';
-  if (score >= 70) return '稳定';
-  if (score >= 60) return '继续练习';
-  return '需强化';
-}
-
-function summarizeDimensions(detailScores) {
-  const order = ['结构', '笔画', '平衡', '韵律'];
-  return order
-    .filter((name) => Object.prototype.hasOwnProperty.call(detailScores || {}, name))
-    .map((name) => ({
-      name,
-      value: detailScores[name],
-    }));
+function getQualityLabel(level) {
+  if (level === 'good') return '好';
+  if (level === 'bad') return '坏';
+  return '中';
 }
 
 function buildFeedbackPreview(text) {
   if (!text) return '暂无评语';
   return text.length > 42 ? `${text.slice(0, 42)}...` : text;
+}
+
+function formatConfidence(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--';
+  }
+  return `${Math.round(Number(value) * 100)}%`;
 }
 
 Page({
@@ -112,12 +107,12 @@ Page({
         return {
           ...item,
           ...palette,
-          grade: getGrade(item.total_score || 0),
+          qualityLabel: item.quality_label || getQualityLabel(item.quality_level),
           characterLabel: item.character_name || '未识别',
-          styleLabel: item.style || '未分类',
           deviceLabel: item.device_name || 'InkPi 树莓派',
           feedbackPreview: buildFeedbackPreview(item.feedback),
-          dimensionPreview: summarizeDimensions(item.detail_scores),
+          ocrText: formatConfidence(item.ocr_confidence),
+          qualityText: formatConfidence(item.quality_confidence),
         };
       });
 

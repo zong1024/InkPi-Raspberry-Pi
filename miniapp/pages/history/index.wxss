@@ -136,9 +136,10 @@
   line-height: 1;
 }
 
-.record-style {
+.record-level {
   margin-top: 12rpx;
   font-size: 22rpx;
+  font-weight: 700;
 }
 
 .record-body {
@@ -178,13 +179,13 @@
   color: #4f4031;
 }
 
-.record-dimensions {
+.record-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 10rpx;
 }
 
-.dimension-pill {
+.meta-pill {
   padding: 8rpx 14rpx;
   border-radius: 999rpx;
   background: rgba(242, 234, 223, 0.95);

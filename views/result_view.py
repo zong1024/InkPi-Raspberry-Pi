@@ -1,21 +1,18 @@
-"""Result view with a lightweight custom chart."""
+"""Result view for the single-chain OCR + ONNX evaluation flow."""
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -25,102 +22,17 @@ from PyQt6.QtWidgets import (
 from models.evaluation_result import EvaluationResult
 from services.led_service import led_service
 from services.speech_service import speech_service
-from views.ui_theme import THEME, app_font, clear_layout, score_to_color, score_to_soft_color
+from views.ui_theme import app_font, score_to_color, score_to_soft_color
 
 
-class RadarChart(QWidget):
-    """Native radar chart widget for four-dimensional scores."""
+class MetaCard(QFrame):
+    """Small result metadata card."""
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.scores: dict[str, int] = {}
-        self.setMinimumSize(220, 220)
-
-    def set_scores(self, scores: dict[str, int]) -> None:
-        self.scores = scores or {}
-        self.update()
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        super().paintEvent(event)
-
-        labels = list(self.scores.keys()) or ["结构", "笔画", "平衡", "韵律"]
-        values = [self.scores.get(label, 0) for label in labels]
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        bounds = self.rect().adjusted(18, 18, -18, -24)
-        center = QPointF(bounds.center())
-        radius = min(bounds.width(), bounds.height()) * 0.34
-
-        grid_pen = QPen(QColor(THEME["line"]), 1)
-        axis_pen = QPen(QColor(THEME["muted"]), 1)
-        fill_brush = QColor(THEME["accent"])
-        fill_brush.setAlpha(90)
-        outline_pen = QPen(QColor(THEME["accent"]), 2)
-
-        count = len(labels)
-        angles = [(-math.pi / 2) + (2 * math.pi * index / count) for index in range(count)]
-
-        for step in (0.25, 0.5, 0.75, 1.0):
-            ring = QPolygonF()
-            for angle in angles:
-                ring.append(
-                    QPointF(
-                        center.x() + math.cos(angle) * radius * step,
-                        center.y() + math.sin(angle) * radius * step,
-                    )
-                )
-            painter.setPen(grid_pen)
-            painter.drawPolygon(ring)
-
-        for angle, label in zip(angles, labels):
-            axis_end = QPointF(
-                center.x() + math.cos(angle) * radius,
-                center.y() + math.sin(angle) * radius,
-            )
-            painter.setPen(axis_pen)
-            painter.drawLine(center, axis_end)
-
-            label_point = QPointF(
-                center.x() + math.cos(angle) * (radius + 24),
-                center.y() + math.sin(angle) * (radius + 24),
-            )
-            text_rect = QRectF(label_point.x() - 24, label_point.y() - 10, 48, 20)
-            painter.setPen(QColor(THEME["ink"]))
-            painter.setFont(app_font(10, QFont.Weight.Bold))
-            painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, label)
-
-        polygon = QPolygonF()
-        for angle, value in zip(angles, values):
-            polygon.append(
-                QPointF(
-                    center.x() + math.cos(angle) * radius * max(0.0, min(value, 100)) / 100,
-                    center.y() + math.sin(angle) * radius * max(0.0, min(value, 100)) / 100,
-                )
-            )
-
-        painter.setPen(outline_pen)
-        painter.setBrush(fill_brush)
-        painter.drawPolygon(polygon)
-
-        painter.setPen(QPen(QColor(THEME["gold"]), 2))
-        painter.setBrush(QColor(THEME["surface"]))
-        for point in polygon:
-            painter.drawEllipse(point, 4, 4)
-
-        painter.end()
-
-
-class DimensionCard(QFrame):
-    """Dimension score card."""
-
-    def __init__(self, title: str, score: int, parent=None):
+    def __init__(self, title: str, value: str, parent=None):
         super().__init__(parent)
         self.setObjectName("metricCard")
         self.setStyleSheet(
-            f"QFrame#metricCard {{ background-color: {score_to_soft_color(score)}; "
-            f"border: 1px solid {THEME['line']}; border-radius: 20px; }}"
+            f"QFrame#metricCard {{ background-color: {score_to_soft_color(78)}; border-radius: 20px; }}"
         )
 
         layout = QVBoxLayout(self)
@@ -132,20 +44,11 @@ class DimensionCard(QFrame):
         title_label.setFont(app_font(10))
         layout.addWidget(title_label)
 
-        score_label = QLabel(str(score))
-        score_label.setObjectName("dimensionScore")
-        score_label.setStyleSheet(f"color: {score_to_color(score)};")
-        layout.addWidget(score_label)
-
-        bar = QProgressBar()
-        bar.setRange(0, 100)
-        bar.setValue(score)
-        bar.setTextVisible(False)
-        bar.setStyleSheet(
-            "QProgressBar { background-color: rgba(255,255,255,0.6); }"
-            f"QProgressBar::chunk {{ background-color: {score_to_color(score)}; border-radius: 8px; }}"
-        )
-        layout.addWidget(bar)
+        value_label = QLabel(value)
+        value_label.setObjectName("sectionTitle")
+        value_label.setWordWrap(True)
+        value_label.setFont(app_font(15, QFont.Weight.Bold))
+        layout.addWidget(value_label)
 
 
 class ResultView(QWidget):
@@ -176,9 +79,6 @@ class ResultView(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(14)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(14)
-
         summary_card = QFrame()
         summary_card.setObjectName("accentCard")
         summary_layout = QVBoxLayout(summary_card)
@@ -196,14 +96,13 @@ class ResultView(QWidget):
 
         self.grade_label = QLabel("--")
         self.grade_label.setObjectName("scoreGrade")
-        self.grade_label.setStyleSheet("color: #f6d8b0;")
         summary_layout.addWidget(self.grade_label)
 
-        self.meta_primary = QLabel("识别结果：--")
+        self.meta_primary = QLabel("识别汉字：--")
         self.meta_primary.setStyleSheet("color: #fff1e2; font-size: 12px;")
         summary_layout.addWidget(self.meta_primary)
 
-        self.meta_secondary = QLabel("书体风格：--")
+        self.meta_secondary = QLabel("OCR 置信度：-")
         self.meta_secondary.setStyleSheet("color: #d7c4ae; font-size: 10px;")
         summary_layout.addWidget(self.meta_secondary)
 
@@ -211,46 +110,48 @@ class ResultView(QWidget):
         self.meta_time.setStyleSheet("color: #d7c4ae; font-size: 10px;")
         summary_layout.addWidget(self.meta_time)
 
-        top_row.addWidget(summary_card, stretch=3)
+        layout.addWidget(summary_card)
 
-        radar_card = QFrame()
-        radar_card.setObjectName("resultCard")
-        radar_layout = QVBoxLayout(radar_card)
-        radar_layout.setContentsMargins(18, 18, 18, 18)
-        radar_layout.setSpacing(8)
+        insight_card = QFrame()
+        insight_card.setObjectName("resultCard")
+        insight_layout = QVBoxLayout(insight_card)
+        insight_layout.setContentsMargins(18, 18, 18, 18)
+        insight_layout.setSpacing(8)
 
-        radar_title = QLabel("四维结构图")
-        radar_title.setObjectName("sectionTitle")
-        radar_title.setFont(app_font(16, QFont.Weight.Bold))
-        radar_layout.addWidget(radar_title)
+        insight_title = QLabel("自动评测说明")
+        insight_title.setObjectName("sectionTitle")
+        insight_title.setFont(app_font(16, QFont.Weight.Bold))
+        insight_layout.addWidget(insight_title)
 
-        radar_hint = QLabel("结构、笔画、平衡与韵律会共同决定总分。")
-        radar_hint.setObjectName("sectionSubtitle")
-        radar_hint.setWordWrap(True)
-        radar_layout.addWidget(radar_hint)
+        insight_hint = QLabel("当前版本固定使用预处理、官方 OCR 与 ONNX 评分模型的一条链路。")
+        insight_hint.setObjectName("sectionSubtitle")
+        insight_hint.setWordWrap(True)
+        insight_layout.addWidget(insight_hint)
 
-        self.radar_chart = RadarChart()
-        radar_layout.addWidget(self.radar_chart, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.insight_copy = QLabel("等待评测结果...")
+        self.insight_copy.setObjectName("sectionSubtitle")
+        self.insight_copy.setWordWrap(True)
+        self.insight_copy.setFont(app_font(11))
+        insight_layout.addWidget(self.insight_copy)
 
-        top_row.addWidget(radar_card, stretch=4)
-        layout.addLayout(top_row)
+        layout.addWidget(insight_card)
 
-        dimensions_card = QFrame()
-        dimensions_card.setObjectName("resultCard")
-        dimensions_layout = QVBoxLayout(dimensions_card)
-        dimensions_layout.setContentsMargins(18, 18, 18, 18)
-        dimensions_layout.setSpacing(10)
+        meta_card = QFrame()
+        meta_card.setObjectName("resultCard")
+        meta_layout = QVBoxLayout(meta_card)
+        meta_layout.setContentsMargins(18, 18, 18, 18)
+        meta_layout.setSpacing(10)
 
-        dimensions_title = QLabel("分项表现")
-        dimensions_title.setObjectName("sectionTitle")
-        dimensions_title.setFont(app_font(16, QFont.Weight.Bold))
-        dimensions_layout.addWidget(dimensions_title)
+        meta_title = QLabel("结果摘要")
+        meta_title.setObjectName("sectionTitle")
+        meta_title.setFont(app_font(16, QFont.Weight.Bold))
+        meta_layout.addWidget(meta_title)
 
-        self.dimension_grid = QGridLayout()
-        self.dimension_grid.setHorizontalSpacing(12)
-        self.dimension_grid.setVerticalSpacing(12)
-        dimensions_layout.addLayout(self.dimension_grid)
-        layout.addWidget(dimensions_card)
+        self.meta_grid = QGridLayout()
+        self.meta_grid.setHorizontalSpacing(12)
+        self.meta_grid.setVerticalSpacing(12)
+        meta_layout.addLayout(self.meta_grid)
+        layout.addWidget(meta_card)
 
         feedback_card = QFrame()
         feedback_card.setObjectName("feedbackCard")
@@ -321,17 +222,31 @@ class ResultView(QWidget):
         self.grade_label.setText(self.result.get_grade())
         self.grade_label.setStyleSheet(f"color: {score_color}; font-size: 16px; font-weight: 700;")
 
-        self.meta_primary.setText(f"识别结果：{self.result.character_name or '未识别'}")
-        self.meta_secondary.setText(f"书体风格：{self.result.style or '未分类'}")
+        self.meta_primary.setText(f"识别汉字：{self.result.character_name or '未识别'}")
+        self.meta_secondary.setText(
+            f"OCR 置信度：{round((self.result.ocr_confidence or 0.0) * 100)}% / "
+            f"质量置信度：{round((self.result.quality_confidence or 0.0) * 100)}%"
+        )
         self.meta_time.setText(f"评测时间：{self.result.timestamp.strftime('%Y-%m-%d %H:%M')}")
+        self.insight_copy.setText(
+            f"系统自动识别当前字为“{self.result.character_name or '未识别'}”，"
+            f"再直接输出 {self.result.total_score} 分和“{self.result.get_grade()}”等级。"
+        )
 
-        self.radar_chart.set_scores(self.result.detail_scores)
+        while self.meta_grid.count():
+            item = self.meta_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
 
-        clear_layout(self.dimension_grid)
-
-        for index, (name, value) in enumerate(self.result.detail_scores.items()):
-            card = DimensionCard(name, value)
-            self.dimension_grid.addWidget(card, index // 2, index % 2)
+        cards = [
+            ("自动识别", self.result.character_name or "未识别"),
+            ("OCR 置信度", f"{round((self.result.ocr_confidence or 0.0) * 100)}%"),
+            ("质量等级", self.result.get_grade()),
+            ("质量置信度", f"{round((self.result.quality_confidence or 0.0) * 100)}%"),
+        ]
+        for index, (title, value) in enumerate(cards):
+            self.meta_grid.addWidget(MetaCard(title, value), index // 2, index % 2)
 
         self.feedback_label.setText(self.result.feedback)
         led_service.show_score(score)

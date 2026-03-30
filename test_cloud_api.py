@@ -48,12 +48,12 @@ class CloudApiTests(unittest.TestCase):
             json={
                 "local_record_id": 12,
                 "total_score": 88,
-                "detail_scores": {"结构": 90, "笔画": 86, "平衡": 88, "韵律": 87},
-                "feedback": "整体不错，结构稳定。",
-                "timestamp": "2026-03-26T12:34:56",
+                "feedback": "整体较稳，继续保持当前写法。",
+                "timestamp": "2026-03-30T12:34:56",
                 "character_name": "水",
-                "style": "楷书",
-                "style_confidence": 0.96,
+                "ocr_confidence": 0.97,
+                "quality_level": "good",
+                "quality_confidence": 0.91,
             },
         )
         self.assertEqual(upload.status_code, 200)
@@ -67,11 +67,13 @@ class CloudApiTests(unittest.TestCase):
         self.assertTrue(listing_payload["ok"])
         self.assertEqual(listing_payload["total"], 1)
         self.assertEqual(listing_payload["items"][0]["character_name"], "水")
+        self.assertEqual(listing_payload["items"][0]["quality_level"], "good")
 
         detail = self.client.get(f"/api/results/{result_id}", headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(detail.status_code, 200)
         detail_payload = detail.get_json()
-        self.assertEqual(detail_payload["result"]["detail_scores"]["结构"], 90)
+        self.assertEqual(detail_payload["result"]["ocr_confidence"], 0.97)
+        self.assertEqual(detail_payload["result"]["quality_confidence"], 0.91)
 
 
 if __name__ == "__main__":

@@ -5,10 +5,11 @@
   <view class="paper-panel hero-sheet">
     <view class="hero-head">
       <view class="hero-copy">
-        <text class="eyebrow">InkPi Archive</text>
+        <text class="eyebrow">InkPi Cloud</text>
         <text class="hero-title">评测卷宗</text>
         <text class="hero-subtitle">
-          树莓派上传完成后，这里会自动刷新最新成绩。每一条记录都可以展开查看完整评分与评语。
+          树莓派评测完成后，历史记录会自动同步到云端。这里展示的是自动 OCR + ONNX
+          单链路的最新成绩。
         </text>
       </view>
       <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
@@ -29,7 +30,7 @@
       <text class="summary-value">{{summary.total}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">最近得分</text>
+      <text class="summary-label">最新得分</text>
       <text class="summary-value">{{summary.latestScore}}</text>
     </view>
     <view class="summary-item">
@@ -62,22 +63,21 @@
   >
     <view class="record-stamp" style="background: {{item.scoreSoft}}; color: {{item.scoreColor}};">
       <text class="record-char">{{item.characterLabel}}</text>
-      <text class="record-style">{{item.styleLabel}}</text>
+      <text class="record-level">{{item.qualityLabel}}</text>
     </view>
 
     <view class="record-body">
       <view class="record-score-line">
         <text class="record-score" style="color: {{item.scoreColor}};">{{item.total_score}}</text>
-        <text class="record-grade">{{item.grade}}</text>
+        <text class="record-grade">{{item.qualityLabel}}</text>
       </view>
 
       <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}}</text>
       <text class="record-feedback">{{item.feedbackPreview}}</text>
 
-      <view class="record-dimensions">
-        <text wx:for="{{item.dimensionPreview}}" wx:key="name" class="dimension-pill">
-          {{item.name}} {{item.value}}
-        </text>
+      <view class="record-meta">
+        <text class="meta-pill">OCR {{item.ocrText}}</text>
+        <text class="meta-pill">评级 {{item.qualityText}}</text>
       </view>
     </view>
   </view>

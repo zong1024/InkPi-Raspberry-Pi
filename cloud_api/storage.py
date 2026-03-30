@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -70,21 +69,14 @@ class CloudDatabase:
                     device_name TEXT NOT NULL,
                     local_record_id INTEGER NOT NULL,
                     total_score INTEGER NOT NULL,
-                    structure_score INTEGER NOT NULL,
-                    stroke_score INTEGER NOT NULL,
-                    balance_score INTEGER NOT NULL,
-                    rhythm_score INTEGER NOT NULL,
                     feedback TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     character_name TEXT,
-                    style TEXT,
-                    style_confidence REAL,
-                    recognition_status TEXT,
-                    recognition_confidence REAL,
-                    score_mode TEXT,
-                    score_explanation TEXT,
-                    detail_scores_json TEXT NOT NULL,
-                    raw_payload_json TEXT NOT NULL,
+                    ocr_confidence REAL,
+                    quality_level TEXT,
+                    quality_confidence REAL,
+                    image_path TEXT,
+                    processed_image_path TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(device_name, local_record_id)
@@ -94,10 +86,11 @@ class CloudDatabase:
             cursor.execute("PRAGMA table_info(results)")
             existing_columns = {row[1] for row in cursor.fetchall()}
             for column_name, column_type in (
-                ("recognition_status", "TEXT"),
-                ("recognition_confidence", "REAL"),
-                ("score_mode", "TEXT"),
-                ("score_explanation", "TEXT"),
+                ("ocr_confidence", "REAL"),
+                ("quality_level", "TEXT"),
+                ("quality_confidence", "REAL"),
+                ("image_path", "TEXT"),
+                ("processed_image_path", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
@@ -177,16 +170,9 @@ class CloudDatabase:
         return {"id": row["id"], "username": row["username"], "display_name": row["display_name"]}
 
     def upsert_result(self, payload: dict[str, Any], device_name: str) -> dict[str, Any]:
-        detail_scores = payload.get("detail_scores") or {}
-        structure_score = int(detail_scores.get("结构", 0))
-        stroke_score = int(detail_scores.get("笔画", 0))
-        balance_score = int(detail_scores.get("平衡", 0))
-        rhythm_score = int(detail_scores.get("韵律", 0))
         local_record_id = int(payload["local_record_id"])
         timestamp = payload.get("timestamp") or utcnow_iso()
-        created_at = utcnow_iso()
-        encoded_details = json.dumps(detail_scores, ensure_ascii=False)
-        encoded_payload = json.dumps(payload, ensure_ascii=False)
+        changed_at = utcnow_iso()
 
         with self._managed_connection() as conn:
             existing = conn.execute(
@@ -199,42 +185,28 @@ class CloudDatabase:
                     """
                     UPDATE results
                     SET total_score = ?,
-                        structure_score = ?,
-                        stroke_score = ?,
-                        balance_score = ?,
-                        rhythm_score = ?,
                         feedback = ?,
                         timestamp = ?,
                         character_name = ?,
-                        style = ?,
-                        style_confidence = ?,
-                        recognition_status = ?,
-                        recognition_confidence = ?,
-                        score_mode = ?,
-                        score_explanation = ?,
-                        detail_scores_json = ?,
-                        raw_payload_json = ?,
+                        ocr_confidence = ?,
+                        quality_level = ?,
+                        quality_confidence = ?,
+                        image_path = ?,
+                        processed_image_path = ?,
                         updated_at = ?
                     WHERE id = ?
                     """,
                     (
                         int(payload["total_score"]),
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         payload.get("feedback", ""),
                         timestamp,
                         payload.get("character_name"),
-                        payload.get("style"),
-                        payload.get("style_confidence"),
-                        payload.get("recognition_status"),
-                        payload.get("recognition_confidence"),
-                        payload.get("score_mode"),
-                        payload.get("score_explanation"),
-                        encoded_details,
-                        encoded_payload,
-                        created_at,
+                        payload.get("ocr_confidence"),
+                        payload.get("quality_level"),
+                        payload.get("quality_confidence"),
+                        payload.get("image_path"),
+                        payload.get("processed_image_path"),
+                        changed_at,
                         existing["id"],
                     ),
                 )
@@ -246,47 +218,33 @@ class CloudDatabase:
                         device_name,
                         local_record_id,
                         total_score,
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         feedback,
                         timestamp,
                         character_name,
-                        style,
-                        style_confidence,
-                        recognition_status,
-                        recognition_confidence,
-                        score_mode,
-                        score_explanation,
-                        detail_scores_json,
-                        raw_payload_json,
+                        ocr_confidence,
+                        quality_level,
+                        quality_confidence,
+                        image_path,
+                        processed_image_path,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
                         local_record_id,
                         int(payload["total_score"]),
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         payload.get("feedback", ""),
                         timestamp,
                         payload.get("character_name"),
-                        payload.get("style"),
-                        payload.get("style_confidence"),
-                        payload.get("recognition_status"),
-                        payload.get("recognition_confidence"),
-                        payload.get("score_mode"),
-                        payload.get("score_explanation"),
-                        encoded_details,
-                        encoded_payload,
-                        created_at,
-                        created_at,
+                        payload.get("ocr_confidence"),
+                        payload.get("quality_level"),
+                        payload.get("quality_confidence"),
+                        payload.get("image_path"),
+                        payload.get("processed_image_path"),
+                        changed_at,
+                        changed_at,
                     ),
                 )
                 result_id = int(cursor.lastrowid)
@@ -320,29 +278,24 @@ class CloudDatabase:
     def get_result(self, result_id: int) -> dict[str, Any] | None:
         with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM results WHERE id = ?", (result_id,)).fetchone()
-
         return self._result_row_to_dict(row) if row else None
 
     def _result_row_to_dict(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         if row is None:
             return None
-
-        detail_scores = json.loads(row["detail_scores_json"]) if row["detail_scores_json"] else {}
         return {
             "id": row["id"],
             "device_name": row["device_name"],
             "local_record_id": row["local_record_id"],
             "total_score": row["total_score"],
-            "detail_scores": detail_scores,
             "feedback": row["feedback"],
             "timestamp": row["timestamp"],
             "character_name": row["character_name"],
-            "style": row["style"],
-            "style_confidence": row["style_confidence"],
-            "recognition_status": row["recognition_status"],
-            "recognition_confidence": row["recognition_confidence"],
-            "score_mode": row["score_mode"],
-            "score_explanation": row["score_explanation"],
+            "ocr_confidence": row["ocr_confidence"],
+            "quality_level": row["quality_level"],
+            "quality_confidence": row["quality_confidence"],
+            "image_path": row["image_path"],
+            "processed_image_path": row["processed_image_path"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

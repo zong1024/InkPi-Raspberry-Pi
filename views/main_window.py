@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
 
 from config import IS_RASPBERRY_PI, UI_CONFIG
 from models.evaluation_result import EvaluationResult
-from services.template_manager import template_manager
 from views.camera_view import CameraView
 from views.history_view import HistoryView
 from views.home_view import HomeView
@@ -39,7 +38,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.current_result: EvaluationResult | None = None
-        self.requested_character_key: str | None = None
 
         self._init_ui()
         self._connect_signals()
@@ -114,7 +112,7 @@ class MainWindow(QMainWindow):
         self.header_title.setFont(app_font(20, QFont.Weight.Bold))
         title_layout.addWidget(self.header_title)
 
-        self.header_subtitle = QLabel("准备开始新的一次书法评测")
+        self.header_subtitle = QLabel("准备开始新的自动识别评测")
         self.header_subtitle.setObjectName("headerSubtitle")
         self.header_subtitle.setFont(app_font(9))
         title_layout.addWidget(self.header_subtitle)
@@ -167,7 +165,6 @@ class MainWindow(QMainWindow):
         self.home_view.start_evaluation.connect(self.show_camera)
         self.home_view.view_history.connect(self.show_history)
         self.home_view.recent_selected.connect(self._open_result)
-        self.home_view.selected_character_changed.connect(self._set_requested_character)
 
         self.camera_view.capture_completed.connect(self._open_result)
         self.camera_view.cancelled.connect(self.show_home)
@@ -188,10 +185,6 @@ class MainWindow(QMainWindow):
     def _refresh_clock(self) -> None:
         self.header_clock.setText(datetime.now().strftime("%m/%d %H:%M"))
 
-    def _set_requested_character(self, character_key: str) -> None:
-        self.requested_character_key = character_key or None
-        self.camera_view.set_requested_character(self.requested_character_key)
-
     def _set_nav_state(self, active_index: int | None) -> None:
         for index, button in enumerate([self.btn_home, self.btn_camera, self.btn_history]):
             button.setProperty("active", active_index is not None and index == active_index)
@@ -208,20 +201,15 @@ class MainWindow(QMainWindow):
 
     def show_home(self) -> None:
         self.home_view.refresh()
-        self._set_page(0, "首页", "查看近期成绩，并开始新的一次书法评测", 0)
+        self._set_page(0, "首页", "查看最近成绩，并开始新的自动识别评测", 0)
 
     def show_camera(self) -> None:
-        self.camera_view.set_requested_character(self.requested_character_key)
-        subtitle = "将单个汉字放入取景框中央，保持背景干净"
-        if self.requested_character_key:
-            display = template_manager.to_display_character(self.requested_character_key)
-            subtitle = f"当前已锁定评测字：{display}，系统将直接按该字评测"
-        self._set_page(1, "拍照评测", subtitle, 1)
+        self._set_page(1, "拍照评测", "让单个汉字落在取景框中央，系统会自动识别并评分", 1)
 
     def show_result(self) -> None:
         subtitle = "评测已完成，可以查看结果或继续下一次拍摄"
         if self.current_result and self.current_result.character_name:
-            subtitle = f"识别字符：{self.current_result.character_name}"
+            subtitle = f"自动识别：{self.current_result.character_name}"
         self._set_page(2, "评测结果", subtitle, None)
 
     def show_history(self) -> None:

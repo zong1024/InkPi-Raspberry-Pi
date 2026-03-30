@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
 from pathlib import Path
+import threading
 from typing import Any
 
 import requests
@@ -59,8 +59,6 @@ class CloudSyncService:
         return self.enabled and bool(self.backend_url) and bool(self.device_key)
 
     def upload_result_async(self, result: EvaluationResult, local_record_id: int) -> bool:
-        """Schedule a background upload. Returns False when sync is not configured."""
-
         if not self.is_ready:
             return False
 
@@ -74,8 +72,6 @@ class CloudSyncService:
         return True
 
     def upload_result(self, result: EvaluationResult, local_record_id: int) -> dict[str, Any]:
-        """Upload one evaluation synchronously."""
-
         if not self.is_ready:
             raise RuntimeError("Cloud sync is not configured")
 
@@ -100,16 +96,12 @@ class CloudSyncService:
             "local_record_id": local_record_id,
             "device_name": self.device_name,
             "total_score": result.total_score,
-            "detail_scores": result.detail_scores,
             "feedback": result.feedback,
             "timestamp": result.timestamp.isoformat(),
             "character_name": result.character_name,
-            "style": result.style,
-            "style_confidence": result.style_confidence,
-            "recognition_status": result.recognition_status,
-            "recognition_confidence": result.recognition_confidence,
-            "score_mode": result.score_mode,
-            "score_explanation": result.score_explanation,
+            "ocr_confidence": result.ocr_confidence,
+            "quality_level": result.quality_level,
+            "quality_confidence": result.quality_confidence,
             "image_path": result.image_path,
             "processed_image_path": result.processed_image_path,
         }

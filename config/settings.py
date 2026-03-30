@@ -27,7 +27,6 @@ PATHS = {
     "project_root": PROJECT_ROOT,
     "models_dir": PROJECT_ROOT / "models",
     "data_dir": PROJECT_ROOT / "data",
-    "templates_dir": PROJECT_ROOT / "models" / "templates",
     "images_dir": PROJECT_ROOT / "data" / "images",
     "processed_dir": PROJECT_ROOT / "data" / "processed",
     "logs_dir": PROJECT_ROOT / "logs",
@@ -108,37 +107,40 @@ CAMERA_CONFIG = {
 # 评测配置
 # =========================
 EVALUATION_CONFIG = {
-    # 评分维度
-    "dimensions": ["结构", "笔画", "平衡", "韵律"],
-    
     # 评分范围
     "score_range": (0, 100),
-    
+
     # 等级阈值
-    "excellent_threshold": 85,
-    "good_threshold": 70,
-    "pass_threshold": 60,
-    
+    "quality_thresholds": {
+        "good": 85,
+        "medium": 70,
+    },
+
+    "quality_labels": {
+        "good": "好",
+        "medium": "中",
+        "bad": "坏",
+    },
+
     # 反馈模板
     "feedback_templates": {
-        "excellent": [
-            "优秀！书法功底扎实，笔画流畅有力！",
-            "太棒了！字形端正，结构匀称！",
-            "完美！体现了深厚的书法功底！",
+        "good": [
+            "整体状态很稳，已经接近比赛演示级效果。",
+            "这张作品完成度很高，字形和气息都比较成熟。",
+            "当前表现优秀，可以把它作为展示用样例。",
         ],
-        "good": {
-            "结构": "注意字形的匀称和留白分布",
-            "笔画": "加强笔画的连贯性和粗细变化",
-            "平衡": "注意字的重心位置",
-            "韵律": "提高行笔的流畅度",
-        },
-        "needs_work": [
-            "继续练习，建议多临摹字帖",
-            "加油！注意笔法和结构",
-            "坚持练习，会有进步的！",
+        "medium": [
+            "整体已经成形，但还有进一步打磨空间。",
+            "识别和评分都比较稳定，建议继续提升细节控制。",
+            "这张作品基础不错，再收一收笔势会更稳。",
+        ],
+        "bad": [
+            "这张作品波动比较明显，建议重拍或重新书写后再试。",
+            "当前作品整体状态偏弱，建议先调整字形和用笔。",
+            "这张图还能识别，但评测结果提示基础质量偏低。",
         ],
     },
-    
+
     # 图像预处理
     "preprocessing": {
         "target_size": 224,
@@ -149,32 +151,43 @@ EVALUATION_CONFIG = {
 
 
 # =========================
-# 模型配置
+# OCR 配置
+# =========================
+OCR_CONFIG = {
+    "engine": "paddleocr",
+    "language": "ch",
+    "device": os.environ.get("INKPI_LOCAL_OCR_DEVICE", "cpu"),
+    "min_confidence": float(os.environ.get("INKPI_LOCAL_OCR_MIN_CONFIDENCE", "0.32")),
+    "warmup": os.environ.get("INKPI_LOCAL_OCR_WARMUP", "true").lower() == "true",
+}
+
+
+# =========================
+# 质量评分 ONNX 配置
+# =========================
+QUALITY_SCORER_CONFIG = {
+    "onnx_path": PATHS["models_dir"] / "quality_scorer.onnx",
+    "input_size": 32,
+    "num_threads": 2,
+    "score_scale": 100.0,
+    "labels": ["bad", "medium", "good"],
+    "default_level": "medium",
+    "feedback_by_level": {
+        "good": "自动识别显示这张作品整体完成度很高，适合直接进入展示或归档。",
+        "medium": "自动识别显示这张作品已经比较稳定，但仍有继续打磨空间。",
+        "bad": "自动识别显示这张作品质量偏弱，建议重新书写或重新拍摄后再试。",
+    },
+}
+
+
+# =========================
+# 模型资产配置
 # =========================
 MODEL_CONFIG = {
-    # 模型文件
-    "model_path": PATHS["models_dir"] / "siamese_calligraphy_best.pth",
-    "onnx_path": PATHS["models_dir"] / "siamese_calligraphy.onnx",
-    "tflite_path": PATHS["models_dir"] / "siamese_calligraphy.tflite",
-    
-    # 模型参数
-    "embedding_dim": 128,
-    "image_size": 224,
-    
-    # 推理配置
-    "inference": {
-        "engine": "auto",  # auto, torch, onnx, tflite
-        "device": "cpu",   # cpu, cuda
-        "num_threads": 4,  # TFLite 线程数
-    },
-    
-    # 相似度阈值
-    "similarity_threshold": {
-        "excellent": 0.9,
-        "good": 0.7,
-        "medium": 0.5,
-        "poor": 0.3,
-    },
+    "ocr_engine": OCR_CONFIG["engine"],
+    "quality_scorer_path": QUALITY_SCORER_CONFIG["onnx_path"],
+    "quality_labels": QUALITY_SCORER_CONFIG["labels"],
+    "input_size": QUALITY_SCORER_CONFIG["input_size"],
 }
 
 

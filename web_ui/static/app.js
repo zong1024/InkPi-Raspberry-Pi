@@ -9,9 +9,6 @@ const state = {
 const els = {
   navButtons: [...document.querySelectorAll(".nav-button")],
   views: [...document.querySelectorAll(".view")],
-  characterGrid: document.getElementById("characterGrid"),
-  selectedCharacterLabel: document.getElementById("selectedCharacterLabel"),
-  selectionModePill: document.getElementById("selectionModePill"),
   cameraStatusText: document.getElementById("cameraStatusText"),
   recordCountText: document.getElementById("recordCountText"),
   averageScoreText: document.getElementById("averageScoreText"),
@@ -22,14 +19,11 @@ const els = {
   globalBanner: document.getElementById("globalBanner"),
   latestScoreText: document.getElementById("latestScoreText"),
   latestCharacterText: document.getElementById("latestCharacterText"),
-  latestStyleText: document.getElementById("latestStyleText"),
-  detailAverages: document.getElementById("detailAverages"),
+  latestLevelText: document.getElementById("latestLevelText"),
+  summaryMetrics: document.getElementById("summaryMetrics"),
   latestResultCard: document.getElementById("latestResultCard"),
   captureStatusPill: document.getElementById("captureStatusPill"),
   cameraPreview: document.getElementById("cameraPreview"),
-  guideCaption: document.getElementById("guideCaption"),
-  captureTargetTitle: document.getElementById("captureTargetTitle"),
-  captureTargetCopy: document.getElementById("captureTargetCopy"),
   guidancePanel: document.getElementById("guidancePanel"),
   captureButton: document.getElementById("captureButton"),
   uploadButton: document.getElementById("uploadButton"),
@@ -90,9 +84,7 @@ async function loadHistory() {
 }
 
 function renderBootstrap() {
-  const { app, selection, camera, stats, characters, history } = state.bootstrap;
-  renderCharacterGrid(characters, selection);
-  updateSelection(selection);
+  const { app, camera, stats, history } = state.bootstrap;
   els.cameraStatusText.textContent = camera.online ? "在线" : "离线";
   els.recordCountText.textContent = String(stats.total_count);
   els.averageScoreText.textContent = String(stats.average_score);
@@ -100,64 +92,26 @@ function renderBootstrap() {
 
   els.latestScoreText.textContent = history[0] ? `${history[0].total_score}` : "--";
   els.latestCharacterText.textContent = history[0]?.character_name || "--";
-  els.latestStyleText.textContent = history[0]?.style || "--";
+  els.latestLevelText.textContent = history[0]?.quality_label || "--";
 
-  els.detailAverages.innerHTML = "";
-  stats.average_details.forEach((item) => {
+  const metrics = [
+    { label: "累计记录", value: stats.total_count },
+    { label: "平均得分", value: stats.average_score || "--" },
+    { label: "最高得分", value: stats.max_score || "--" },
+    { label: "最低得分", value: stats.min_score || "--" },
+  ];
+
+  els.summaryMetrics.innerHTML = "";
+  metrics.forEach((item) => {
     const row = document.createElement("div");
     row.className = "metric-row";
     row.innerHTML = `
       <span>${item.label}</span>
-      <div class="metric-track"><div class="metric-bar" style="width:${Math.max(0, Math.min(100, item.score))}%"></div></div>
-      <strong>${item.score}</strong>
+      <div class="metric-track"><div class="metric-bar" style="width:${metricWidth(item.value)}%"></div></div>
+      <strong>${item.value}</strong>
     `;
-    els.detailAverages.appendChild(row);
+    els.summaryMetrics.appendChild(row);
   });
-}
-
-function renderCharacterGrid(characters, selection) {
-  els.characterGrid.innerHTML = "";
-
-  const autoButton = document.createElement("button");
-  autoButton.className = `character-chip is-auto ${selection.locked ? "" : "is-selected"}`.trim();
-  autoButton.textContent = "AUTO";
-  autoButton.addEventListener("click", () => updateSelectionRemote(null));
-  els.characterGrid.appendChild(autoButton);
-
-  characters.forEach((item) => {
-    const chip = document.createElement("button");
-    chip.className = `character-chip ${selection.key === item.key ? "is-selected" : ""}`.trim();
-    chip.textContent = item.display;
-    chip.title = item.styles.join(" / ");
-    chip.addEventListener("click", () => updateSelectionRemote(item.key));
-    els.characterGrid.appendChild(chip);
-  });
-}
-
-async function updateSelectionRemote(character) {
-  try {
-    const selection = await fetchJson("/api/selection", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character }),
-    });
-    state.bootstrap.selection = selection;
-    renderCharacterGrid(state.bootstrap.characters, selection);
-    updateSelection(selection);
-    showBanner(selection.locked ? `已锁定评测字：${selection.display}` : "已切回自动 OCR 模式。");
-  } catch (error) {
-    showBanner(`设置评测字失败：${error.message}`, true);
-  }
-}
-
-function updateSelection(selection) {
-  els.selectedCharacterLabel.textContent = selection.display;
-  els.selectionModePill.textContent = selection.locked ? "手动锁定" : "自动 OCR";
-  els.captureTargetTitle.textContent = selection.display;
-  els.captureTargetCopy.textContent = selection.locked
-    ? `当前已锁定评测字“${selection.display}”，系统将跳过自动识别，直接按该字进入评分。`
-    : "当前未锁定评测字，系统会先自动识别字符，再决定进入模板评分、通用评分或提示重拍。";
-  els.guideCaption.textContent = selection.locked ? `TARGET ${selection.display}` : "AUTO";
 }
 
 function renderLatestResult(result) {
@@ -172,13 +126,13 @@ function renderLatestResult(result) {
     <div class="summary-score">
       <strong style="color:${result.color}">${result.total_score}</strong>
       <div>
-        <div>${result.grade}</div>
+        <div>${result.quality_label}</div>
         <div>${result.display_time}</div>
       </div>
     </div>
     <div class="summary-meta">
-      <span>评测字：${result.character_name}</span>
-      <span>书体：${result.style}</span>
+      <span>识别字：${result.character_name}</span>
+      <span>OCR：${formatConfidence(result.ocr_confidence)}</span>
     </div>
     <p>${result.feedback}</p>
   `;
@@ -194,7 +148,7 @@ function renderHistory() {
   state.history.forEach((item, index) => {
     const node = els.historyItemTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector(".history-char").textContent = item.character_name;
-    node.querySelector(".history-style").textContent = item.style;
+    node.querySelector(".history-style").textContent = `等级 ${item.quality_label} / OCR ${formatConfidence(item.ocr_confidence)}`;
     node.querySelector(".history-score").textContent = item.total_score;
     node.querySelector(".history-time").textContent = item.display_time;
     if (item.id === state.selectedRecordId || (!state.selectedRecordId && index === 0)) {
@@ -227,30 +181,21 @@ function renderHistoryDetail(item) {
     return;
   }
 
-  const metrics = item.details
-    .map(
-      (detail) => `
-        <div class="metric-row">
-          <span>${detail.label}</span>
-          <div class="metric-track"><div class="metric-bar" style="width:${detail.score}%"></div></div>
-          <strong>${detail.score}</strong>
-        </div>
-      `
-    )
-    .join("");
-
   const originalImage = item.id ? `/api/results/${item.id}/image/original` : "";
   els.historyDetail.className = "detail-panel";
   els.historyDetail.innerHTML = `
     <div class="detail-header">
       <div class="detail-title">
         <h4>${item.character_name}</h4>
-        <p>${item.style} · ${item.grade} · ${item.display_time}</p>
+        <p>${item.quality_label} / OCR ${formatConfidence(item.ocr_confidence)} / ${item.display_time}</p>
       </div>
       <div class="detail-score" style="color:${item.color}">${item.total_score}</div>
     </div>
     ${originalImage ? `<img src="${originalImage}" alt="作品原图" style="width:100%;border-radius:22px;max-height:280px;object-fit:cover;">` : ""}
-    <div class="detail-metrics">${metrics}</div>
+    <div class="summary-meta">
+      <span>质量置信度：${formatConfidence(item.quality_confidence)}</span>
+      <span>自动识别：${item.character_name}</span>
+    </div>
     <p class="detail-feedback">${item.feedback}</p>
   `;
 }
@@ -265,7 +210,7 @@ function switchView(view) {
   });
 
   const pageMeta = {
-    overview: ["演示主控台", "评测总览"],
+    overview: ["演示主控台", "自动评测总览"],
     capture: ["自动识别优先", "拍照评测"],
     history: ["结果归档", "历史记录"],
   };
@@ -310,7 +255,7 @@ async function evaluateCapture() {
     const payload = await fetchJson("/api/evaluate/capture", { method: "POST" });
     const result = payload.result;
     ingestNewResult(result);
-    showBanner(`评测完成：${result.character_name} · ${result.total_score} 分`);
+    showBanner(`评测完成：${result.character_name} / ${result.total_score} 分 / ${result.quality_label}`);
     switchView("history");
   } catch (error) {
     handleEvaluationError(error);
@@ -336,7 +281,7 @@ async function handleUpload(event) {
     });
     const result = payload.result;
     ingestNewResult(result);
-    showBanner(`图片评测完成：${result.character_name} · ${result.total_score} 分`);
+    showBanner(`图片评测完成：${result.character_name} / ${result.total_score} 分 / ${result.quality_label}`);
     switchView("history");
   } catch (error) {
     handleEvaluationError(error);
@@ -357,7 +302,7 @@ function ingestNewResult(result) {
     els.recordCountText.textContent = String(total);
     els.latestScoreText.textContent = `${result.total_score}`;
     els.latestCharacterText.textContent = result.character_name;
-    els.latestStyleText.textContent = result.style;
+    els.latestLevelText.textContent = result.quality_label;
   }
 }
 
@@ -393,6 +338,16 @@ function tickClock() {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function metricWidth(value) {
+  if (value === "--") return 0;
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function formatConfidence(value) {
+  if (typeof value !== "number") return "--";
+  return `${Math.round(value * 100)}%`;
 }
 
 async function fetchJson(url, options = {}) {
