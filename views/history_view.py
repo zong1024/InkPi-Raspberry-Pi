@@ -10,17 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
-    QComboBox,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QBoxLayout, QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
@@ -146,6 +136,7 @@ class HistoryView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.compact_mode = False
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -160,61 +151,69 @@ class HistoryView(QWidget):
         container = QWidget()
         self.scroll_area.setWidget(container)
 
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(12)
+        self.page_layout = QVBoxLayout(container)
+        self.page_layout.setContentsMargins(4, 4, 4, 4)
+        self.page_layout.setSpacing(12)
 
         stats_title = QLabel("历史成绩")
         stats_title.setObjectName("sectionTitle")
         stats_title.setFont(app_font(16, QFont.Weight.Bold))
-        layout.addWidget(stats_title)
+        self.page_layout.addWidget(stats_title)
 
         self.stats_row = QHBoxLayout()
         self.stats_row.setSpacing(10)
-        layout.addLayout(self.stats_row)
+        self.page_layout.addLayout(self.stats_row)
 
         filter_card = QFrame()
         filter_card.setObjectName("panelCard")
-        filter_layout = QHBoxLayout(filter_card)
-        filter_layout.setContentsMargins(16, 12, 16, 12)
-        filter_layout.setSpacing(8)
+        self.filter_layout = QVBoxLayout(filter_card)
+        self.filter_layout.setContentsMargins(16, 12, 16, 12)
+        self.filter_layout.setSpacing(8)
+
+        self.filter_top_row = QHBoxLayout()
+        self.filter_top_row.setSpacing(8)
 
         filter_title = QLabel("时间范围")
         filter_title.setObjectName("mutedLabel")
-        filter_layout.addWidget(filter_title)
+        self.filter_top_row.addWidget(filter_title)
+        self.filter_title = filter_title
 
         self.date_combo = QComboBox()
         self.date_combo.addItems(["全部", "今天", "最近 7 天", "最近 30 天"])
         self.date_combo.setMinimumWidth(120)
         self.date_combo.currentIndexChanged.connect(self._on_filter_changed)
-        filter_layout.addWidget(self.date_combo)
+        self.filter_top_row.addWidget(self.date_combo, stretch=1)
 
-        filter_layout.addStretch()
+        self.filter_layout.addLayout(self.filter_top_row)
+
+        self.filter_bottom_row = QHBoxLayout()
+        self.filter_bottom_row.setSpacing(8)
 
         self.record_hint = QLabel("最近 20 条记录")
         self.record_hint.setObjectName("mutedLabel")
-        filter_layout.addWidget(self.record_hint)
+        self.filter_bottom_row.addWidget(self.record_hint, stretch=1)
 
-        btn_refresh = QPushButton("刷新")
-        btn_refresh.setObjectName("secondaryButton")
-        btn_refresh.setMinimumHeight(40)
-        btn_refresh.clicked.connect(self.refresh_data)
-        filter_layout.addWidget(btn_refresh)
+        self.btn_refresh = QPushButton("刷新")
+        self.btn_refresh.setObjectName("secondaryButton")
+        self.btn_refresh.setMinimumHeight(40)
+        self.btn_refresh.clicked.connect(self.refresh_data)
+        self.filter_bottom_row.addWidget(self.btn_refresh)
 
-        btn_back = QPushButton("返回首页")
-        btn_back.setObjectName("ghostButton")
-        btn_back.setMinimumHeight(40)
-        btn_back.clicked.connect(self.back_requested.emit)
-        filter_layout.addWidget(btn_back)
+        self.btn_back = QPushButton("返回首页")
+        self.btn_back.setObjectName("ghostButton")
+        self.btn_back.setMinimumHeight(40)
+        self.btn_back.clicked.connect(self.back_requested.emit)
+        self.filter_bottom_row.addWidget(self.btn_back)
 
-        layout.addWidget(filter_card)
+        self.filter_layout.addLayout(self.filter_bottom_row)
+        self.page_layout.addWidget(filter_card)
 
         self.list_container = QWidget()
         self.list_layout = QVBoxLayout(self.list_container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(8)
-        layout.addWidget(self.list_container)
-        layout.addStretch()
+        self.page_layout.addWidget(self.list_container)
+        self.page_layout.addStretch()
 
     def refresh_data(self) -> None:
         self.scroll_area.verticalScrollBar().setValue(0)
@@ -293,3 +292,16 @@ class HistoryView(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             database_service.delete(record_id)
             self.refresh_data()
+
+    def set_compact_mode(self, compact: bool) -> None:
+        if compact == self.compact_mode:
+            return
+
+        self.compact_mode = compact
+        self.page_layout.setSpacing(8 if compact else 12)
+        self.stats_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.filter_top_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.filter_bottom_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.date_combo.setMinimumWidth(0 if compact else 120)
+        self.btn_refresh.setMinimumHeight(36 if compact else 40)
+        self.btn_back.setMinimumHeight(36 if compact else 40)

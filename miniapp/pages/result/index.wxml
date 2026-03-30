@@ -45,4 +45,9 @@
     <text class="panel-title">评语建议</text>
     <text class="feedback-quote">{{result.feedback || '暂无评语'}}</text>
   </view>
+
+  <view wx:if="{{result}}" class="detail-actions">
+    <button class="ghost-btn detail-back" bindtap="goBack">返回历史</button>
+    <button class="detail-delete" bindtap="deleteCurrent" loading="{{deleting}}">删除这条记录</button>
+  </view>
 </view>

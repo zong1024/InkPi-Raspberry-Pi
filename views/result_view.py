@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
     QLabel,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -61,6 +62,7 @@ class ResultView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.result: EvaluationResult | None = None
+        self.compact_mode = False
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -75,9 +77,9 @@ class ResultView(QWidget):
         container = QWidget()
         self.scroll_area.setWidget(container)
 
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(14)
+        self.page_layout = QVBoxLayout(container)
+        self.page_layout.setContentsMargins(4, 4, 4, 4)
+        self.page_layout.setSpacing(14)
 
         summary_card = QFrame()
         summary_card.setObjectName("accentCard")
@@ -110,7 +112,13 @@ class ResultView(QWidget):
         self.meta_time.setStyleSheet("color: #d7c4ae; font-size: 10px;")
         summary_layout.addWidget(self.meta_time)
 
-        layout.addWidget(summary_card)
+        self.summary_badge = QLabel("自动评测中")
+        self.summary_badge.setObjectName("successChip")
+        summary_layout.addWidget(self.summary_badge)
+
+        self.summary_card = summary_card
+        self.summary_layout = summary_layout
+        self.page_layout.addWidget(summary_card)
 
         insight_card = QFrame()
         insight_card.setObjectName("resultCard")
@@ -134,7 +142,7 @@ class ResultView(QWidget):
         self.insight_copy.setFont(app_font(11))
         insight_layout.addWidget(self.insight_copy)
 
-        layout.addWidget(insight_card)
+        self.page_layout.addWidget(insight_card)
 
         meta_card = QFrame()
         meta_card.setObjectName("resultCard")
@@ -151,7 +159,40 @@ class ResultView(QWidget):
         self.meta_grid.setHorizontalSpacing(12)
         self.meta_grid.setVerticalSpacing(12)
         meta_layout.addLayout(self.meta_grid)
-        layout.addWidget(meta_card)
+        self.page_layout.addWidget(meta_card)
+
+        confidence_card = QFrame()
+        confidence_card.setObjectName("resultCard")
+        confidence_layout = QVBoxLayout(confidence_card)
+        confidence_layout.setContentsMargins(18, 18, 18, 18)
+        confidence_layout.setSpacing(10)
+
+        confidence_title = QLabel("可信度读数")
+        confidence_title.setObjectName("sectionTitle")
+        confidence_title.setFont(app_font(16, QFont.Weight.Bold))
+        confidence_layout.addWidget(confidence_title)
+
+        self.ocr_confidence_label = QLabel("OCR 置信度 0%")
+        self.ocr_confidence_label.setObjectName("mutedLabel")
+        confidence_layout.addWidget(self.ocr_confidence_label)
+
+        self.ocr_progress = QProgressBar()
+        self.ocr_progress.setRange(0, 100)
+        confidence_layout.addWidget(self.ocr_progress)
+
+        self.quality_confidence_label = QLabel("质量置信度 0%")
+        self.quality_confidence_label.setObjectName("mutedLabel")
+        confidence_layout.addWidget(self.quality_confidence_label)
+
+        self.quality_progress = QProgressBar()
+        self.quality_progress.setRange(0, 100)
+        confidence_layout.addWidget(self.quality_progress)
+
+        self.confidence_hint = QLabel("这两个数值越高，说明自动识别和评分越稳定，更适合直接展示给评委。")
+        self.confidence_hint.setObjectName("sectionSubtitle")
+        self.confidence_hint.setWordWrap(True)
+        confidence_layout.addWidget(self.confidence_hint)
+        self.page_layout.addWidget(confidence_card)
 
         feedback_card = QFrame()
         feedback_card.setObjectName("feedbackCard")
@@ -169,41 +210,38 @@ class ResultView(QWidget):
         self.feedback_label.setWordWrap(True)
         self.feedback_label.setFont(app_font(11))
         feedback_layout.addWidget(self.feedback_label)
-        layout.addWidget(feedback_card)
+        self.page_layout.addWidget(feedback_card)
 
         actions_card = QFrame()
         actions_card.setObjectName("panelCard")
-        actions_layout = QGridLayout(actions_card)
-        actions_layout.setContentsMargins(18, 18, 18, 18)
-        actions_layout.setHorizontalSpacing(10)
-        actions_layout.setVerticalSpacing(10)
+        self.actions_layout = QGridLayout(actions_card)
+        self.actions_layout.setContentsMargins(18, 18, 18, 18)
+        self.actions_layout.setHorizontalSpacing(10)
+        self.actions_layout.setVerticalSpacing(10)
 
         self.btn_home = QPushButton("返回首页")
         self.btn_home.setObjectName("secondaryButton")
         self.btn_home.setMinimumHeight(50)
         self.btn_home.clicked.connect(self.back_requested.emit)
-        actions_layout.addWidget(self.btn_home, 0, 0)
 
         self.btn_history = QPushButton("查看历史")
         self.btn_history.setObjectName("secondaryButton")
         self.btn_history.setMinimumHeight(50)
         self.btn_history.clicked.connect(self.history_requested.emit)
-        actions_layout.addWidget(self.btn_history, 0, 1)
 
         self.btn_speak = QPushButton("语音播报")
         self.btn_speak.setObjectName("ghostButton")
         self.btn_speak.setMinimumHeight(50)
         self.btn_speak.clicked.connect(self._on_speak)
-        actions_layout.addWidget(self.btn_speak, 1, 0)
 
         self.btn_new = QPushButton("再次评测")
         self.btn_new.setObjectName("primaryButton")
         self.btn_new.setMinimumHeight(50)
         self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
-        actions_layout.addWidget(self.btn_new, 1, 1)
+        self._apply_actions_layout()
 
-        layout.addWidget(actions_card)
-        layout.addStretch()
+        self.page_layout.addWidget(actions_card)
+        self.page_layout.addStretch()
 
     def set_result(self, result: EvaluationResult) -> None:
         self.result = result
@@ -218,9 +256,11 @@ class ResultView(QWidget):
         score_color = score_to_color(score)
 
         self.total_score_label.setText(str(score))
-        self.total_score_label.setStyleSheet("color: #fff8f1; font-size: 64px; font-weight: 800;")
+        score_font_size = 48 if self.compact_mode else 64
+        self.total_score_label.setStyleSheet(f"color: #fff8f1; font-size: {score_font_size}px; font-weight: 800;")
         self.grade_label.setText(self.result.get_grade())
         self.grade_label.setStyleSheet(f"color: {score_color}; font-size: 16px; font-weight: 700;")
+        self.summary_badge.setText(f"{self.result.get_grade()} / {self.result.character_name or '未识别'}")
 
         self.meta_primary.setText(f"识别汉字：{self.result.character_name or '未识别'}")
         self.meta_secondary.setText(
@@ -228,6 +268,12 @@ class ResultView(QWidget):
             f"质量置信度：{round((self.result.quality_confidence or 0.0) * 100)}%"
         )
         self.meta_time.setText(f"评测时间：{self.result.timestamp.strftime('%Y-%m-%d %H:%M')}")
+        ocr_value = round((self.result.ocr_confidence or 0.0) * 100)
+        quality_value = round((self.result.quality_confidence or 0.0) * 100)
+        self.ocr_confidence_label.setText(f"OCR 置信度 {ocr_value}%")
+        self.quality_confidence_label.setText(f"质量置信度 {quality_value}%")
+        self.ocr_progress.setValue(ocr_value)
+        self.quality_progress.setValue(quality_value)
         self.insight_copy.setText(
             f"系统自动识别当前字为“{self.result.character_name or '未识别'}”，"
             f"再直接输出 {self.result.total_score} 分和“{self.result.get_grade()}”等级。"
@@ -245,8 +291,9 @@ class ResultView(QWidget):
             ("质量等级", self.result.get_grade()),
             ("质量置信度", f"{round((self.result.quality_confidence or 0.0) * 100)}%"),
         ]
+        columns = 1 if self.compact_mode else 2
         for index, (title, value) in enumerate(cards):
-            self.meta_grid.addWidget(MetaCard(title, value), index // 2, index % 2)
+            self.meta_grid.addWidget(MetaCard(title, value), index // columns, index % columns)
 
         self.feedback_label.setText(self.result.feedback)
         led_service.show_score(score)
@@ -254,3 +301,31 @@ class ResultView(QWidget):
     def _on_speak(self) -> None:
         if self.result is not None:
             speech_service.speak_score(self.result.total_score, self.result.feedback)
+
+    def _apply_actions_layout(self) -> None:
+        while self.actions_layout.count():
+            item = self.actions_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+
+        buttons = [self.btn_home, self.btn_history, self.btn_speak, self.btn_new]
+        if self.compact_mode:
+            for row, button in enumerate(buttons):
+                self.actions_layout.addWidget(button, row, 0)
+        else:
+            positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+            for button, (row, column) in zip(buttons, positions):
+                self.actions_layout.addWidget(button, row, column)
+
+    def set_compact_mode(self, compact: bool) -> None:
+        self.compact_mode = compact
+        self.page_layout.setSpacing(10 if compact else 14)
+        self.summary_layout.setContentsMargins(16 if compact else 22, 16 if compact else 20, 16 if compact else 22, 16 if compact else 20)
+
+        for button in (self.btn_home, self.btn_history, self.btn_speak, self.btn_new):
+            button.setMinimumHeight(42 if compact else 50)
+
+        self._apply_actions_layout()
+        if self.result is not None:
+            self._update_display()

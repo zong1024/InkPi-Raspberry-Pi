@@ -9,15 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QBoxLayout, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
@@ -137,6 +129,7 @@ class HomeView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.compact_mode = False
         self._init_ui()
         self.refresh()
 
@@ -152,16 +145,16 @@ class HomeView(QWidget):
         container = QWidget()
         self.scroll_area.setWidget(container)
 
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(12)
+        self.page_layout = QVBoxLayout(container)
+        self.page_layout.setContentsMargins(4, 4, 4, 4)
+        self.page_layout.setSpacing(12)
 
-        hero_card = QFrame()
-        hero_card.setObjectName("heroCard")
-        hero_card.setMinimumHeight(148)
-        hero_layout = QHBoxLayout(hero_card)
-        hero_layout.setContentsMargins(20, 18, 20, 18)
-        hero_layout.setSpacing(16)
+        self.hero_card = QFrame()
+        self.hero_card.setObjectName("heroCard")
+        self.hero_card.setMinimumHeight(148)
+        self.hero_layout = QHBoxLayout(self.hero_card)
+        self.hero_layout.setContentsMargins(20, 18, 20, 18)
+        self.hero_layout.setSpacing(16)
 
         hero_text = QVBoxLayout()
         hero_text.setSpacing(6)
@@ -182,28 +175,29 @@ class HomeView(QWidget):
         subtitle.setFont(app_font(9))
         hero_text.addWidget(subtitle)
 
-        button_row = QHBoxLayout()
-        button_row.setSpacing(10)
+        self.button_row = QHBoxLayout()
+        self.button_row.setSpacing(10)
 
         self.btn_start = QPushButton("开始评测")
         self.btn_start.setObjectName("primaryButton")
         self.btn_start.setMinimumHeight(50)
         self.btn_start.clicked.connect(self.start_evaluation.emit)
-        button_row.addWidget(self.btn_start)
+        self.button_row.addWidget(self.btn_start)
 
         self.btn_history = QPushButton("查看历史")
         self.btn_history.setObjectName("secondaryButton")
         self.btn_history.setMinimumHeight(50)
         self.btn_history.clicked.connect(self.view_history.emit)
-        button_row.addWidget(self.btn_history)
+        self.button_row.addWidget(self.btn_history)
 
-        hero_text.addLayout(button_row)
-        hero_layout.addLayout(hero_text, stretch=3)
+        hero_text.addLayout(self.button_row)
+        self.hero_layout.addLayout(hero_text, stretch=3)
 
-        cue_card = QFrame()
-        cue_card.setObjectName("accentCard")
-        cue_card.setFixedWidth(196)
-        cue_layout = QVBoxLayout(cue_card)
+        self.cue_card = QFrame()
+        self.cue_card.setObjectName("accentCard")
+        self.cue_card.setMinimumWidth(168)
+        self.cue_card.setMaximumWidth(220)
+        cue_layout = QVBoxLayout(self.cue_card)
         cue_layout.setContentsMargins(18, 16, 18, 16)
         cue_layout.setSpacing(6)
 
@@ -220,37 +214,37 @@ class HomeView(QWidget):
         self.hero_hint.setWordWrap(True)
         cue_layout.addWidget(self.hero_hint)
 
-        hero_layout.addWidget(cue_card, stretch=2)
-        layout.addWidget(hero_card)
+        self.hero_layout.addWidget(self.cue_card, stretch=2)
+        self.page_layout.addWidget(self.hero_card)
 
         self.stats_layout = QHBoxLayout()
         self.stats_layout.setSpacing(10)
-        layout.addLayout(self.stats_layout)
+        self.page_layout.addLayout(self.stats_layout)
 
-        recent_header = QHBoxLayout()
-        recent_header.setSpacing(10)
+        self.recent_header = QHBoxLayout()
+        self.recent_header.setSpacing(10)
 
         recent_title = QLabel("近期记录")
         recent_title.setObjectName("sectionTitle")
         recent_title.setFont(app_font(16, QFont.Weight.Bold))
-        recent_header.addWidget(recent_title)
-        recent_header.addStretch()
+        self.recent_header.addWidget(recent_title)
+        self.recent_header.addStretch()
 
-        recent_hint = QLabel("自动识别结果与总分都会保存在这里")
-        recent_hint.setObjectName("mutedLabel")
-        recent_header.addWidget(recent_hint)
-        layout.addLayout(recent_header)
+        self.recent_hint = QLabel("自动识别结果与总分都会保存在这里")
+        self.recent_hint.setObjectName("mutedLabel")
+        self.recent_header.addWidget(self.recent_hint)
+        self.page_layout.addLayout(self.recent_header)
 
         self.recent_container = QWidget()
         self.recent_layout = QVBoxLayout(self.recent_container)
         self.recent_layout.setContentsMargins(0, 0, 0, 0)
         self.recent_layout.setSpacing(10)
-        layout.addWidget(self.recent_container)
-        layout.addStretch()
+        self.page_layout.addWidget(self.recent_container)
+        self.page_layout.addStretch()
 
     def refresh(self) -> None:
         stats = database_service.get_statistics()
-        recent_records = database_service.get_recent(4)
+        recent_records = database_service.get_recent(2 if self.compact_mode else 4)
         self.scroll_area.verticalScrollBar().setValue(0)
 
         clear_layout(self.stats_layout)
@@ -297,3 +291,20 @@ class HomeView(QWidget):
             card = RecentCard(record)
             card.selected.connect(self.recent_selected.emit)
             self.recent_layout.addWidget(card)
+
+    def set_compact_mode(self, compact: bool) -> None:
+        if compact == self.compact_mode:
+            return
+
+        self.compact_mode = compact
+        self.page_layout.setSpacing(8 if compact else 12)
+        self.hero_card.setMinimumHeight(0 if compact else 148)
+        self.hero_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.button_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.stats_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.recent_header.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.recent_hint.setVisible(not compact)
+        self.cue_card.setMaximumWidth(16777215 if compact else 220)
+        self.btn_start.setMinimumHeight(42 if compact else 50)
+        self.btn_history.setMinimumHeight(42 if compact else 50)
+        self.refresh()

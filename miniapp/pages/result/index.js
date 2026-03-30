@@ -39,6 +39,7 @@ Page({
     result: null,
     metrics: [],
     error: '',
+    deleting: false,
   },
 
   onLoad(options) {
@@ -95,5 +96,42 @@ Page({
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  async deleteCurrent() {
+    if (!this.resultId) {
+      return;
+    }
+
+    const result = this.data.result || {};
+    const modal = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除记录',
+        content: `确认删除「${result.characterLabel || '未识别'}」这条记录吗？`,
+        confirmColor: '#b34b3e',
+        success: resolve,
+        fail: () => resolve({ confirm: false }),
+      });
+    });
+
+    if (!modal.confirm) {
+      return;
+    }
+
+    this.setData({ deleting: true });
+    try {
+      await api.deleteHistory(this.resultId);
+      wx.showToast({ title: '已删除', icon: 'success' });
+      setTimeout(() => {
+        wx.navigateBack();
+      }, 300);
+    } catch (error) {
+      wx.showToast({ title: '删除失败', icon: 'none' });
+      this.setData({ deleting: false });
+    }
+  },
+
+  goBack() {
+    wx.navigateBack();
   },
 });

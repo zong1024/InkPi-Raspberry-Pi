@@ -106,7 +106,44 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def list_results():
         limit = int(request.args.get("limit", 30))
         offset = int(request.args.get("offset", 0))
-        return jsonify({"ok": True, **db.list_results(limit=limit, offset=offset)})
+        keyword = str(request.args.get("keyword", "")).strip()
+        quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
+        device_name = str(request.args.get("device_name", "all")).strip() or "all"
+        date_range = str(request.args.get("date_range", "all")).strip() or "all"
+        sort = str(request.args.get("sort", "latest")).strip() or "latest"
+        return jsonify(
+            {
+                "ok": True,
+                **db.list_results(
+                    limit=limit,
+                    offset=offset,
+                    keyword=keyword,
+                    quality_level=quality_level,
+                    device_name=device_name,
+                    date_range=date_range,
+                    sort=sort,
+                ),
+            }
+        )
+
+    @app.get("/api/results/summary")
+    @auth_required
+    def results_summary():
+        keyword = str(request.args.get("keyword", "")).strip()
+        quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
+        device_name = str(request.args.get("device_name", "all")).strip() or "all"
+        date_range = str(request.args.get("date_range", "all")).strip() or "all"
+        return jsonify(
+            {
+                "ok": True,
+                "summary": db.get_summary(
+                    keyword=keyword,
+                    quality_level=quality_level,
+                    device_name=device_name,
+                    date_range=date_range,
+                ),
+            }
+        )
 
     @app.get("/api/results/<int:result_id>")
     @auth_required
@@ -115,6 +152,25 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         if not result:
             return json_error("result_not_found", 404)
         return jsonify({"ok": True, "result": result})
+
+    @app.delete("/api/results/<int:result_id>")
+    @auth_required
+    def delete_result(result_id: int):
+        deleted = db.delete_result(result_id)
+        if not deleted:
+            return json_error("result_not_found", 404)
+        return jsonify({"ok": True, "deleted_id": result_id})
+
+    @app.post("/api/results/batch-delete")
+    @auth_required
+    def batch_delete_results():
+        payload = request.get_json(silent=True) or {}
+        ids = payload.get("ids") or []
+        if not isinstance(ids, list):
+            return json_error("invalid_payload", 400)
+
+        deleted_count = db.delete_results(ids)
+        return jsonify({"ok": True, "deleted_count": deleted_count})
 
     @app.post("/api/device/results")
     def upload_result():

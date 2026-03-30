@@ -13,17 +13,7 @@ import cv2
 import numpy as np
 from PyQt6.QtCore import QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QImage, QPixmap
-from PyQt6.QtWidgets import (
-    QFileDialog,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QMessageBox,
-    QPushButton,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QBoxLayout, QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from config import IMAGES_DIR
 from models.evaluation_result import EvaluationResult
@@ -69,18 +59,19 @@ class CameraView(QWidget):
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
+        self.compact_mode = False
         self._init_ui()
 
     def _init_ui(self) -> None:
-        content_layout = QHBoxLayout(self)
-        content_layout.setContentsMargins(4, 4, 4, 4)
-        content_layout.setSpacing(12)
+        self.content_layout = QHBoxLayout(self)
+        self.content_layout.setContentsMargins(4, 4, 4, 4)
+        self.content_layout.setSpacing(12)
 
         preview_card = QFrame()
         preview_card.setObjectName("previewCard")
-        preview_layout = QVBoxLayout(preview_card)
-        preview_layout.setContentsMargins(16, 16, 16, 16)
-        preview_layout.setSpacing(8)
+        self.preview_layout = QVBoxLayout(preview_card)
+        self.preview_layout.setContentsMargins(16, 16, 16, 16)
+        self.preview_layout.setSpacing(8)
 
         preview_header = QHBoxLayout()
         preview_title = QLabel("实时取景")
@@ -92,7 +83,7 @@ class CameraView(QWidget):
         self.camera_state = QLabel("准备中")
         self.camera_state.setObjectName("statusPill")
         preview_header.addWidget(self.camera_state)
-        preview_layout.addLayout(preview_header)
+        self.preview_layout.addLayout(preview_header)
 
         self.preview_frame = QFrame()
         self.preview_frame.setObjectName("previewFrame")
@@ -107,23 +98,23 @@ class CameraView(QWidget):
         self.preview_label.setWordWrap(True)
         self.preview_label.setFont(app_font(12))
         frame_layout.addWidget(self.preview_label)
-        preview_layout.addWidget(self.preview_frame, stretch=1)
+        self.preview_layout.addWidget(self.preview_frame, stretch=1)
 
-        preview_hint = QLabel("只保留单个汉字主体，尽量不要把整页练习纸、边框和大段注释一起拍进来。")
-        preview_hint.setObjectName("sectionSubtitle")
-        preview_hint.setWordWrap(True)
-        preview_layout.addWidget(preview_hint)
+        self.preview_hint = QLabel("只保留单个汉字主体，尽量不要把整页练习纸、边框和大段注释一起拍进来。")
+        self.preview_hint.setObjectName("sectionSubtitle")
+        self.preview_hint.setWordWrap(True)
+        self.preview_layout.addWidget(self.preview_hint)
 
-        content_layout.addWidget(preview_card, stretch=7)
+        self.content_layout.addWidget(preview_card, stretch=7)
 
-        side_widget = QWidget()
-        side_layout = QVBoxLayout(side_widget)
-        side_layout.setContentsMargins(0, 0, 0, 0)
-        side_layout.setSpacing(10)
+        self.side_widget = QWidget()
+        self.side_layout = QVBoxLayout(self.side_widget)
+        self.side_layout.setContentsMargins(0, 0, 0, 0)
+        self.side_layout.setSpacing(10)
 
-        guide_card = QFrame()
-        guide_card.setObjectName("guideCard")
-        guide_layout = QVBoxLayout(guide_card)
+        self.guide_card = QFrame()
+        self.guide_card.setObjectName("guideCard")
+        guide_layout = QVBoxLayout(self.guide_card)
         guide_layout.setContentsMargins(16, 16, 16, 16)
         guide_layout.setSpacing(6)
 
@@ -132,6 +123,7 @@ class CameraView(QWidget):
         guide_title.setFont(app_font(15, QFont.Weight.Bold))
         guide_layout.addWidget(guide_title)
 
+        self.guide_steps: list[QLabel] = []
         for text in [
             "1. 先提取单字主体，判断画面是否适合评测。",
             "2. 用本地官方 OCR 自动识别当前汉字。",
@@ -141,6 +133,7 @@ class CameraView(QWidget):
             label.setObjectName("sectionSubtitle")
             label.setWordWrap(True)
             guide_layout.addWidget(label)
+            self.guide_steps.append(label)
 
         self.status_label = QLabel("等待相机就绪")
         self.status_label.setObjectName("sectionSubtitle")
@@ -153,18 +146,42 @@ class CameraView(QWidget):
         self.action_hint.setFont(app_font(10))
         guide_layout.addWidget(self.action_hint)
 
-        side_layout.addWidget(guide_card)
+        self.side_layout.addWidget(self.guide_card)
 
-        action_card = QFrame()
-        action_card.setObjectName("panelCard")
-        action_layout = QVBoxLayout(action_card)
+        self.focus_card = QFrame()
+        self.focus_card.setObjectName("panelCard")
+        focus_layout = QVBoxLayout(self.focus_card)
+        focus_layout.setContentsMargins(16, 16, 16, 16)
+        focus_layout.setSpacing(8)
+
+        focus_title = QLabel("拍摄要求")
+        focus_title.setObjectName("sectionTitle")
+        focus_title.setFont(app_font(14, QFont.Weight.Bold))
+        focus_layout.addWidget(focus_title)
+
+        self.focus_chips: list[QLabel] = []
+        for text, name in [
+            ("主体完整", "successChip"),
+            ("尽量居中", "accentChip"),
+            ("背景干净", "chipLabel"),
+        ]:
+            label = QLabel(text)
+            label.setObjectName(name)
+            focus_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignLeft)
+            self.focus_chips.append(label)
+
+        self.side_layout.addWidget(self.focus_card)
+
+        self.action_card = QFrame()
+        self.action_card.setObjectName("panelCard")
+        action_layout = QVBoxLayout(self.action_card)
         action_layout.setContentsMargins(16, 16, 16, 16)
         action_layout.setSpacing(8)
 
-        action_target = QLabel("当前为全自动识别评测模式")
-        action_target.setObjectName("mutedLabel")
-        action_target.setWordWrap(True)
-        action_layout.addWidget(action_target)
+        self.action_target = QLabel("当前为全自动识别评测模式")
+        self.action_target.setObjectName("mutedLabel")
+        self.action_target.setWordWrap(True)
+        action_layout.addWidget(self.action_target)
 
         self.btn_capture = QPushButton("拍照并评测")
         self.btn_capture.setObjectName("primaryButton")
@@ -184,11 +201,11 @@ class CameraView(QWidget):
         self.btn_cancel.clicked.connect(self.cancelled.emit)
         action_layout.addWidget(self.btn_cancel)
 
-        side_layout.addWidget(action_card)
-        side_layout.addStretch()
+        self.side_layout.addWidget(self.action_card)
+        self.side_layout.addStretch()
 
-        side_widget.setMaximumWidth(232)
-        content_layout.addWidget(side_widget, stretch=3)
+        self.side_widget.setMaximumWidth(232)
+        self.content_layout.addWidget(self.side_widget, stretch=3)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -418,3 +435,28 @@ class CameraView(QWidget):
 
     def cleanup(self) -> None:
         self._stop_camera()
+
+    def set_compact_mode(self, compact: bool) -> None:
+        if compact == self.compact_mode:
+            return
+
+        self.compact_mode = compact
+        self.content_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
+        self.content_layout.setSpacing(8 if compact else 12)
+        self.preview_layout.setContentsMargins(12 if compact else 16, 12 if compact else 16, 12 if compact else 16, 12 if compact else 16)
+        self.side_layout.setSpacing(8 if compact else 10)
+        self.preview_label.setMinimumSize(240 if compact else 430, 136 if compact else 270)
+        self.preview_hint.setVisible(not compact)
+        self.side_widget.setMaximumWidth(16777215 if compact else 232)
+        self.action_target.setText("全自动识别评测" if compact else "当前为全自动识别评测模式")
+        self.focus_card.setVisible(True)
+
+        for index, label in enumerate(self.guide_steps):
+            label.setVisible(not compact or index == 0)
+
+        for index, label in enumerate(self.focus_chips):
+            label.setVisible(not compact or index < 2)
+
+        self.btn_capture.setMinimumHeight(42 if compact else 48)
+        self.btn_load.setMinimumHeight(40 if compact else 46)
+        self.btn_cancel.setMinimumHeight(38 if compact else 42)

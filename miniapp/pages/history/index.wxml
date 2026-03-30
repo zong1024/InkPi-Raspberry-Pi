@@ -6,10 +6,9 @@
     <view class="hero-head">
       <view class="hero-copy">
         <text class="eyebrow">InkPi Cloud</text>
-        <text class="hero-title">评测卷宗</text>
+        <text class="hero-title">历史卷宗</text>
         <text class="hero-subtitle">
-          树莓派评测完成后，历史记录会自动同步到云端。这里展示的是自动 OCR + ONNX
-          单链路的最新成绩。
+          这里会持续汇总树莓派上传的评测结果。现在可以按字、等级、时间和设备筛选，也支持直接删除无效记录。
         </text>
       </view>
       <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
@@ -20,38 +19,137 @@
       <view class="chip-row">
         <text class="meta-chip">最近刷新 {{lastUpdated || '暂未同步'}}</text>
         <text class="meta-chip">设备 {{summary.deviceCount}}</text>
+        <text class="meta-chip">字种 {{summary.uniqueCharacters}}</text>
       </view>
     </view>
   </view>
 
-  <view class="summary-strip">
+  <view class="summary-grid">
     <view class="summary-item">
       <text class="summary-label">总记录</text>
       <text class="summary-value">{{summary.total}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">最新得分</text>
-      <text class="summary-value">{{summary.latestScore}}</text>
-    </view>
-    <view class="summary-item">
       <text class="summary-label">平均得分</text>
       <text class="summary-value">{{summary.average}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="summary-label">近 7 天均分</text>
+      <text class="summary-value">{{summary.recentAverage}}</text>
+    </view>
+    <view class="summary-item">
+      <text class="summary-label">最高分</text>
+      <text class="summary-value">{{summary.bestScore}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel digest-panel">
+    <view class="section-head digest-head">
+      <text class="section-title">自动总结</text>
+      <text class="section-note">{{summary.topDevice}}</text>
+    </view>
+    <text class="digest-copy">{{summary.insight}}</text>
+
+    <view class="quality-strip">
+      <view class="quality-pill quality-good">
+        <text class="quality-name">好</text>
+        <text class="quality-count">{{summary.qualityCounts.good}}</text>
+      </view>
+      <view class="quality-pill quality-medium">
+        <text class="quality-name">中</text>
+        <text class="quality-count">{{summary.qualityCounts.medium}}</text>
+      </view>
+      <view class="quality-pill quality-bad">
+        <text class="quality-name">坏</text>
+        <text class="quality-count">{{summary.qualityCounts.bad}}</text>
+      </view>
+    </view>
+
+    <view class="digest-tags">
+      <text class="meta-chip">最新得分 {{summary.latestScore}}</text>
+      <text class="meta-chip">高频字 {{summary.topCharacter}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel charstats-panel">
+    <view class="section-head">
+      <text class="section-title">按字统计</text>
+      <text class="section-note">看哪些字出现最多、均分最高</text>
+    </view>
+    <view wx:if="{{summary.topCharacters && summary.topCharacters.length}}" class="charstats-list">
+      <view wx:for="{{summary.topCharacters}}" wx:key="character_name" class="charstat-row">
+        <view class="charstat-main">
+          <text class="charstat-char">{{item.character_name}}</text>
+          <text class="charstat-meta">出现 {{item.count}} 次</text>
+        </view>
+        <text class="charstat-score">{{item.average_score}} 分</text>
+      </view>
+    </view>
+    <text wx:else class="panel-subtitle">还没有足够的历史数据来生成按字统计。</text>
+  </view>
+
+  <view class="paper-panel filter-panel">
+    <view class="section-head">
+      <text class="section-title">筛选与整理</text>
+      <text class="section-note">{{hasActiveFilters ? '当前已启用筛选' : '默认显示最新记录'}}</text>
+    </view>
+
+    <view class="search-row">
+      <input
+        class="search-input"
+        placeholder="搜索汉字、评语或设备"
+        value="{{filters.keyword}}"
+        bindinput="onKeywordInput"
+        bindconfirm="applyKeywordFilter"
+        confirm-type="search"
+      />
+      <button class="secondary-btn search-btn" bindtap="applyKeywordFilter">搜索</button>
+    </view>
+
+    <view class="picker-grid">
+      <picker mode="selector" range="{{qualityOptions}}" value="{{filters.qualityIndex}}" bindchange="onQualityChange">
+        <view class="picker-chip">等级：{{qualityOptions[filters.qualityIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{dateOptions}}" value="{{filters.dateIndex}}" bindchange="onDateChange">
+        <view class="picker-chip">时间：{{dateOptions[filters.dateIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{sortOptions}}" value="{{filters.sortIndex}}" bindchange="onSortChange">
+        <view class="picker-chip">排序：{{sortOptions[filters.sortIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{deviceOptions}}" value="{{filters.deviceIndex}}" bindchange="onDeviceChange">
+        <view class="picker-chip">设备：{{deviceOptions[filters.deviceIndex]}}</view>
+      </picker>
+    </view>
+
+    <view class="filter-actions">
+      <view class="filter-action-group">
+        <button wx:if="{{hasActiveFilters}}" class="ghost-btn clear-btn" bindtap="clearFilters">清空筛选</button>
+        <button class="ghost-btn manage-btn" bindtap="toggleManageMode">{{managing ? '退出管理' : '批量管理'}}</button>
+      </view>
+      <text class="filter-hint">删除会同步从云端历史中移除当前记录。</text>
+    </view>
+
+    <view wx:if="{{managing}}" class="batch-toolbar">
+      <text class="batch-label">已选择 {{selectedIds.length}} 条</text>
+      <view class="batch-actions">
+        <button class="ghost-btn batch-chip" bindtap="selectAllRecords">全选</button>
+        <button class="ghost-btn batch-chip" bindtap="clearSelection">清空</button>
+        <button class="batch-delete" bindtap="batchDeleteSelected">批量删除</button>
+      </view>
     </view>
   </view>
 
   <view class="section-head">
-    <text class="section-title">最新记录</text>
-    <text class="section-note">下拉刷新，或等待自动同步</text>
+    <text class="section-title">历史记录</text>
+    <text class="section-note">点开看详情，或直接删除无效结果</text>
   </view>
 
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
   <view wx:if="{{loading}}" class="notice">正在同步最新评测记录...</view>
 
   <view wx:if="{{!results.length && !loading}}" class="paper-panel empty-panel">
-    <text class="panel-title">还没有评测记录</text>
-    <text class="panel-subtitle">
-      树莓派完成一次评测并成功上传后，这里就会出现新的成绩单。
-    </text>
+    <text class="panel-title">当前条件下没有记录</text>
+    <text class="panel-subtitle">可以清空筛选，或等待树莓派上传新的评测结果。</text>
   </view>
 
   <view
@@ -61,15 +159,32 @@
     data-id="{{item.id}}"
     bindtap="openDetail"
   >
+    <view wx:if="{{managing}}" class="record-select-wrap" catchtap="onSelectRecord" data-id="{{item.id}}">
+      <view class="record-select {{selectedIds.indexOf(item.id) !== -1 ? 'record-select-on' : ''}}">
+        <text wx:if="{{selectedIds.indexOf(item.id) !== -1}}" class="record-select-mark">✓</text>
+      </view>
+    </view>
+
     <view class="record-stamp" style="background: {{item.scoreSoft}}; color: {{item.scoreColor}};">
       <text class="record-char">{{item.characterLabel}}</text>
       <text class="record-level">{{item.qualityLabel}}</text>
     </view>
 
     <view class="record-body">
-      <view class="record-score-line">
-        <text class="record-score" style="color: {{item.scoreColor}};">{{item.total_score}}</text>
-        <text class="record-grade">{{item.qualityLabel}}</text>
+      <view class="record-top">
+        <view class="record-score-line">
+          <text class="record-score" style="color: {{item.scoreColor}};">{{item.total_score}}</text>
+          <text class="record-grade">{{item.qualityLabel}}</text>
+        </view>
+        <button
+          class="record-delete"
+          catchtap="deleteRecord"
+          data-id="{{item.id}}"
+          data-character="{{item.characterLabel}}"
+          loading="{{deletingId === item.id}}"
+        >
+          删除
+        </button>
       </view>
 
       <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}}</text>

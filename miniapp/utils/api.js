@@ -39,16 +39,45 @@ function login(username, password) {
   });
 }
 
-function getHistory(limit = 30) {
-  return request(`/api/results?limit=${limit}`);
+function toQuery(params = {}) {
+  const query = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+  return query.length ? `?${query.join('&')}` : '';
+}
+
+function getHistory(options = {}) {
+  const params = typeof options === 'number' ? { limit: options } : options;
+  return request(`/api/results${toQuery(params)}`);
+}
+
+function getHistorySummary(options = {}) {
+  return request(`/api/results/summary${toQuery(options)}`);
 }
 
 function getResultDetail(id) {
   return request(`/api/results/${id}`);
 }
 
+function deleteHistory(id) {
+  return request(`/api/results/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+function batchDeleteHistory(ids = []) {
+  return request('/api/results/batch-delete', {
+    method: 'POST',
+    header: { 'Content-Type': 'application/json' },
+    data: { ids },
+  });
+}
+
 module.exports = {
   login,
   getHistory,
+  getHistorySummary,
   getResultDetail,
+  deleteHistory,
+  batchDeleteHistory,
 };
