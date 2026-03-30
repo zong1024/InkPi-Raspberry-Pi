@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import threading
 from typing import Optional, Sequence
 
 import cv2
@@ -35,6 +36,7 @@ class LocalOcrService:
         self.language = str(self.config.get("language", "ch"))
         self._ocr = None
         self._available = False
+        self._infer_lock = threading.RLock()
         self._init_ocr()
 
     def _init_ocr(self) -> None:
@@ -84,7 +86,8 @@ class LocalOcrService:
 
         prepared = self._prepare_image(image)
         try:
-            result = self._run_ocr(prepared)
+            with self._infer_lock:
+                result = self._run_ocr(prepared)
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("Local OCR inference failed: %s", exc)
             return None
