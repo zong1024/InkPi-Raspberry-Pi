@@ -92,7 +92,8 @@ class PreprocessingService:
         gray = self._to_grayscale(grid_removed)
         binary = self._adaptive_threshold(gray)
         binary = self._median_blur(binary)
-        focused = self._extract_primary_subject(binary)
+        sharpened = self._sharpen(binary)
+        focused = self._extract_primary_subject(sharpened)
         return self._extract_ocr_subject(gray, focused)
 
     def _precheck(self, image: np.ndarray) -> None:
