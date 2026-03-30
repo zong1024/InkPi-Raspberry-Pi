@@ -90,7 +90,9 @@ class LocalOcrService:
                 result = self._run_ocr(prepared)
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("Local OCR inference failed: %s", exc)
-            return None
+            result = self._retry_after_failure(prepared)
+            if result is None:
+                return None
 
         detections = self._parse_result(result, prepared.shape[:2])
         if not detections:
@@ -105,6 +107,17 @@ class LocalOcrService:
             confidence=float(best["confidence"]),
             bbox=best.get("bbox"),
         )
+
+    def _retry_after_failure(self, prepared: np.ndarray):
+        try:
+            with self._infer_lock:
+                self._init_ocr()
+                if not self.available:
+                    return None
+                return self._run_ocr(prepared)
+        except Exception as retry_exc:  # noqa: BLE001
+            self.logger.warning("Local OCR retry failed: %s", retry_exc)
+            return None
 
     def _run_ocr(self, prepared: np.ndarray):
         if hasattr(self._ocr, "predict"):

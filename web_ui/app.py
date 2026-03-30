@@ -356,7 +356,7 @@ def main() -> None:
 
     host = APP_CONFIG.get("server", {}).get("host", "0.0.0.0")
     port = int(APP_CONFIG.get("server", {}).get("port", 5000))
-    app.run(host=host, port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=False)
 
 
 if __name__ == "__main__":
