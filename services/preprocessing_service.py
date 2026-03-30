@@ -443,8 +443,7 @@ class PreprocessingService:
         if crop.size == 0:
             return gray
 
-        clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
-        return clahe.apply(crop)
+        return crop
 
     def _perspective_correction(self, image: np.ndarray) -> Tuple[np.ndarray, bool]:
         """
