@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -70,33 +69,38 @@ class CloudDatabase:
                     device_name TEXT NOT NULL,
                     local_record_id INTEGER NOT NULL,
                     total_score INTEGER NOT NULL,
-                    structure_score INTEGER NOT NULL,
-                    stroke_score INTEGER NOT NULL,
-                    balance_score INTEGER NOT NULL,
-                    rhythm_score INTEGER NOT NULL,
                     feedback TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
                     character_name TEXT,
-                    style TEXT,
-                    style_confidence REAL,
-                    detail_scores_json TEXT NOT NULL,
-                    raw_payload_json TEXT NOT NULL,
+                    ocr_confidence REAL,
+                    quality_level TEXT,
+                    quality_confidence REAL,
+                    image_path TEXT,
+                    processed_image_path TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(device_name, local_record_id)
                 )
                 """
             )
+            cursor.execute("PRAGMA table_info(results)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            for column_name, column_type in (
+                ("ocr_confidence", "REAL"),
+                ("quality_level", "TEXT"),
+                ("quality_confidence", "REAL"),
+                ("image_path", "TEXT"),
+                ("processed_image_path", "TEXT"),
+            ):
+                if column_name not in existing_columns:
+                    cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
             conn.commit()
 
     def ensure_default_user(self, username: str, password: str, display_name: str) -> None:
         with self._managed_connection() as conn:
-            existing = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-            if existing:
-                return
             conn.execute(
                 """
-                INSERT INTO users (username, password_hash, display_name, created_at)
+                INSERT OR IGNORE INTO users (username, password_hash, display_name, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 (username, generate_password_hash(password), display_name, utcnow_iso()),
@@ -163,16 +167,9 @@ class CloudDatabase:
         return {"id": row["id"], "username": row["username"], "display_name": row["display_name"]}
 
     def upsert_result(self, payload: dict[str, Any], device_name: str) -> dict[str, Any]:
-        detail_scores = payload.get("detail_scores") or {}
-        structure_score = int(detail_scores.get("结构", 0))
-        stroke_score = int(detail_scores.get("笔画", 0))
-        balance_score = int(detail_scores.get("平衡", 0))
-        rhythm_score = int(detail_scores.get("韵律", 0))
         local_record_id = int(payload["local_record_id"])
         timestamp = payload.get("timestamp") or utcnow_iso()
-        created_at = utcnow_iso()
-        encoded_details = json.dumps(detail_scores, ensure_ascii=False)
-        encoded_payload = json.dumps(payload, ensure_ascii=False)
+        changed_at = utcnow_iso()
 
         with self._managed_connection() as conn:
             existing = conn.execute(
@@ -185,34 +182,28 @@ class CloudDatabase:
                     """
                     UPDATE results
                     SET total_score = ?,
-                        structure_score = ?,
-                        stroke_score = ?,
-                        balance_score = ?,
-                        rhythm_score = ?,
                         feedback = ?,
                         timestamp = ?,
                         character_name = ?,
-                        style = ?,
-                        style_confidence = ?,
-                        detail_scores_json = ?,
-                        raw_payload_json = ?,
+                        ocr_confidence = ?,
+                        quality_level = ?,
+                        quality_confidence = ?,
+                        image_path = ?,
+                        processed_image_path = ?,
                         updated_at = ?
                     WHERE id = ?
                     """,
                     (
                         int(payload["total_score"]),
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         payload.get("feedback", ""),
                         timestamp,
                         payload.get("character_name"),
-                        payload.get("style"),
-                        payload.get("style_confidence"),
-                        encoded_details,
-                        encoded_payload,
-                        created_at,
+                        payload.get("ocr_confidence"),
+                        payload.get("quality_level"),
+                        payload.get("quality_confidence"),
+                        payload.get("image_path"),
+                        payload.get("processed_image_path"),
+                        changed_at,
                         existing["id"],
                     ),
                 )
@@ -224,39 +215,33 @@ class CloudDatabase:
                         device_name,
                         local_record_id,
                         total_score,
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         feedback,
                         timestamp,
                         character_name,
-                        style,
-                        style_confidence,
-                        detail_scores_json,
-                        raw_payload_json,
+                        ocr_confidence,
+                        quality_level,
+                        quality_confidence,
+                        image_path,
+                        processed_image_path,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
                         local_record_id,
                         int(payload["total_score"]),
-                        structure_score,
-                        stroke_score,
-                        balance_score,
-                        rhythm_score,
                         payload.get("feedback", ""),
                         timestamp,
                         payload.get("character_name"),
-                        payload.get("style"),
-                        payload.get("style_confidence"),
-                        encoded_details,
-                        encoded_payload,
-                        created_at,
-                        created_at,
+                        payload.get("ocr_confidence"),
+                        payload.get("quality_level"),
+                        payload.get("quality_confidence"),
+                        payload.get("image_path"),
+                        payload.get("processed_image_path"),
+                        changed_at,
+                        changed_at,
                     ),
                 )
                 result_id = int(cursor.lastrowid)
@@ -265,19 +250,40 @@ class CloudDatabase:
 
         return self.get_result(result_id)
 
-    def list_results(self, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    def list_results(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        keyword: str = "",
+        quality_level: str = "all",
+        device_name: str = "all",
+        date_range: str = "all",
+        sort: str = "latest",
+    ) -> dict[str, Any]:
         limit = max(1, min(limit, 100))
         offset = max(0, offset)
+        where_sql, params = self._build_filter_clause(
+            keyword=keyword,
+            quality_level=quality_level,
+            device_name=device_name,
+            date_range=date_range,
+        )
+        order_sql = self._build_sort_clause(sort)
+
         with self._managed_connection() as conn:
-            total = conn.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM results {where_sql}",
+                params,
+            ).fetchone()[0]
             rows = conn.execute(
                 """
                 SELECT *
                 FROM results
-                ORDER BY timestamp DESC, id DESC
+                {where_sql}
+                ORDER BY {order_sql}
                 LIMIT ? OFFSET ?
-                """,
-                (limit, offset),
+                """.format(where_sql=where_sql, order_sql=order_sql),
+                (*params, limit, offset),
             ).fetchall()
 
         return {
@@ -287,28 +293,289 @@ class CloudDatabase:
             "items": [self._result_row_to_dict(row) for row in rows],
         }
 
+    def get_summary(
+        self,
+        keyword: str = "",
+        quality_level: str = "all",
+        device_name: str = "all",
+        date_range: str = "all",
+    ) -> dict[str, Any]:
+        where_sql, params = self._build_filter_clause(
+            keyword=keyword,
+            quality_level=quality_level,
+            device_name=device_name,
+            date_range=date_range,
+        )
+        recent_cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+
+        with self._managed_connection() as conn:
+            stats = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS total,
+                    AVG(total_score) AS average_score,
+                    MAX(total_score) AS best_score,
+                    MIN(total_score) AS worst_score,
+                    COUNT(DISTINCT device_name) AS device_count,
+                    COUNT(DISTINCT COALESCE(character_name, '')) AS unique_characters
+                FROM results
+                {where_sql}
+                """,
+                params,
+            ).fetchone()
+
+            latest_row = conn.execute(
+                f"""
+                SELECT total_score, timestamp, character_name
+                FROM results
+                {where_sql}
+                ORDER BY timestamp DESC, id DESC
+                LIMIT 1
+                """,
+                params,
+            ).fetchone()
+
+            quality_rows = conn.execute(
+                f"""
+                SELECT quality_level, COUNT(*) AS count
+                FROM results
+                {where_sql}
+                GROUP BY quality_level
+                """,
+                params,
+            ).fetchall()
+
+            recent_params = list(params)
+            recent_where = where_sql
+            recent_clause = "timestamp >= ?"
+            if recent_where:
+                recent_where = f"{recent_where} AND {recent_clause}"
+            else:
+                recent_where = f"WHERE {recent_clause}"
+            recent_params.append(recent_cutoff)
+
+            recent_row = conn.execute(
+                f"""
+                SELECT COUNT(*) AS total, AVG(total_score) AS average_score
+                FROM results
+                {recent_where}
+                """,
+                recent_params,
+            ).fetchone()
+
+            top_characters = conn.execute(
+                f"""
+                SELECT
+                    COALESCE(character_name, '未识别') AS character_name,
+                    COUNT(*) AS count,
+                    ROUND(AVG(total_score), 1) AS average_score
+                FROM results
+                {where_sql}
+                GROUP BY COALESCE(character_name, '未识别')
+                ORDER BY count DESC, average_score DESC, character_name ASC
+                LIMIT 8
+                """,
+                params,
+            ).fetchall()
+
+            top_devices = conn.execute(
+                f"""
+                SELECT
+                    device_name,
+                    COUNT(*) AS count,
+                    ROUND(AVG(total_score), 1) AS average_score
+                FROM results
+                {where_sql}
+                GROUP BY device_name
+                ORDER BY count DESC, average_score DESC, device_name ASC
+                LIMIT 3
+                """,
+                params,
+            ).fetchall()
+
+            device_rows = conn.execute(
+                """
+                SELECT device_name
+                FROM results
+                GROUP BY device_name
+                ORDER BY MAX(timestamp) DESC, device_name ASC
+                """
+            ).fetchall()
+
+        quality_counts = {"good": 0, "medium": 0, "bad": 0}
+        for row in quality_rows:
+            level = row["quality_level"] or "medium"
+            if level in quality_counts:
+                quality_counts[level] = int(row["count"])
+
+        total = int(stats["total"] or 0)
+        average_score = round(float(stats["average_score"] or 0), 1) if total else None
+        recent_average = (
+            round(float(recent_row["average_score"] or 0), 1) if int(recent_row["total"] or 0) else None
+        )
+
+        top_character = top_characters[0]["character_name"] if top_characters else None
+        top_device = top_devices[0]["device_name"] if top_devices else None
+
+        return {
+            "total": total,
+            "average_score": average_score,
+            "best_score": int(stats["best_score"] or 0) if total else None,
+            "worst_score": int(stats["worst_score"] or 0) if total else None,
+            "latest_score": int(latest_row["total_score"]) if latest_row else None,
+            "latest_character": latest_row["character_name"] if latest_row else None,
+            "latest_timestamp": latest_row["timestamp"] if latest_row else None,
+            "device_count": int(stats["device_count"] or 0),
+            "unique_characters": int(stats["unique_characters"] or 0),
+            "quality_counts": quality_counts,
+            "recent_average": recent_average,
+            "recent_total": int(recent_row["total"] or 0),
+            "top_characters": [
+                {
+                    "character_name": row["character_name"],
+                    "count": int(row["count"]),
+                    "average_score": float(row["average_score"] or 0),
+                }
+                for row in top_characters
+            ],
+            "top_devices": [
+                {
+                    "device_name": row["device_name"],
+                    "count": int(row["count"]),
+                    "average_score": float(row["average_score"] or 0),
+                }
+                for row in top_devices
+            ],
+            "available_devices": [row["device_name"] for row in device_rows],
+            "insight": self._build_summary_insight(
+                total=total,
+                average_score=average_score,
+                recent_average=recent_average,
+                quality_counts=quality_counts,
+                top_character=top_character,
+                top_device=top_device,
+            ),
+        }
+
     def get_result(self, result_id: int) -> dict[str, Any] | None:
         with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM results WHERE id = ?", (result_id,)).fetchone()
-
         return self._result_row_to_dict(row) if row else None
+
+    def delete_result(self, result_id: int) -> bool:
+        with self._managed_connection() as conn:
+            cursor = conn.execute("DELETE FROM results WHERE id = ?", (result_id,))
+            conn.commit()
+        return cursor.rowcount > 0
+
+    def delete_results(self, result_ids: list[int]) -> int:
+        valid_ids = [int(result_id) for result_id in result_ids if str(result_id).strip()]
+        if not valid_ids:
+            return 0
+
+        placeholders = ",".join("?" for _ in valid_ids)
+        with self._managed_connection() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM results WHERE id IN ({placeholders})",
+                valid_ids,
+            )
+            conn.commit()
+        return int(cursor.rowcount or 0)
+
+    def _build_filter_clause(
+        self,
+        keyword: str = "",
+        quality_level: str = "all",
+        device_name: str = "all",
+        date_range: str = "all",
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        keyword = keyword.strip()
+        if keyword:
+            like_value = f"%{keyword}%"
+            clauses.append(
+                "("
+                "COALESCE(character_name, '') LIKE ? OR "
+                "COALESCE(feedback, '') LIKE ? OR "
+                "COALESCE(device_name, '') LIKE ?"
+                ")"
+            )
+            params.extend([like_value, like_value, like_value])
+
+        if quality_level and quality_level != "all":
+            clauses.append("quality_level = ?")
+            params.append(quality_level)
+
+        if device_name and device_name != "all":
+            clauses.append("device_name = ?")
+            params.append(device_name)
+
+        if date_range in {"1d", "7d", "30d"}:
+            days = {"1d": 1, "7d": 7, "30d": 30}[date_range]
+            clauses.append("timestamp >= ?")
+            params.append((datetime.now() - timedelta(days=days)).isoformat())
+
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return where_sql, params
+
+    def _build_sort_clause(self, sort: str) -> str:
+        sort_map = {
+            "latest": "timestamp DESC, id DESC",
+            "highest": "total_score DESC, timestamp DESC, id DESC",
+            "lowest": "total_score ASC, timestamp DESC, id DESC",
+        }
+        return sort_map.get(sort, sort_map["latest"])
+
+    def _build_summary_insight(
+        self,
+        total: int,
+        average_score: float | None,
+        recent_average: float | None,
+        quality_counts: dict[str, int],
+        top_character: str | None,
+        top_device: str | None,
+    ) -> str:
+        if total == 0:
+            return "还没有云端历史记录，完成一次评测后这里会自动生成总结。"
+
+        insight_parts = []
+        if average_score is not None:
+            insight_parts.append(f"当前平均分 {average_score:.1f}")
+        if recent_average is not None:
+            insight_parts.append(f"近 7 天平均 {recent_average:.1f}")
+        if top_character:
+            insight_parts.append(f"最常出现的字是「{top_character}」")
+        if top_device:
+            insight_parts.append(f"主要来自 {top_device}")
+
+        dominant_level = max(quality_counts.items(), key=lambda item: item[1])[0] if any(quality_counts.values()) else None
+        if dominant_level == "good":
+            insight_parts.append("整体状态偏稳定")
+        elif dominant_level == "medium":
+            insight_parts.append("目前成绩集中在中段")
+        elif dominant_level == "bad":
+            insight_parts.append("最近低分样本偏多，建议重点回看")
+
+        return "，".join(insight_parts) + "。"
 
     def _result_row_to_dict(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
         if row is None:
             return None
-
-        detail_scores = json.loads(row["detail_scores_json"]) if row["detail_scores_json"] else {}
         return {
             "id": row["id"],
             "device_name": row["device_name"],
             "local_record_id": row["local_record_id"],
             "total_score": row["total_score"],
-            "detail_scores": detail_scores,
             "feedback": row["feedback"],
             "timestamp": row["timestamp"],
             "character_name": row["character_name"],
-            "style": row["style"],
-            "style_confidence": row["style_confidence"],
+            "ocr_confidence": row["ocr_confidence"],
+            "quality_level": row["quality_level"],
+            "quality_confidence": row["quality_confidence"],
+            "image_path": row["image_path"],
+            "processed_image_path": row["processed_image_path"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

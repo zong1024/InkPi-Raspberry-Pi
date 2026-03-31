@@ -20,32 +20,26 @@ function getScorePalette(score) {
   };
 }
 
-function getGrade(score) {
-  if (score >= 90) return '优秀';
-  if (score >= 80) return '良好';
-  if (score >= 70) return '稳定';
-  if (score >= 60) return '继续练习';
-  return '需强化';
+function getQualityLabel(level) {
+  if (level === 'good') return '好';
+  if (level === 'bad') return '坏';
+  return '中';
 }
 
-function dimensionNote(name, value) {
-  if (value >= 85) return `${name}表现稳定，可以继续保持。`;
-  if (value >= 70) return `${name}整体不错，仍有继续优化空间。`;
-  return `${name}偏弱，建议把这一项作为下一轮重点练习。`;
-}
-
-function dimensionColor(value) {
-  if (value >= 85) return '#4f9d61';
-  if (value >= 70) return '#b77a39';
-  return '#c25b49';
+function formatConfidence(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--';
+  }
+  return `${Math.round(Number(value) * 100)}%`;
 }
 
 Page({
   data: {
     loading: true,
     result: null,
-    dimensions: [],
+    metrics: [],
     error: '',
+    deleting: false,
   },
 
   onLoad(options) {
@@ -67,32 +61,77 @@ Page({
       const data = await api.getResultDetail(this.resultId);
       const rawResult = data.result || {};
       const palette = getScorePalette(rawResult.total_score || 0);
-      const order = ['结构', '笔画', '平衡', '韵律'];
-      const detailScores = rawResult.detail_scores || {};
-
-      const dimensions = order
-        .filter((name) => Object.prototype.hasOwnProperty.call(detailScores, name))
-        .map((name) => ({
-          name,
-          value: detailScores[name],
-          color: dimensionColor(detailScores[name]),
-          note: dimensionNote(name, detailScores[name]),
-        }));
 
       const result = {
         ...rawResult,
         ...palette,
-        grade: getGrade(rawResult.total_score || 0),
+        qualityLabel: rawResult.quality_label || getQualityLabel(rawResult.quality_level),
         characterLabel: rawResult.character_name || '未识别',
-        styleLabel: rawResult.style || '未分类',
         deviceLabel: rawResult.device_name || 'InkPi 树莓派',
+        ocrText: formatConfidence(rawResult.ocr_confidence),
+        qualityText: formatConfidence(rawResult.quality_confidence),
       };
 
-      this.setData({ result, dimensions });
+      const metrics = [
+        {
+          title: '自动识别',
+          value: result.characterLabel,
+          note: `OCR 置信度 ${result.ocrText}`,
+        },
+        {
+          title: '质量评级',
+          value: result.qualityLabel,
+          note: `模型置信度 ${result.qualityText}`,
+        },
+        {
+          title: '单链路',
+          value: 'OCR + ONNX',
+          note: '当前版本固定使用自动 OCR 与 ONNX 评分模型。',
+        },
+      ];
+
+      this.setData({ result, metrics });
     } catch (error) {
       this.setData({ error: '加载详情失败，请返回历史页后重试。' });
     } finally {
       this.setData({ loading: false });
     }
+  },
+
+  async deleteCurrent() {
+    if (!this.resultId) {
+      return;
+    }
+
+    const result = this.data.result || {};
+    const modal = await new Promise((resolve) => {
+      wx.showModal({
+        title: '删除记录',
+        content: `确认删除「${result.characterLabel || '未识别'}」这条记录吗？`,
+        confirmColor: '#b34b3e',
+        success: resolve,
+        fail: () => resolve({ confirm: false }),
+      });
+    });
+
+    if (!modal.confirm) {
+      return;
+    }
+
+    this.setData({ deleting: true });
+    try {
+      await api.deleteHistory(this.resultId);
+      wx.showToast({ title: '已删除', icon: 'success' });
+      setTimeout(() => {
+        wx.navigateBack();
+      }, 300);
+    } catch (error) {
+      wx.showToast({ title: '删除失败', icon: 'none' });
+      this.setData({ deleting: false });
+    }
+  },
+
+  goBack() {
+    wx.navigateBack();
   },
 });

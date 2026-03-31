@@ -2,7 +2,7 @@
 # InkPi Raspberry Pi deployment helper.
 # Usage:
 #   ./deploy_rpi.sh
-#   MODEL_SOURCE=/path/to/siamese_calligraphy.onnx ./deploy_rpi.sh
+#   MODEL_SOURCE=/path/to/quality_scorer.onnx ./deploy_rpi.sh
 #   RUN_SELF_TEST=1 ./deploy_rpi.sh
 #   INSTALL_KIOSK=1 ./deploy_rpi.sh
 #   START_APP=1 ./deploy_rpi.sh
@@ -79,21 +79,33 @@ source venv/bin/activate
 
 echo "[5/7] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyttsx3
+python -m pip install pyttsx3 paddleocr
 
-echo "[6/7] Preparing model and running health check..."
+echo "[6/7] Preparing models and health check..."
 if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
     mkdir -p models
-    cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
+    cp "${MODEL_SOURCE}" "models/quality_scorer.onnx"
 fi
 
-if [ -f "models/siamese_calligraphy.onnx" ]; then
-    echo "Found Siamese model: models/siamese_calligraphy.onnx"
-else
-    echo "Warning: models/siamese_calligraphy.onnx not found. The app will fall back to rule-based scoring."
+if [ ! -f "models/quality_scorer.onnx" ]; then
+    echo "Error: models/quality_scorer.onnx not found. Single-chain scoring cannot start."
+    exit 1
 fi
 
-python -c "import main; print('Health check passed: import main')"
+python - <<'PY'
+import main
+from services.local_ocr_service import local_ocr_service
+from services.quality_scorer_service import quality_scorer_service
+
+print("Health check passed: import main")
+print("Local OCR available:", local_ocr_service.available)
+print("Quality scorer available:", quality_scorer_service.available)
+
+if not local_ocr_service.available:
+    raise SystemExit("PaddleOCR is unavailable on this device.")
+if not quality_scorer_service.available:
+    raise SystemExit("Quality scorer ONNX is unavailable on this device.")
+PY
 
 if [ "${RUN_SELF_TEST:-0}" = "1" ]; then
     MPLBACKEND=Agg python test_all.py

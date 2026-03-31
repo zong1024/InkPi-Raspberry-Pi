@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 from functools import wraps
+import io
 from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, request
+import cv2
+import numpy as np
 
 try:
     from cloud_api.storage import CloudDatabase
@@ -40,6 +43,10 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     def json_error(message: str, status_code: int):
         return jsonify({"ok": False, "error": message}), status_code
+
+    def device_key_valid() -> bool:
+        device_key = request.headers.get("X-Device-Key", "").strip()
+        return bool(device_key) and device_key == app.config["DEVICE_KEY"]
 
     def auth_required(fn: Callable):
         @wraps(fn)
@@ -102,7 +109,44 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def list_results():
         limit = int(request.args.get("limit", 30))
         offset = int(request.args.get("offset", 0))
-        return jsonify({"ok": True, **db.list_results(limit=limit, offset=offset)})
+        keyword = str(request.args.get("keyword", "")).strip()
+        quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
+        device_name = str(request.args.get("device_name", "all")).strip() or "all"
+        date_range = str(request.args.get("date_range", "all")).strip() or "all"
+        sort = str(request.args.get("sort", "latest")).strip() or "latest"
+        return jsonify(
+            {
+                "ok": True,
+                **db.list_results(
+                    limit=limit,
+                    offset=offset,
+                    keyword=keyword,
+                    quality_level=quality_level,
+                    device_name=device_name,
+                    date_range=date_range,
+                    sort=sort,
+                ),
+            }
+        )
+
+    @app.get("/api/results/summary")
+    @auth_required
+    def results_summary():
+        keyword = str(request.args.get("keyword", "")).strip()
+        quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
+        device_name = str(request.args.get("device_name", "all")).strip() or "all"
+        date_range = str(request.args.get("date_range", "all")).strip() or "all"
+        return jsonify(
+            {
+                "ok": True,
+                "summary": db.get_summary(
+                    keyword=keyword,
+                    quality_level=quality_level,
+                    device_name=device_name,
+                    date_range=date_range,
+                ),
+            }
+        )
 
     @app.get("/api/results/<int:result_id>")
     @auth_required
@@ -112,10 +156,28 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return json_error("result_not_found", 404)
         return jsonify({"ok": True, "result": result})
 
+    @app.delete("/api/results/<int:result_id>")
+    @auth_required
+    def delete_result(result_id: int):
+        deleted = db.delete_result(result_id)
+        if not deleted:
+            return json_error("result_not_found", 404)
+        return jsonify({"ok": True, "deleted_id": result_id})
+
+    @app.post("/api/results/batch-delete")
+    @auth_required
+    def batch_delete_results():
+        payload = request.get_json(silent=True) or {}
+        ids = payload.get("ids") or []
+        if not isinstance(ids, list):
+            return json_error("invalid_payload", 400)
+
+        deleted_count = db.delete_results(ids)
+        return jsonify({"ok": True, "deleted_count": deleted_count})
+
     @app.post("/api/device/results")
     def upload_result():
-        device_key = request.headers.get("X-Device-Key", "").strip()
-        if not device_key or device_key != app.config["DEVICE_KEY"]:
+        if not device_key_valid():
             return json_error("invalid_device_key", 401)
 
         payload = request.get_json(silent=True) or {}
@@ -129,6 +191,51 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         )
         result = db.upsert_result(payload, device_name=device_name)
         return jsonify({"ok": True, "result": result})
+
+    @app.post("/api/device/ocr")
+    def device_ocr():
+        if not device_key_valid():
+            return json_error("invalid_device_key", 401)
+
+        image_file = request.files.get("image")
+        if image_file is None:
+            return json_error("missing_image", 400)
+
+        raw = image_file.read()
+        if not raw:
+            return json_error("empty_image", 400)
+
+        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return json_error("invalid_image", 400)
+
+        ocr_service = app.extensions.get("ocr_service")
+        if ocr_service is None:
+            try:
+                from services.local_ocr_service import local_ocr_service
+
+                ocr_service = local_ocr_service
+            except Exception as exc:  # noqa: BLE001
+                return json_error(f"ocr_service_unavailable:{exc}", 503)
+
+        if not getattr(ocr_service, "available", False):
+            return json_error("ocr_service_unavailable", 503)
+
+        recognition = ocr_service.recognize(image)
+        if recognition is None:
+            return json_error("ocr_failed", 422)
+
+        return jsonify(
+            {
+                "ok": True,
+                "item": {
+                    "character": recognition.character,
+                    "confidence": recognition.confidence,
+                    "source": getattr(recognition, "source", "paddleocr"),
+                    "bbox": list(recognition.bbox) if recognition.bbox is not None else None,
+                },
+            }
+        )
 
     return app
 

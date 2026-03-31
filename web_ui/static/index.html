@@ -12,7 +12,9 @@
       <div class="brand-block">
         <p class="brand-kicker">InkPi Local Console</p>
         <h1>InkPi</h1>
-        <p class="brand-copy">把树莓派评测台做成一张可直接上手的数字书法控制台。</p>
+        <p class="brand-copy">
+          树莓派本地只保留一条评测链路：预处理、自动 OCR、ONNX 评分，然后把结果同步到历史记录和云端。
+        </p>
       </div>
 
       <nav class="nav-group">
@@ -24,14 +26,9 @@
       <section class="rail-panel">
         <div class="rail-label">当前模式</div>
         <div class="selection-card">
-          <p id="selectedCharacterLabel">自动识别</p>
-          <span id="selectionModePill" class="status-pill">自动模式</span>
+          <p>自动识别评测</p>
+          <span class="status-pill">预处理 → OCR → ONNX</span>
         </div>
-      </section>
-
-      <section class="rail-panel">
-        <div class="rail-label">字库选择</div>
-        <div id="characterGrid" class="character-grid"></div>
       </section>
 
       <section class="rail-panel">
@@ -65,7 +62,7 @@
       <header class="workspace-header">
         <div>
           <p class="page-kicker" id="pageKicker">演示主控台</p>
-          <h2 id="pageTitle">评测总览</h2>
+          <h2 id="pageTitle">自动评测总览</h2>
         </div>
         <div class="header-meta">
           <span id="modePill" class="status-pill">本地 WebUI</span>
@@ -78,10 +75,11 @@
       <section class="view is-active" data-view-panel="overview">
         <div class="hero-panel">
           <div class="hero-copy">
-            <p class="hero-kicker">Kiosk-first Demo</p>
-            <h3>先锁定评测字，再拍一张干净的作品。</h3>
+            <p class="hero-kicker">Single Chain</p>
+            <h3>拍下单字，系统会自己识别并直接给出总分与等级。</h3>
             <p class="hero-text">
-              这版 WebUI 直接复用树莓派本地算法、数据库和云同步。评委只需要选择目标字、拍照评测、查看结果。
+              这一版只保留固定单链路。只要画面里是清晰、居中的单个毛笔字，
+              系统就会自动完成预处理、OCR 和 ONNX 质量评分。
             </p>
             <div class="hero-actions">
               <button class="primary-action" data-jump="capture">进入拍照页</button>
@@ -90,16 +88,16 @@
           </div>
           <div class="hero-stats">
             <div class="stat-block">
-              <span>最近成绩</span>
+              <span>最近得分</span>
               <strong id="latestScoreText">--</strong>
             </div>
             <div class="stat-block">
-              <span>识别字</span>
+              <span>识别汉字</span>
               <strong id="latestCharacterText">--</strong>
             </div>
             <div class="stat-block">
-              <span>书体</span>
-              <strong id="latestStyleText">--</strong>
+              <span>等级</span>
+              <strong id="latestLevelText">--</strong>
             </div>
           </div>
         </div>
@@ -108,18 +106,18 @@
           <article class="ink-panel">
             <div class="panel-header">
               <div>
-                <p class="panel-kicker">四维均值</p>
-                <h3>本地成绩面板</h3>
+                <p class="panel-kicker">运行摘要</p>
+                <h3>设备概览</h3>
               </div>
             </div>
-            <div id="detailAverages" class="metric-columns"></div>
+            <div id="summaryMetrics" class="metric-columns"></div>
           </article>
 
           <article class="ink-panel">
             <div class="panel-header">
               <div>
-                <p class="panel-kicker">最近评测</p>
-                <h3>当次演示摘要</h3>
+                <p class="panel-kicker">最近结果</p>
+                <h3>最新成绩单</h3>
               </div>
             </div>
             <div id="latestResultCard" class="result-summary empty-state">
@@ -144,12 +142,12 @@
               <img id="cameraPreview" alt="摄像头取景">
               <div class="preview-overlay">
                 <div class="guide-square" id="guideSquare"></div>
-                <div class="guide-caption" id="guideCaption">AUTO</div>
+                <div class="guide-caption" id="guideCaption">AUTO OCR</div>
               </div>
             </div>
 
             <p class="preview-note">
-              只保留一个汉字，尽量让主体占取景区六成以上，避免整页练习纸和边框一起入镜。
+              让单个汉字落在参考框中央，尽量不要把整页练习纸、边框或大段注释一起拍进去。
             </p>
           </article>
 
@@ -157,12 +155,13 @@
             <article class="ink-panel">
               <div class="panel-header">
                 <div>
-                  <p class="panel-kicker">当前目标</p>
-                  <h3 id="captureTargetTitle">自动识别</h3>
+                  <p class="panel-kicker">识别链路</p>
+                  <h3>自动评测</h3>
                 </div>
               </div>
-              <p id="captureTargetCopy" class="panel-copy">
-                当前未锁定评测字，系统会先尝试识别，再决定是否进入评分。
+              <p class="panel-copy">
+                这次评测会固定走三步：先提取单字主体，再用本地官方 OCR 识别字符，最后交给 ONNX
+                评分模型输出总分和好中坏等级。
               </p>
             </article>
 
@@ -208,11 +207,11 @@
               <div class="panel-header">
                 <div>
                   <p class="panel-kicker">失败提示</p>
-                  <h3>重新拍摄建议</h3>
+                  <h3>重拍建议</h3>
                 </div>
               </div>
               <div id="guidancePanel" class="guidance-copy">
-                画面太暗、反光太强、内容过碎或字形与多个内置模板过近时，系统会直接提示重拍，不会乱猜。
+                系统只接受清晰、居中的单个毛笔字。若 OCR 识别失败或画面不达标，会在这里给出明确的重拍建议。
               </div>
             </article>
           </aside>
@@ -240,7 +239,7 @@
               </div>
             </div>
             <div id="historyDetail" class="detail-panel empty-state">
-              选择左侧一条记录查看完整得分、风格和建议。
+              选择左侧一条记录，查看完整识别结果、总分、等级和反馈。
             </div>
           </article>
         </div>

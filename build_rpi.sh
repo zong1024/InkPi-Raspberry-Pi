@@ -2,7 +2,7 @@
 # InkPi Raspberry Pi build helper.
 # Usage:
 #   ./build_rpi.sh
-#   MODEL_SOURCE=/path/to/siamese_calligraphy.onnx ./build_rpi.sh
+#   MODEL_SOURCE=/path/to/quality_scorer.onnx ./build_rpi.sh
 
 set -euo pipefail
 
@@ -57,21 +57,33 @@ source venv/bin/activate
 
 echo "[3/5] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyinstaller pyttsx3
+python -m pip install pyinstaller pyttsx3 paddleocr
 
 echo "[4/5] Preparing model and sanity check..."
 mkdir -p models
 if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then
-    cp "${MODEL_SOURCE}" "models/siamese_calligraphy.onnx"
+    cp "${MODEL_SOURCE}" "models/quality_scorer.onnx"
 fi
 
-if [ -f "models/siamese_calligraphy.onnx" ]; then
-    echo "Found Siamese model: models/siamese_calligraphy.onnx"
-else
-    echo "Warning: models/siamese_calligraphy.onnx not found. Packaged app will fall back to rule-based scoring."
+if [ ! -f "models/quality_scorer.onnx" ]; then
+    echo "Error: models/quality_scorer.onnx not found. Single-chain scoring cannot be packaged."
+    exit 1
 fi
 
-python -c "import main; print('Health check passed: import main')"
+python - <<'PY'
+import main
+from services.local_ocr_service import local_ocr_service
+from services.quality_scorer_service import quality_scorer_service
+
+print("Health check passed: import main")
+print("Local OCR available:", local_ocr_service.available)
+print("Quality scorer available:", quality_scorer_service.available)
+
+if not local_ocr_service.available:
+    raise SystemExit("PaddleOCR is unavailable on this device.")
+if not quality_scorer_service.available:
+    raise SystemExit("Quality scorer ONNX is unavailable on this device.")
+PY
 
 echo "[5/5] Building application..."
 pyinstaller \
@@ -80,10 +92,8 @@ pyinstaller \
     --name InkPi \
     --add-data "config:config" \
     --add-data "models:models" \
-    --add-data "models/templates:models/templates" \
     --add-data "services:services" \
     --add-data "views:views" \
-    --add-data "core:core" \
     --add-data "data:data" \
     --hidden-import PyQt6 \
     --hidden-import PyQt6.QtCore \
@@ -97,6 +107,7 @@ pyinstaller \
     --hidden-import sqlite3 \
     --hidden-import requests \
     --hidden-import onnxruntime \
+    --hidden-import paddleocr \
     --hidden-import PIL \
     --hidden-import scipy \
     --collect-all PyQt6 \

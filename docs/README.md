@@ -1,47 +1,38 @@
-# InkPi 文档索引
+# 文档索引
 
-## 先看哪份
+## 先看什么
 
-如果你第一次接触这个项目，推荐按下面顺序读：
+如果你现在要理解这条新主线，建议按这个顺序看：
 
-1. [README.md](../README.md)
-2. [docs/TRAINING.md](./TRAINING.md)
-3. [training/README.md](../training/README.md)
+1. [README.md](C:/Users/zongrui/Documents/2/README.md)
+2. [training/README.md](C:/Users/zongrui/Documents/2/training/README.md)
+3. [cloud_api/app.py](C:/Users/zongrui/Documents/2/cloud_api/app.py)
+4. [web_ui/app.py](C:/Users/zongrui/Documents/2/web_ui/app.py)
 
-## 文档说明
+## 当前主线
 
-### 项目总览
+当前项目已经改成单链路自动评测：
 
-- [README.md](../README.md)
-  - 项目定位
-  - 当前真实运行链路
-  - DeepVision 关系说明
-  - 树莓派部署入口
+`预处理 -> 本地官方 OCR -> 单个 ONNX 评分模型 -> 结果展示与云端同步`
 
-### 训练与模型
+与旧版本不同的是：
 
-- [docs/TRAINING.md](./TRAINING.md)
-  - 当前推荐训练方案
-  - 公开字符级数据集整理
-  - 审计、训练、导出与部署注意事项
+- 不再依赖模板库评分
+- 不再依赖 Siamese 双图比较
+- 不再保留手动锁定评测字作为主流程
+- 不再区分模板评分和兜底评分
 
-- [training/README.md](../training/README.md)
-  - 训练目录说明
-  - 常用训练命令
-  - 输出文件说明
+## 代码入口
 
-- [training/PUBLIC_DATASET_WORKFLOW.md](../training/PUBLIC_DATASET_WORKFLOW.md)
-  - 公开字符级书法数据集工作流
+- [main.py](C:/Users/zongrui/Documents/2/main.py)
+- [views/main_window.py](C:/Users/zongrui/Documents/2/views/main_window.py)
+- [views/camera_view.py](C:/Users/zongrui/Documents/2/views/camera_view.py)
+- [services/evaluation_service.py](C:/Users/zongrui/Documents/2/services/evaluation_service.py)
+- [services/local_ocr_service.py](C:/Users/zongrui/Documents/2/services/local_ocr_service.py)
+- [services/quality_scorer_service.py](C:/Users/zongrui/Documents/2/services/quality_scorer_service.py)
+- [services/database_service.py](C:/Users/zongrui/Documents/2/services/database_service.py)
 
-## 当前代码阅读建议
+## 相关文档
 
-如果你要理解应用实际怎么跑，建议从这里开始：
-
-1. `main.py`
-2. `views/main_window.py`
-3. `views/camera_view.py`
-4. `services/preprocessing_service.py`
-5. `services/evaluation_service.py`
-6. `services/database_service.py`
-
-`core/` 和 `data/` 不是没用，而是它们更偏向算法分层和架构演进，不是桌面端当前最短理解路径。
+- [training/README.md](C:/Users/zongrui/Documents/2/training/README.md)
+- [docs/TRAINING.md](C:/Users/zongrui/Documents/2/docs/TRAINING.md)

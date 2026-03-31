@@ -11,7 +11,6 @@ class WebUiSmokeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.client = app.test_client()
         with state.lock:
-            state.selected_character = None
             state.last_result = None
             state.last_result_id = None
 
@@ -32,24 +31,20 @@ class WebUiSmokeTest(unittest.TestCase):
         response = self.client.get("/api/bootstrap")
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
-        self.assertIn("characters", payload)
         self.assertIn("history", payload)
-        self.assertIn("selection", payload)
         self.assertIn("camera_settings", payload)
+        self.assertIn("stats", payload)
+        self.assertNotIn("selection", payload)
+        self.assertNotIn("characters", payload)
         response.close()
 
-    def test_selection_roundtrip(self) -> None:
-        response = self.client.post("/api/selection", json={"character": "shui"})
+    def test_history_endpoint(self) -> None:
+        response = self.client.get("/api/history")
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
-        self.assertTrue(payload["locked"])
-        self.assertEqual(payload["key"], "shui")
+        self.assertIn("items", payload)
+        self.assertIsInstance(payload["items"], list)
         response.close()
-
-        cleared = self.client.post("/api/selection", json={"character": None})
-        self.assertEqual(cleared.status_code, 200)
-        self.assertFalse(cleared.get_json()["locked"])
-        cleared.close()
 
     def test_camera_settings_roundtrip(self) -> None:
         response = self.client.get("/api/camera/settings")
@@ -72,7 +67,6 @@ class WebUiSmokeTest(unittest.TestCase):
         self.assertEqual(reset_payload["lens_mode"], "wide")
         self.assertAlmostEqual(reset_payload["zoom_ratio"], 1.0, places=1)
         reset.close()
-
 
 if __name__ == "__main__":
     unittest.main()

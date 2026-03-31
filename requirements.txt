@@ -1,28 +1,17 @@
-# InkPi 书法评测系统依赖
-# 核心依赖
+# InkPi single-chain runtime
 numpy>=1.24.0
 opencv-python>=4.8.0
 PyQt6>=6.6.0
 pyttsx3>=2.90
 requests>=2.28.0
 Flask>=3.0.0
-
-# 数据库
-# SQLite3 是 Python 标准库，无需安装
-
-# 图表绘制 (用于雷达图和趋势图)
 matplotlib>=3.8.0
-
-# 汉字识别 (ONNX Runtime - 轻量级推理)
 onnxruntime>=1.16.0
-
-# 科学计算 (用于数据增强和图像处理)
 scipy>=1.10.0
+paddleocr>=3.0.0
 
-# LED 灯带控制 (仅树莓派需要)
-# spidev 用于 WS2812B SPI 驱动
-# 安装方式: pip install spidev (仅 Linux/RPi)
-# spidev>=3.6
-
-# 打包工具 (在 RPi 上使用)
+# Training / export
+scikit-learn>=1.5.0
+skl2onnx>=1.17.0
+onnx>=1.17.0
 pyinstaller>=6.0.0

@@ -82,11 +82,15 @@
   font-weight: 700;
 }
 
-.metric-row {
+.metric-card {
   margin-top: 24rpx;
+  padding: 20rpx;
+  border-radius: 24rpx;
+  background: rgba(252, 247, 239, 0.92);
+  border: 1rpx solid rgba(214, 193, 167, 0.72);
 }
 
-.metric-head {
+.metric-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -102,19 +106,7 @@
 .metric-value {
   font-size: 24rpx;
   color: #7d6651;
-}
-
-.metric-track {
-  margin-top: 14rpx;
-  height: 20rpx;
-  border-radius: 999rpx;
-  overflow: hidden;
-  background: rgba(240, 229, 215, 0.95);
-}
-
-.metric-fill {
-  height: 100%;
-  border-radius: 999rpx;
+  font-weight: 700;
 }
 
 .metric-note {
@@ -131,4 +123,26 @@
   font-size: 28rpx;
   line-height: 1.9;
   color: #4f4032;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.detail-back,
+.detail-delete {
+  flex: 1;
+  margin: 0;
+}
+
+.detail-delete {
+  height: 76rpx;
+  border-radius: 999rpx;
+  background: rgba(252, 227, 221, 0.96);
+  color: #b34b3e;
+  border: 1rpx solid rgba(214, 124, 102, 0.42);
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 76rpx;
 }

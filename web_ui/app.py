@@ -22,31 +22,24 @@ from services.database_service import database_service
 from services.evaluation_service import evaluation_service
 from services.preprocessing_service import PreprocessingError, preprocessing_service
 from services.speech_service import speech_service
-from services.template_manager import template_manager
 
-
-DETAIL_LABELS = {
-    "结构": "结构",
-    "缁撴瀯": "结构",
-    "笔画": "笔画",
-    "绗旂敾": "笔画",
-    "平衡": "平衡",
-    "骞宠　": "平衡",
-    "韵律": "韵律",
-    "闊靛緥": "韵律",
-}
 
 GUIDANCE_BY_ERROR = {
     "too_dark": "请把作品移到更亮的位置，再让镜头正对纸面。",
-    "too_bright": "请避开顶灯反光和强侧光，尽量让纸面亮而不曝。",
-    "low_contrast": "请换一张更清晰的作品，或让墨迹与背景分离得更明显。",
-    "empty_shot": "请只保留一个汉字，并让主体尽量落在画面中央。",
-    "obstruction": "请移开手部、桌面杂物和纸张边框，只保留作品主体。",
+    "too_bright": "请避开强反光和直射光，让纸面亮但不过曝。",
+    "low_contrast": "请换一张更清晰的作品，或让墨迹和背景更分离。",
+    "empty_shot": "请只保留一个汉字，并把主体放到画面中央。",
+    "obstruction": "请移开手部、桌面杂物和边框遮挡，只保留作品主体。",
     "not_calligraphy": "当前画面不像单个毛笔字，请重新对准作品后再试。",
-    "ambiguous_character": "当前字形与多个内置模板过于接近，建议先锁定评测字再拍。",
-    "unsupported_character": "当前作品像毛笔字，但不在系统当前支持的字库中。",
-    "too_fragmented": "画面内容过于零散，请更靠近作品并避免把整张练习纸拍进去。",
-    "scattered_content": "主体过散，请把待测字放到取景区中央后重试。",
+    "too_fragmented": "画面内容过于零散，请靠近一点并只保留单个汉字。",
+    "scattered_content": "主体过散，请让目标汉字更集中地落在取景框中央。",
+    "ocr_failed": "系统暂时没能稳定认出这个字，请让主体更完整、更居中后重拍。",
+}
+
+LEVEL_LABELS = {
+    "good": "好",
+    "medium": "中",
+    "bad": "坏",
 }
 
 
@@ -54,7 +47,6 @@ GUIDANCE_BY_ERROR = {
 class WebUiState:
     """Shared in-process UI state."""
 
-    selected_character: str | None = None
     last_result_id: int | None = None
     last_result: EvaluationResult | None = None
     camera_online: bool = False
@@ -65,7 +57,6 @@ class WebUiState:
     def snapshot(self) -> dict[str, Any]:
         with self.lock:
             return {
-                "selected_character": self.selected_character,
                 "camera_online": self.camera_online,
                 "camera_last_error": self.camera_last_error,
                 "last_result_id": self.last_result_id,
@@ -127,11 +118,9 @@ def create_app() -> Flask:
                     "version": APP_CONFIG["version"],
                     "mode": "raspberry-pi" if IS_RASPBERRY_PI else "desktop",
                 },
-                "selection": _serialize_selection(),
                 "camera": _get_camera_status(),
                 "camera_settings": camera_service.get_view_settings(),
                 "stats": _serialize_stats(stats),
-                "characters": _serialize_character_library(),
                 "history": [_serialize_result(result) for result in recent_results],
                 "last_result": _serialize_result(state.last_result) if state.last_result else None,
             }
@@ -165,22 +154,6 @@ def create_app() -> Flask:
             return jsonify({"error": "not_found", "message": "图像文件不存在。"}), 404
         return send_file(file_path)
 
-    @app.get("/api/selection")
-    def get_selection():
-        return jsonify(_serialize_selection())
-
-    @app.post("/api/selection")
-    def set_selection():
-        payload = request.get_json(silent=True) or {}
-        requested = payload.get("character")
-        normalized = template_manager.resolve_character_key(requested) if requested else None
-
-        with state.lock:
-            state.selected_character = normalized or None
-            state.updated_at = time.time()
-
-        return jsonify(_serialize_selection())
-
     @app.get("/api/camera/settings")
     def get_camera_settings():
         return jsonify(camera_service.get_view_settings())
@@ -203,7 +176,6 @@ def create_app() -> Flask:
                 zoom_ratio=payload.get("zoom_ratio"),
             )
         return jsonify(settings)
-
     @app.get("/api/camera/frame")
     def camera_frame():
         if not _ensure_camera():
@@ -275,44 +247,12 @@ def create_app() -> Flask:
     return app
 
 
-def _serialize_character_library() -> list[dict[str, Any]]:
-    items = []
-    for key in template_manager.list_available_chars():
-        items.append(
-            {
-                "key": key,
-                "display": template_manager.to_display_character(key),
-                "styles": [
-                    template_manager.to_display_style(style)
-                    for style in template_manager.list_available_styles(key)
-                ],
-            }
-        )
-    return items
-
-
-def _serialize_selection() -> dict[str, Any]:
-    with state.lock:
-        key = state.selected_character
-    return {
-        "key": key,
-        "display": template_manager.to_display_character(key) if key else "自动识别",
-        "locked": bool(key),
-    }
-
-
 def _serialize_stats(stats: dict[str, Any]) -> dict[str, Any]:
-    details = stats.get("average_details", {})
-    ordered = [
-        {"label": DETAIL_LABELS.get(key, key), "score": round(float(value), 1)}
-        for key, value in details.items()
-    ]
     return {
         "total_count": int(stats.get("total_count", 0)),
         "average_score": round(float(stats.get("average_score", 0)), 1),
         "max_score": int(stats.get("max_score", 0)),
         "min_score": int(stats.get("min_score", 0)),
-        "average_details": ordered,
     }
 
 
@@ -320,49 +260,22 @@ def _serialize_result(result: EvaluationResult | None) -> dict[str, Any] | None:
     if result is None:
         return None
 
-    ordered_details = []
-    for key, value in result.detail_scores.items():
-        ordered_details.append({"label": DETAIL_LABELS.get(key, key), "score": int(value)})
-
-    character = result.character_name
-    if character:
-        character = template_manager.to_display_character(character)
-
-    style = result.style
-    if style:
-        style = template_manager.to_display_style(style)
-
     return {
         "id": result.id,
         "total_score": int(result.total_score),
-        "grade": _score_to_grade(int(result.total_score)),
-        "color": _score_to_color(int(result.total_score)),
+        "grade": LEVEL_LABELS.get(result.quality_level, "中"),
+        "quality_level": result.quality_level,
+        "quality_label": LEVEL_LABELS.get(result.quality_level, "中"),
+        "color": result.get_color(),
         "feedback": result.feedback,
         "timestamp": result.timestamp.isoformat() if result.timestamp else None,
         "display_time": result.timestamp.strftime("%m-%d %H:%M") if result.timestamp else "--",
-        "character_name": character or "未识别",
-        "style": style or "未分类",
-        "style_confidence": result.style_confidence,
-        "details": ordered_details,
+        "character_name": result.character_name or "未识别",
+        "ocr_confidence": result.ocr_confidence,
+        "quality_confidence": result.quality_confidence,
         "image_path": result.image_path,
         "processed_image_path": result.processed_image_path,
     }
-
-
-def _score_to_grade(score: int) -> str:
-    if score >= 85:
-        return "优秀"
-    if score >= 70:
-        return "良好"
-    return "待加强"
-
-
-def _score_to_color(score: int) -> str:
-    if score >= 85:
-        return "#3f6f52"
-    if score >= 70:
-        return "#b87433"
-    return "#9b4d34"
 
 
 def _decode_data_url(image_data: str) -> np.ndarray | None:
@@ -419,15 +332,12 @@ def _evaluate_and_store(image: np.ndarray, source_name: str) -> EvaluationResult
     cv2.imwrite(str(original_path), image)
 
     processed, processed_path = preprocessing_service.preprocess(image, save_processed=True)
-    with state.lock:
-        selected_character = state.selected_character
-
+    ocr_image = preprocessing_service.prepare_ocr_image(image)
     result = evaluation_service.evaluate(
         processed,
         original_image_path=str(original_path),
         processed_image_path=processed_path,
-        character_name=selected_character,
-        texture_image=image,
+        ocr_image=ocr_image,
     )
     result.id = database_service.save(result)
 
@@ -456,10 +366,6 @@ def _preprocessing_error_response(exc: PreprocessingError):
                 "error": exc.error_type,
                 "message": str(exc),
                 "guidance": GUIDANCE_BY_ERROR.get(exc.error_type, "请调整画面后重新拍摄。"),
-                "supported_characters": [
-                    template_manager.to_display_character(key)
-                    for key in template_manager.list_available_chars()
-                ],
             }
         ),
         422,
@@ -474,7 +380,7 @@ def main() -> None:
 
     host = APP_CONFIG.get("server", {}).get("host", "0.0.0.0")
     port = int(APP_CONFIG.get("server", {}).get("port", 5000))
-    app.run(host=host, port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=False)
 
 
 if __name__ == "__main__":

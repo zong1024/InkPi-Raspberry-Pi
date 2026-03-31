@@ -1,0 +1,55 @@
+{
+  "manifest": "/home/zongrui/singlechain_train/data/quality_manifest_balanced_v4.jsonl",
+  "output_dir": "/home/zongrui/singlechain_train/models/quality_scorer_balanced_v4",
+  "input_size": 32,
+  "feature_dim": 1031,
+  "sample_count": 15000,
+  "label_counts": {
+    "good": 5000,
+    "medium": 5000,
+    "bad": 5000
+  },
+  "train_accuracy": 0.9826829268292683,
+  "val_accuracy": 0.9588888888888889,
+  "train_score_mean": 74.49445343017578,
+  "val_score_mean": 74.63287353515625,
+  "per_label_val_score_mean": {
+    "bad": 57.723907470703125,
+    "medium": 74.36746215820312,
+    "good": 91.80725860595703
+  },
+  "classification_report": {
+    "bad": {
+      "precision": 0.9513023782559457,
+      "recall": 0.9333333333333333,
+      "f1-score": 0.9422321929332585,
+      "support": 900.0
+    },
+    "medium": {
+      "precision": 0.9302071973827699,
+      "recall": 0.9477777777777778,
+      "f1-score": 0.9389102916895983,
+      "support": 900.0
+    },
+    "good": {
+      "precision": 0.9955555555555555,
+      "recall": 0.9955555555555555,
+      "f1-score": 0.9955555555555555,
+      "support": 900.0
+    },
+    "accuracy": 0.9588888888888889,
+    "macro avg": {
+      "precision": 0.9590217103980905,
+      "recall": 0.958888888888889,
+      "f1-score": 0.9588993467261374,
+      "support": 2700.0
+    },
+    "weighted avg": {
+      "precision": 0.9590217103980904,
+      "recall": 0.9588888888888889,
+      "f1-score": 0.9588993467261375,
+      "support": 2700.0
+    }
+  },
+  "onnx_path": "/home/zongrui/singlechain_train/models/quality_scorer_balanced_v4/quality_scorer.onnx"
+}
