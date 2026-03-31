@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication
 
 from config import APP_CONFIG, DATA_DIR, IS_RASPBERRY_PI, LOG_CONFIG
 from views.main_window import MainWindow
-from views.ui_theme import FONT_FAMILY, build_stylesheet
+from views.ui_theme import build_stylesheet, ensure_app_font_family
 
 
 def setup_logging() -> None:
@@ -36,7 +36,7 @@ def configure_application(app: QApplication) -> None:
     app.setApplicationName(APP_CONFIG["app_name"])
     app.setApplicationVersion(APP_CONFIG["version"])
     app.setStyleSheet(build_stylesheet())
-    app.setFont(QFont(FONT_FAMILY, 10))
+    app.setFont(QFont(ensure_app_font_family(), 10))
 
 
 def main() -> None:
