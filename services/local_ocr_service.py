@@ -11,6 +11,7 @@ from typing import Optional, Sequence
 
 import cv2
 import numpy as np
+import requests
 
 from config import OCR_CONFIG
 
@@ -34,6 +35,9 @@ class LocalOcrService:
         self.min_confidence = float(self.config.get("min_confidence", 0.32))
         self.device = str(self.config.get("device", "cpu"))
         self.language = str(self.config.get("language", "ch"))
+        self.remote_backend_url = str(os.environ.get("INKPI_CLOUD_BACKEND_URL", "")).rstrip("/")
+        self.remote_device_key = str(os.environ.get("INKPI_CLOUD_DEVICE_KEY", "")).strip()
+        self.remote_timeout = float(os.environ.get("INKPI_REMOTE_OCR_TIMEOUT", "4.0"))
         self._ocr = None
         self._available = False
         self._infer_lock = threading.RLock()
@@ -76,12 +80,27 @@ class LocalOcrService:
 
     @property
     def available(self) -> bool:
-        return self._available and self._ocr is not None
+        return (self._available and self._ocr is not None) or self.remote_available
+
+    @property
+    def remote_available(self) -> bool:
+        return bool(self.remote_backend_url) and bool(self.remote_device_key)
 
     def recognize(self, image: np.ndarray) -> Optional[OcrRecognition]:
         """Recognize the best single character from a preprocessed ROI."""
 
-        if not self.available:
+        if self._available and self._ocr is not None:
+            return self._recognize_local(image)
+
+        if self.remote_available:
+            return self._recognize_remote(image)
+
+        return None
+
+    def _recognize_local(self, image: np.ndarray) -> Optional[OcrRecognition]:
+        """Run the local OCR engine."""
+
+        if not (self._available and self._ocr is not None):
             return None
 
         prepared = self._prepare_image(image)
@@ -107,6 +126,40 @@ class LocalOcrService:
             confidence=float(best["confidence"]),
             bbox=best.get("bbox"),
         )
+
+    def _recognize_remote(self, image: np.ndarray) -> Optional[OcrRecognition]:
+        """Fallback to the server-side OCR endpoint for desktop testing environments."""
+
+        try:
+            ok, encoded = cv2.imencode(".jpg", image)
+            if not ok:
+                return None
+            response = requests.post(
+                f"{self.remote_backend_url}/api/device/ocr",
+                headers={"X-Device-Key": self.remote_device_key},
+                files={"image": ("ocr.jpg", encoded.tobytes(), "image/jpeg")},
+                timeout=self.remote_timeout,
+            )
+            if response.status_code != 200:
+                self.logger.warning("Remote OCR request failed: %s %s", response.status_code, response.text[:200])
+                return None
+            payload = response.json()
+            if not payload.get("ok"):
+                return None
+            item = payload.get("item") or {}
+            character = str(item.get("character", "")).strip()
+            if not character:
+                return None
+            bbox = item.get("bbox")
+            return OcrRecognition(
+                character=character,
+                confidence=float(item.get("confidence", 0.0) or 0.0),
+                source=str(item.get("source", "remote-ocr")),
+                bbox=tuple(float(x) for x in bbox) if isinstance(bbox, list) and len(bbox) == 4 else None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning("Remote OCR request failed: %s", exc)
+            return None
 
     def _retry_after_failure(self, prepared: np.ndarray):
         try:

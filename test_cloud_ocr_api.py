@@ -1,4 +1,4 @@
-"""Tests for the cloud OCR candidate endpoint."""
+"""Tests for the cloud OCR endpoint."""
 
 from __future__ import annotations
 
@@ -14,15 +14,16 @@ import numpy as np
 from cloud_api.app import create_app
 
 
-class _FakeOcrProvider:
+class _FakeOcrService:
     available = True
 
-    def get_candidates(self, image, limit: int = 8):
+    def recognize(self, image):
         del image
-        return [
-            type("Candidate", (), {"key": "shen", "display": "神", "provider_score": 0.93, "provider": "fake"}),
-            type("Candidate", (), {"key": "shui", "display": "水", "provider_score": 0.61, "provider": "fake"}),
-        ][:limit]
+        return type(
+            "Recognition",
+            (),
+            {"character": "神", "confidence": 0.93, "source": "fake", "bbox": (1.0, 2.0, 30.0, 40.0)},
+        )()
 
 
 class CloudOcrApiTests(unittest.TestCase):
@@ -39,7 +40,7 @@ class CloudOcrApiTests(unittest.TestCase):
                 "DEFAULT_DISPLAY_NAME": "InkPi Demo",
             }
         )
-        self.app.extensions["full_ocr_provider"] = _FakeOcrProvider()
+        self.app.extensions["ocr_service"] = _FakeOcrService()
         self.client = self.app.test_client()
 
     def tearDown(self) -> None:
@@ -48,16 +49,15 @@ class CloudOcrApiTests(unittest.TestCase):
         gc.collect()
         self.temp_dir.cleanup()
 
-    def test_device_ocr_endpoint_returns_candidates(self) -> None:
+    def test_device_ocr_endpoint_returns_recognition(self) -> None:
         image = np.ones((96, 96), dtype=np.uint8) * 255
         ok, encoded = cv2.imencode(".jpg", image)
         self.assertTrue(ok)
 
         response = self.client.post(
-            "/api/device/full-recognition/candidates",
+            "/api/device/ocr",
             headers={"X-Device-Key": "device-key"},
             data={
-                "limit": "4",
                 "image": (io.BytesIO(encoded.tobytes()), "sample.jpg"),
             },
             content_type="multipart/form-data",
@@ -65,8 +65,8 @@ class CloudOcrApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["items"][0]["display"], "神")
-        self.assertEqual(payload["items"][1]["display"], "水")
+        self.assertEqual(payload["item"]["character"], "神")
+        self.assertAlmostEqual(payload["item"]["confidence"], 0.93, places=3)
 
 
 if __name__ == "__main__":

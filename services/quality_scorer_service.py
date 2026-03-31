@@ -8,7 +8,12 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import onnxruntime as ort
+try:
+    import onnxruntime as ort
+    _ORT_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # noqa: BLE001
+    ort = None  # type: ignore[assignment]
+    _ORT_IMPORT_ERROR = exc
 
 from config import QUALITY_SCORER_CONFIG
 
@@ -34,13 +39,16 @@ class QualityScorerService:
         self.labels = list(self.config.get("labels", ["bad", "medium", "good"]))
         self.score_scale = float(self.config.get("score_scale", 100.0))
         self.default_level = str(self.config.get("default_level", "medium"))
-        self._session: ort.InferenceSession | None = None
+        self._session = None
         self._input_names: list[str] = []
         self._input_shapes: dict[str, list[int | str | None]] = {}
         self._output_names: list[str] = []
         self._load_session()
 
     def _load_session(self) -> None:
+        if ort is None:
+            self.logger.warning("onnxruntime is unavailable on this device: %s", _ORT_IMPORT_ERROR)
+            return
         if not self.model_path.exists():
             self.logger.warning("Quality scorer model is missing: %s", self.model_path)
             return

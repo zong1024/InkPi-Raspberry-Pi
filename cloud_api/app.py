@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 from functools import wraps
+import io
 from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, request
+import cv2
+import numpy as np
 
 try:
     from cloud_api.storage import CloudDatabase
@@ -188,6 +191,51 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         )
         result = db.upsert_result(payload, device_name=device_name)
         return jsonify({"ok": True, "result": result})
+
+    @app.post("/api/device/ocr")
+    def device_ocr():
+        if not device_key_valid():
+            return json_error("invalid_device_key", 401)
+
+        image_file = request.files.get("image")
+        if image_file is None:
+            return json_error("missing_image", 400)
+
+        raw = image_file.read()
+        if not raw:
+            return json_error("empty_image", 400)
+
+        image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return json_error("invalid_image", 400)
+
+        ocr_service = app.extensions.get("ocr_service")
+        if ocr_service is None:
+            try:
+                from services.local_ocr_service import local_ocr_service
+
+                ocr_service = local_ocr_service
+            except Exception as exc:  # noqa: BLE001
+                return json_error(f"ocr_service_unavailable:{exc}", 503)
+
+        if not getattr(ocr_service, "available", False):
+            return json_error("ocr_service_unavailable", 503)
+
+        recognition = ocr_service.recognize(image)
+        if recognition is None:
+            return json_error("ocr_failed", 422)
+
+        return jsonify(
+            {
+                "ok": True,
+                "item": {
+                    "character": recognition.character,
+                    "confidence": recognition.confidence,
+                    "source": getattr(recognition, "source", "paddleocr"),
+                    "bbox": list(recognition.bbox) if recognition.bbox is not None else None,
+                },
+            }
+        )
 
     return app
 
