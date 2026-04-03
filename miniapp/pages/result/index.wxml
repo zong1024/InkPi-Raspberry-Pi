@@ -30,7 +30,7 @@
 
   <view wx:if="{{result}}" class="paper-panel metrics-panel">
     <text class="panel-title">本次评测依据</text>
-    <text class="panel-subtitle">当前版本固定使用预处理、官方 OCR 与 ONNX 评分模型的一条链路。</text>
+    <text class="panel-subtitle">当前版本固定使用预处理、OCR 与 ONNX 评分模型的一条单链路。</text>
 
     <view wx:for="{{metrics}}" wx:key="title" class="metric-card">
       <view class="metric-top">
@@ -39,6 +39,25 @@
       </view>
       <text class="metric-note">{{item.note}}</text>
     </view>
+  </view>
+
+  <view wx:if="{{result}}" class="paper-panel dimensions-panel">
+    <text class="panel-title">四维解释分</text>
+    <text class="panel-subtitle">{{dimensionSummary}}</text>
+
+    <view wx:if="{{dimensionCards.length}}" class="dimension-grid">
+      <view wx:for="{{dimensionCards}}" wx:key="key" class="dimension-card">
+        <view class="dimension-top">
+          <text class="dimension-label">{{item.label}}</text>
+          <text class="dimension-score">{{item.score}}</text>
+        </view>
+        <view class="dimension-track">
+          <view class="dimension-bar" style="width: {{item.score}}%;"></view>
+        </view>
+      </view>
+    </view>
+
+    <text wx:else class="metric-note">老记录暂无四维评分，新评测结果会自动生成。</text>
   </view>
 
   <view wx:if="{{result}}" class="paper-panel feedback-panel">

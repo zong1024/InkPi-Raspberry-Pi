@@ -13,7 +13,7 @@
         <p class="brand-kicker">InkPi Local Console</p>
         <h1>InkPi</h1>
         <p class="brand-copy">
-          树莓派本地只保留一条评测链路：预处理、自动 OCR、ONNX 评分，然后把结果同步到历史记录和云端。
+          本地 WebUI 保留调试属性：走预处理、OCR、ONNX 主链路，同时把四维解释分和原始特征留在详情页，方便你继续校验评测效果。
         </p>
       </div>
 
@@ -26,8 +26,8 @@
       <section class="rail-panel">
         <div class="rail-label">当前模式</div>
         <div class="selection-card">
-          <p>自动识别评测</p>
-          <span class="status-pill">预处理 → OCR → ONNX</span>
+          <p>单链路评测</p>
+          <span class="status-pill">预处理 → OCR → ONNX → 四维解释</span>
         </div>
       </section>
 
@@ -68,10 +68,9 @@
         <div class="hero-panel">
           <div class="hero-copy">
             <p class="hero-kicker">Single Chain</p>
-            <h3>拍下单字，系统会自己识别并直接给出总分与等级。</h3>
+            <h3>拍下单字，系统会自动识别并给出主分、等级和四维解释分。</h3>
             <p class="hero-text">
-              这一版只保留固定单链路。只要画面里是清晰、居中的单个毛笔字，
-              系统就会自动完成预处理、OCR 和 ONNX 质量评分。
+              WebUI 继续承担调试角色。总览和历史列表只展示关键信息，结果详情里可以展开看到概率输出、质量特征、几何特征和校准中间量。
             </p>
             <div class="hero-actions">
               <button class="primary-action" data-jump="capture">进入拍照页</button>
@@ -152,8 +151,7 @@
                 </div>
               </div>
               <p class="panel-copy">
-                这次评测会固定走三步：先提取单字主体，再用本地官方 OCR 识别字符，最后交给 ONNX
-                评分模型输出总分和好中坏等级。
+                这次评测会固定走四步：先提取单字主体，再用本地 OCR 识别字符，接着由 ONNX 模型输出主分与等级，最后生成结构、笔画、完整、稳定四维解释分。
               </p>
             </article>
 
@@ -179,7 +177,7 @@
                 </div>
               </div>
               <div id="guidancePanel" class="guidance-copy">
-                系统只接受清晰、居中的单个毛笔字。若 OCR 识别失败或画面不达标，会在这里给出明确的重拍建议。
+                系统只接受清晰、居中的单个毛笔字。若识别失败或画面不达标，这里会给出明确的重拍建议。
               </div>
             </article>
           </aside>
@@ -207,7 +205,7 @@
               </div>
             </div>
             <div id="historyDetail" class="detail-panel empty-state">
-              选择左侧一条记录，查看完整识别结果、总分、等级和反馈。
+              选择左侧一条记录，查看主分、四维解释分和调试信息。
             </div>
           </article>
         </div>
@@ -220,6 +218,7 @@
       <div class="history-main">
         <strong class="history-char"></strong>
         <span class="history-style"></span>
+        <span class="history-dimensions"></span>
       </div>
       <div class="history-meta">
         <span class="history-score"></span>

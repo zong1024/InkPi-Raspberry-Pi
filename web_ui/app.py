@@ -26,7 +26,7 @@ from services.speech_service import speech_service
 
 GUIDANCE_BY_ERROR = {
     "too_dark": "请把作品移到更亮的位置，再让镜头正对纸面。",
-    "too_bright": "请避开强反光和直射光，让纸面亮但不过曝。",
+    "too_bright": "请避开强反光和直射光，让纸面明亮但不过曝。",
     "low_contrast": "请换一张更清晰的作品，或让墨迹和背景更分离。",
     "empty_shot": "请只保留一个汉字，并把主体放到画面中央。",
     "obstruction": "请移开手部、桌面杂物和边框遮挡，只保留作品主体。",
@@ -136,7 +136,7 @@ def create_app() -> Flask:
         result = database_service.get_by_id(record_id)
         if result is None:
             return jsonify({"error": "not_found", "message": "未找到该评测记录。"}), 404
-        return jsonify(_serialize_result(result))
+        return jsonify(_serialize_result(result, include_debug=True))
 
     @app.get("/api/results/<int:record_id>/image/<kind>")
     def result_image(record_id: int, kind: str):
@@ -233,11 +233,11 @@ def _serialize_stats(stats: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _serialize_result(result: EvaluationResult | None) -> dict[str, Any] | None:
+def _serialize_result(result: EvaluationResult | None, include_debug: bool = False) -> dict[str, Any] | None:
     if result is None:
         return None
 
-    return {
+    payload = {
         "id": result.id,
         "total_score": int(result.total_score),
         "grade": LEVEL_LABELS.get(result.quality_level, "中"),
@@ -252,7 +252,12 @@ def _serialize_result(result: EvaluationResult | None) -> dict[str, Any] | None:
         "quality_confidence": result.quality_confidence,
         "image_path": result.image_path,
         "processed_image_path": result.processed_image_path,
+        "dimension_scores": result.get_dimension_scores(),
+        "dimension_summary": result.get_dimension_summary(),
     }
+    if include_debug:
+        payload["score_debug"] = result.score_debug
+    return payload
 
 
 def _decode_data_url(image_data: str) -> np.ndarray | None:

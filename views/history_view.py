@@ -10,34 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QBoxLayout, QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, clear_layout, score_to_color, score_to_soft_color
-
-
-class StatTile(QFrame):
-    """Small statistics tile."""
-
-    def __init__(self, title: str, value: str, parent=None):
-        super().__init__(parent)
-        self.setObjectName("statCard")
-        self.setMinimumHeight(74)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(2)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("mutedLabel")
-        title_label.setFont(app_font(10))
-        layout.addWidget(title_label)
-
-        value_label = QLabel(value)
-        value_label.setObjectName("metricValue")
-        value_label.setFont(app_font(22, QFont.Weight.Bold))
-        layout.addWidget(value_label)
+from views.ui_theme import app_font, clear_layout
 
 
 class HistoryItem(QFrame):
@@ -49,78 +26,67 @@ class HistoryItem(QFrame):
     def __init__(self, result: EvaluationResult, parent=None):
         super().__init__(parent)
         self.result = result
-        self.setObjectName("historyCard")
+        self.setObjectName("historyItemCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        score_panel = QFrame()
-        score_panel.setStyleSheet(
-            f"background-color: {score_to_soft_color(result.total_score)};"
-            "border-radius: 18px;"
-        )
-        score_layout = QVBoxLayout(score_panel)
-        score_layout.setContentsMargins(14, 10, 14, 10)
-        score_layout.setSpacing(4)
+        glyph_card = QFrame()
+        glyph_card.setObjectName("historyGlyphCard")
+        glyph_layout = QVBoxLayout(glyph_card)
+        glyph_layout.setContentsMargins(12, 10, 12, 10)
+        glyph_layout.setSpacing(4)
 
-        char_label = QLabel(result.character_name or "未识别")
-        char_label.setObjectName("historyScore")
-        char_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
-        score_layout.addWidget(char_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        glyph = QLabel(result.character_name or "字")
+        glyph.setObjectName("glyphLabel")
+        glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        glyph_layout.addWidget(glyph)
 
-        grade_label = QLabel(result.get_grade())
-        grade_label.setObjectName("historyGrade")
-        grade_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
-        score_layout.addWidget(grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(score_panel)
+        layout.addWidget(glyph_card)
 
-        text_layout = QVBoxLayout()
-        text_layout.setSpacing(4)
+        info = QVBoxLayout()
+        info.setSpacing(4)
 
-        title_label = QLabel(f"{result.total_score} 分")
-        title_label.setObjectName("sectionTitle")
-        title_label.setFont(app_font(13, QFont.Weight.Bold))
-        text_layout.addWidget(title_label)
+        title = QLabel(result.character_name or "未识别")
+        title.setObjectName("sectionTitle")
+        title.setFont(app_font(13, QFont.Weight.Bold))
+        info.addWidget(title)
 
         time_label = QLabel(result.timestamp.strftime("%Y-%m-%d %H:%M"))
-        time_label.setObjectName("cardSubtitle")
-        text_layout.addWidget(time_label)
+        time_label.setObjectName("mutedLabel")
+        time_label.setFont(app_font(10))
+        info.addWidget(time_label)
 
-        meta_parts = []
-        if result.ocr_confidence is not None:
-            meta_parts.append(f"OCR {result.ocr_confidence:.0%}")
-        if result.quality_confidence is not None:
-            meta_parts.append(f"评级 {result.quality_confidence:.0%}")
-        meta_label = QLabel(" / ".join(meta_parts) if meta_parts else "自动 OCR + ONNX 单链路")
-        meta_label.setObjectName("mutedLabel")
-        meta_label.setWordWrap(True)
-        text_layout.addWidget(meta_label)
+        feedback = QLabel(result.feedback[:36] + ("..." if len(result.feedback) > 36 else ""))
+        feedback.setObjectName("sectionSubtitle")
+        feedback.setWordWrap(True)
+        feedback.setFont(app_font(10))
+        info.addWidget(feedback)
+        layout.addLayout(info, stretch=1)
 
-        feedback_preview = result.feedback[:80] + ("..." if len(result.feedback) > 80 else "")
-        feedback_label = QLabel(feedback_preview)
-        feedback_label.setObjectName("sectionSubtitle")
-        feedback_label.setWordWrap(True)
-        text_layout.addWidget(feedback_label)
+        right = QVBoxLayout()
+        right.setSpacing(4)
+        right.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        layout.addLayout(text_layout, stretch=1)
+        grade = QLabel(result.get_grade())
+        grade.setObjectName("historyGrade")
+        grade.setAlignment(Qt.AlignmentFlag.AlignRight)
+        right.addWidget(grade)
 
-        action_layout = QVBoxLayout()
-        action_layout.setSpacing(8)
-        action_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        view_chip = QLabel("查看")
-        view_chip.setObjectName("accentChip")
-        action_layout.addWidget(view_chip, alignment=Qt.AlignmentFlag.AlignRight)
+        score = QLabel(str(result.total_score))
+        score.setObjectName("historyScore")
+        score.setAlignment(Qt.AlignmentFlag.AlignRight)
+        right.addWidget(score)
 
         delete_button = QPushButton("删除")
-        delete_button.setObjectName("dangerButton")
-        delete_button.setMinimumHeight(36)
+        delete_button.setObjectName("ghostButton")
+        delete_button.setMinimumHeight(32)
         delete_button.clicked.connect(lambda: self.delete_requested.emit(self.result.id))
-        action_layout.addWidget(delete_button)
+        right.addWidget(delete_button)
 
-        layout.addLayout(action_layout)
+        layout.addLayout(right)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802
         if event.button() == Qt.MouseButton.LeftButton:
@@ -140,100 +106,54 @@ class HistoryView(QWidget):
         self._init_ui()
 
     def _init_ui(self) -> None:
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(2, 2, 2, 2)
+        root.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setSpacing(8)
+
+        title = QLabel("Past Evaluations")
+        title.setObjectName("pageTitle")
+        title.setFont(app_font(18, QFont.Weight.Bold))
+        header.addWidget(title)
+
+        header.addStretch()
+
+        self.total_label = QLabel("TOTAL: 0")
+        self.total_label.setObjectName("miniLabel")
+        header.addWidget(self.total_label)
+        root.addLayout(header)
+
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(8)
+
+        self.date_combo = QComboBox()
+        self.date_combo.addItems(["全部", "今天", "近 7 天", "近 30 天"])
+        self.date_combo.currentIndexChanged.connect(self._on_filter_changed)
+        filter_row.addWidget(self.date_combo, stretch=1)
+
+        self.btn_back = QPushButton("返回首页")
+        self.btn_back.setObjectName("secondaryButton")
+        self.btn_back.setMinimumHeight(38)
+        self.btn_back.clicked.connect(self.back_requested.emit)
+        filter_row.addWidget(self.btn_back)
+        root.addLayout(filter_row)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        root_layout.addWidget(self.scroll_area)
-
-        container = QWidget()
-        self.scroll_area.setWidget(container)
-
-        self.page_layout = QVBoxLayout(container)
-        self.page_layout.setContentsMargins(4, 4, 4, 4)
-        self.page_layout.setSpacing(12)
-
-        stats_title = QLabel("历史成绩")
-        stats_title.setObjectName("sectionTitle")
-        stats_title.setFont(app_font(16, QFont.Weight.Bold))
-        self.page_layout.addWidget(stats_title)
-
-        self.stats_row = QHBoxLayout()
-        self.stats_row.setSpacing(10)
-        self.page_layout.addLayout(self.stats_row)
-
-        filter_card = QFrame()
-        filter_card.setObjectName("panelCard")
-        self.filter_layout = QVBoxLayout(filter_card)
-        self.filter_layout.setContentsMargins(16, 12, 16, 12)
-        self.filter_layout.setSpacing(8)
-
-        self.filter_top_row = QHBoxLayout()
-        self.filter_top_row.setSpacing(8)
-
-        filter_title = QLabel("时间范围")
-        filter_title.setObjectName("mutedLabel")
-        self.filter_top_row.addWidget(filter_title)
-        self.filter_title = filter_title
-
-        self.date_combo = QComboBox()
-        self.date_combo.addItems(["全部", "今天", "最近 7 天", "最近 30 天"])
-        self.date_combo.setMinimumWidth(120)
-        self.date_combo.currentIndexChanged.connect(self._on_filter_changed)
-        self.filter_top_row.addWidget(self.date_combo, stretch=1)
-
-        self.filter_layout.addLayout(self.filter_top_row)
-
-        self.filter_bottom_row = QHBoxLayout()
-        self.filter_bottom_row.setSpacing(8)
-
-        self.record_hint = QLabel("最近 20 条记录")
-        self.record_hint.setObjectName("mutedLabel")
-        self.filter_bottom_row.addWidget(self.record_hint, stretch=1)
-
-        self.btn_refresh = QPushButton("刷新")
-        self.btn_refresh.setObjectName("secondaryButton")
-        self.btn_refresh.setMinimumHeight(40)
-        self.btn_refresh.clicked.connect(self.refresh_data)
-        self.filter_bottom_row.addWidget(self.btn_refresh)
-
-        self.btn_back = QPushButton("返回首页")
-        self.btn_back.setObjectName("ghostButton")
-        self.btn_back.setMinimumHeight(40)
-        self.btn_back.clicked.connect(self.back_requested.emit)
-        self.filter_bottom_row.addWidget(self.btn_back)
-
-        self.filter_layout.addLayout(self.filter_bottom_row)
-        self.page_layout.addWidget(filter_card)
+        root.addWidget(self.scroll_area, stretch=1)
 
         self.list_container = QWidget()
         self.list_layout = QVBoxLayout(self.list_container)
         self.list_layout.setContentsMargins(0, 0, 0, 0)
         self.list_layout.setSpacing(8)
-        self.page_layout.addWidget(self.list_container)
-        self.page_layout.addStretch()
+        self.scroll_area.setWidget(self.list_container)
 
     def refresh_data(self) -> None:
         self.scroll_area.verticalScrollBar().setValue(0)
-        self._load_stats()
         self._load_records()
-
-    def _load_stats(self) -> None:
-        stats = database_service.get_statistics()
-
-        clear_layout(self.stats_row)
-
-        tiles = [
-            StatTile("累计评测", str(stats["total_count"])),
-            StatTile("平均得分", str(stats["average_score"]) if stats["total_count"] else "--"),
-            StatTile("最佳成绩", str(stats["max_score"]) if stats["total_count"] else "--"),
-            StatTile("最低成绩", str(stats["min_score"]) if stats["total_count"] else "--"),
-        ]
-
-        for tile in tiles:
-            self.stats_row.addWidget(tile)
 
     def _load_records(self) -> None:
         clear_layout(self.list_layout)
@@ -243,7 +163,6 @@ class HistoryView(QWidget):
 
         if filter_index == 0:
             records = database_service.get_all(limit=20)
-            self.record_hint.setText("最近 20 条记录")
         else:
             if filter_index == 1:
                 start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -252,25 +171,27 @@ class HistoryView(QWidget):
             else:
                 start_date = now - timedelta(days=30)
             records = database_service.get_by_date_range(start_date, now)
-            self.record_hint.setText(f"筛选结果：{len(records)} 条")
+
+        self.total_label.setText(f"TOTAL: {len(records)}")
 
         if not records:
             empty_card = QFrame()
             empty_card.setObjectName("emptyStateCard")
             empty_layout = QVBoxLayout(empty_card)
-            empty_layout.setContentsMargins(24, 24, 24, 24)
-            empty_layout.setSpacing(8)
+            empty_layout.setContentsMargins(20, 18, 20, 18)
+            empty_layout.setSpacing(6)
 
-            title = QLabel("这个时间范围内还没有记录")
+            title = QLabel("暂无记录")
             title.setObjectName("sectionTitle")
             empty_layout.addWidget(title)
 
-            body = QLabel("完成新的自动识别评测后，结果会自动保存在这里。")
+            body = QLabel("完成新的评测后，结果会自动保存在这里。")
             body.setObjectName("sectionSubtitle")
             body.setWordWrap(True)
             empty_layout.addWidget(body)
 
             self.list_layout.addWidget(empty_card)
+            self.list_layout.addStretch()
             return
 
         for record in records:
@@ -278,6 +199,8 @@ class HistoryView(QWidget):
             item.clicked.connect(self.result_selected.emit)
             item.delete_requested.connect(self._on_delete_record)
             self.list_layout.addWidget(item)
+
+        self.list_layout.addStretch()
 
     def _on_filter_changed(self) -> None:
         self._load_records()
@@ -294,14 +217,4 @@ class HistoryView(QWidget):
             self.refresh_data()
 
     def set_compact_mode(self, compact: bool) -> None:
-        if compact == self.compact_mode:
-            return
-
         self.compact_mode = compact
-        self.page_layout.setSpacing(8 if compact else 12)
-        self.stats_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.filter_top_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.filter_bottom_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.date_combo.setMinimumWidth(0 if compact else 120)
-        self.btn_refresh.setMinimumHeight(36 if compact else 40)
-        self.btn_back.setMinimumHeight(36 if compact else 40)

@@ -1,30 +1,29 @@
-# InkPi 新训练主线
+# InkPi 训练说明
 
-当前分支的训练目标已经改成单链路：
+当前训练链路已经收敛为：
 
-`预处理 -> 官方 OCR -> 单图 ONNX 评分模型`
+`真实样本清单 -> 单图质量模型训练 -> 导出 ONNX -> 运行时加载评分`
 
 ## 当前训练资产
 
-- `training/build_quality_manifest.py`
-  - 从真实字符图片构建质量评分清单
-  - `good` 来自 `public_character/originals`
-  - `medium` 与 `bad` 来自 `public_character/good` 中的真实样本筛选
-- `training/train_quality_scorer.py`
-  - 训练单图质量评分模型
-  - 输入为 `32x32` 灰度单字图 + 字符编码
-  - 输出为 `bad / medium / good` 概率
-  - 导出 `quality_scorer.onnx`
-- `training/train_quality_scorer.sh`
-  - 一键构建清单、训练并导出 ONNX
+- [`build_quality_manifest.py`](build_quality_manifest.py)：从真实单字样本构建三档质量清单
+- [`train_quality_scorer.py`](train_quality_scorer.py)：训练单图质量评分模型
+- [`train_quality_scorer.sh`](train_quality_scorer.sh)：一键执行清单构建、训练和导出
 
-## 运行方法
+## 运行方式
 
 ```bash
 bash training/train_quality_scorer.sh
 ```
 
-可用环境变量：
+也可以单独运行脚本：
+
+```bash
+python training/build_quality_manifest.py
+python training/train_quality_scorer.py
+```
+
+## 主要环境变量
 
 - `DATA_DIR`
 - `MANIFEST_PATH`
@@ -35,12 +34,13 @@ bash training/train_quality_scorer.sh
 - `LIMIT_BAD`
 - `MAX_ITER`
 
-## OCR 说明
+## 导出产物
 
-- 第一阶段直接使用官方 PaddleOCR 模型做本地识别
-- OCR 不再通过旧的模板重排链路
-- 后续如果要自训 OCR，可以单独增加 `train_ocr_recognizer.py`，但不影响当前单链路运行
+- [`../models/quality_scorer.onnx`](../models/quality_scorer.onnx)
+- [`../models/quality_scorer.metrics.json`](../models/quality_scorer.metrics.json)
 
-## 旧脚本状态
+## 与运行时的关系
 
-旧的 Siamese / 模板比对训练脚本在这个分支上已经退出主线，不再用于当前运行时评测。
+- 运行时 OCR 由 [`../services/local_ocr_service.py`](../services/local_ocr_service.py) 负责
+- 运行时质量评分由 [`../services/quality_scorer_service.py`](../services/quality_scorer_service.py) 加载 ONNX 模型完成
+- 当前运行时不再把模板库对比或 Siamese 双图评分作为主链路

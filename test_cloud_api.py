@@ -10,6 +10,31 @@ from pathlib import Path
 from cloud_api.app import create_app
 
 
+def build_upload_payload(local_record_id: int, total_score: int, quality_level: str, character_name: str) -> dict:
+    return {
+        "local_record_id": local_record_id,
+        "total_score": total_score,
+        "feedback": "整体表现稳定，继续保持当前状态。",
+        "timestamp": "2026-03-30T12:34:56",
+        "character_name": character_name,
+        "ocr_confidence": 0.97,
+        "quality_level": quality_level,
+        "quality_confidence": 0.91,
+        "dimension_scores": {
+            "structure": 84,
+            "stroke": 80,
+            "integrity": 88,
+            "stability": 82,
+        },
+        "score_debug": {
+            "probabilities": {"good": 0.91},
+            "quality_features": {"center_quality": 0.92},
+            "geometry_features": {"projection_balance": 0.86},
+            "calibration": {"feature_quality": 0.84},
+        },
+    }
+
+
 class CloudApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -32,97 +57,61 @@ class CloudApiTests(unittest.TestCase):
         gc.collect()
         self.temp_dir.cleanup()
 
-    def test_demo_login_and_history_roundtrip(self) -> None:
+    def login_headers(self) -> dict[str, str]:
         login = self.client.post(
             "/api/auth/login",
             json={"username": "demo", "password": "demo123456"},
         )
         self.assertEqual(login.status_code, 200)
-        data = login.get_json()
-        self.assertTrue(data["ok"])
-        token = data["token"]
+        return {"Authorization": f"Bearer {login.get_json()['token']}"}
+
+    def test_demo_login_and_history_roundtrip(self) -> None:
+        headers = self.login_headers()
 
         upload = self.client.post(
             "/api/device/results",
             headers={"X-Device-Key": "device-key", "X-Device-Name": "InkPi-RPi"},
-            json={
-                "local_record_id": 12,
-                "total_score": 88,
-                "feedback": "整体较稳，继续保持当前写法。",
-                "timestamp": "2026-03-30T12:34:56",
-                "character_name": "水",
-                "ocr_confidence": 0.97,
-                "quality_level": "good",
-                "quality_confidence": 0.91,
-            },
+            json=build_upload_payload(local_record_id=12, total_score=88, quality_level="good", character_name="永"),
         )
         self.assertEqual(upload.status_code, 200)
         upload_payload = upload.get_json()
         self.assertTrue(upload_payload["ok"])
         result_id = upload_payload["result"]["id"]
 
-        listing = self.client.get("/api/results", headers={"Authorization": f"Bearer {token}"})
+        listing = self.client.get("/api/results", headers=headers)
         self.assertEqual(listing.status_code, 200)
         listing_payload = listing.get_json()
         self.assertTrue(listing_payload["ok"])
         self.assertEqual(listing_payload["total"], 1)
-        self.assertEqual(listing_payload["items"][0]["character_name"], "水")
+        self.assertEqual(listing_payload["items"][0]["character_name"], "永")
         self.assertEqual(listing_payload["items"][0]["quality_level"], "good")
+        self.assertEqual(listing_payload["items"][0]["dimension_scores"]["integrity"], 88)
+        self.assertNotIn("score_debug", listing_payload["items"][0])
 
-        detail = self.client.get(f"/api/results/{result_id}", headers={"Authorization": f"Bearer {token}"})
+        detail = self.client.get(f"/api/results/{result_id}", headers=headers)
         self.assertEqual(detail.status_code, 200)
         detail_payload = detail.get_json()
         self.assertEqual(detail_payload["result"]["ocr_confidence"], 0.97)
         self.assertEqual(detail_payload["result"]["quality_confidence"], 0.91)
+        self.assertEqual(detail_payload["result"]["dimension_scores"]["structure"], 84)
+        self.assertEqual(detail_payload["result"]["score_debug"]["calibration"]["feature_quality"], 0.84)
 
     def test_history_summary_filters_and_delete(self) -> None:
-        login = self.client.post(
-            "/api/auth/login",
-            json={"username": "demo", "password": "demo123456"},
-        )
-        token = login.get_json()["token"]
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = self.login_headers()
 
         uploads = [
-            {
-                "local_record_id": 1,
-                "total_score": 92,
-                "feedback": "章法稳，状态很好。",
-                "timestamp": "2026-03-30T10:00:00",
-                "character_name": "神",
-                "ocr_confidence": 0.96,
-                "quality_level": "good",
-                "quality_confidence": 0.88,
-            },
-            {
-                "local_record_id": 2,
-                "total_score": 76,
-                "feedback": "整体规整，但还可继续收笔。",
-                "timestamp": "2026-03-29T10:00:00",
-                "character_name": "水",
-                "ocr_confidence": 0.92,
-                "quality_level": "medium",
-                "quality_confidence": 0.77,
-            },
-            {
-                "local_record_id": 3,
-                "total_score": 61,
-                "feedback": "结构偏散，需要继续练习。",
-                "timestamp": "2026-03-28T10:00:00",
-                "character_name": "神",
-                "ocr_confidence": 0.83,
-                "quality_level": "bad",
-                "quality_confidence": 0.71,
-            },
+            build_upload_payload(local_record_id=1, total_score=92, quality_level="good", character_name="神"),
+            build_upload_payload(local_record_id=2, total_score=76, quality_level="medium", character_name="永"),
+            build_upload_payload(local_record_id=3, total_score=61, quality_level="bad", character_name="神"),
         ]
 
         for payload in uploads:
-            response = self.client.post(
-                "/api/device/results",
-                headers={"X-Device-Key": "device-key", "X-Device-Name": "InkPi-RPi"},
-                json=payload,
-            )
-            self.assertEqual(response.status_code, 200)
+          response = self.client.post(
+              "/api/device/results",
+              headers={"X-Device-Key": "device-key", "X-Device-Name": "InkPi-RPi"},
+              json=payload,
+          )
+          self.assertEqual(response.status_code, 200)
 
         summary = self.client.get("/api/results/summary", headers=headers)
         self.assertEqual(summary.status_code, 200)

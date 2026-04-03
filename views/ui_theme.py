@@ -1,4 +1,4 @@
-"""Shared UI theme tokens for the Raspberry Pi touch interface."""
+"""Shared UI theme tokens for the 3.5-inch InkPi interface."""
 
 from __future__ import annotations
 
@@ -12,29 +12,22 @@ from config import IS_RASPBERRY_PI
 
 
 THEME = {
-    "bg": "#1b1512",
-    "bg_alt": "#231b17",
-    "surface": "#f3eadc",
-    "surface_alt": "#eadbc7",
-    "surface_soft": "#f7f1e7",
-    "header": "#15100d",
-    "header_soft": "#30241d",
-    "ink": "#211810",
-    "muted": "#76614f",
-    "line": "#ccb296",
-    "line_strong": "#9d7959",
-    "accent": "#bb6a3a",
-    "accent_hover": "#a7592b",
-    "accent_soft": "#f0d4c0",
-    "gold": "#d2a86c",
-    "gold_soft": "#f3e2bf",
-    "success": "#4f7f5a",
-    "success_soft": "#d9eadb",
-    "warning": "#b47a33",
-    "warning_soft": "#f2e0bc",
-    "danger": "#b34b3e",
-    "danger_soft": "#f2d1cb",
+    "window": "#f5f1ea",
+    "surface": "#fffdfa",
+    "surface_alt": "#f1ece5",
+    "surface_soft": "#ece6df",
+    "ink": "#26211d",
+    "muted": "#8c857d",
+    "line": "#e2dbd1",
+    "line_soft": "#efe9e1",
+    "accent": "#b90f1f",
+    "accent_hover": "#a20d1b",
+    "accent_soft": "#f7d8dc",
+    "success": "#2f7d57",
+    "warning": "#ba7a28",
+    "danger": "#b74b48",
 }
+
 FONT_FAMILY = "Noto Sans CJK SC" if IS_RASPBERRY_PI else "Microsoft YaHei UI"
 FONT_CANDIDATES = (
     "Noto Sans CJK SC",
@@ -66,11 +59,13 @@ def ensure_app_font_family() -> str:
         return FONT_FAMILY
 
     families = {family.casefold(): family for family in QFontDatabase.families()}
+    normalized_candidates = {candidate.casefold() for candidate in FONT_CANDIDATES}
+
     for candidate in FONT_CANDIDATES:
         match = families.get(candidate.casefold())
         if match:
             _RESOLVED_FONT_FAMILY = match
-            return _RESOLVED_FONT_FAMILY
+            return match
 
     for font_file in FONT_FILES:
         if not font_file.exists():
@@ -80,51 +75,56 @@ def ensure_app_font_family() -> str:
             continue
         registered = QFontDatabase.applicationFontFamilies(font_id)
         for family in registered:
-            if family.casefold() in {candidate.casefold() for candidate in FONT_CANDIDATES}:
+            if family.casefold() in normalized_candidates:
                 _RESOLVED_FONT_FAMILY = family
-                return _RESOLVED_FONT_FAMILY
+                return family
         if registered:
             _RESOLVED_FONT_FAMILY = registered[0]
-            return _RESOLVED_FONT_FAMILY
+            return registered[0]
 
     _RESOLVED_FONT_FAMILY = FONT_FAMILY
-    return _RESOLVED_FONT_FAMILY
+    return FONT_FAMILY
 
 
 def font_stack() -> str:
     """Return the CSS font-family stack for the active application font."""
     primary = ensure_app_font_family()
-    fallbacks = ['"Noto Sans CJK SC"', '"Noto Sans SC"', '"Microsoft YaHei UI"', '"Microsoft YaHei"', '"SimHei"', '"SimSun"', '"PingFang SC"', "sans-serif"]
+    fallbacks = [
+        '"Noto Sans CJK SC"',
+        '"Noto Sans SC"',
+        '"Microsoft YaHei UI"',
+        '"Microsoft YaHei"',
+        '"SimHei"',
+        '"SimSun"',
+        '"PingFang SC"',
+        "sans-serif",
+    ]
     quoted_primary = f'"{primary}"'
     ordered = [quoted_primary] + [item for item in fallbacks if item != quoted_primary]
     return ", ".join(ordered)
 
 
 def score_to_color(score: int) -> str:
-    """Return the primary color for a numeric score."""
     if score >= 85:
-        return THEME["success"]
-    if score >= 60:
+        return THEME["accent"]
+    if score >= 70:
         return THEME["warning"]
     return THEME["danger"]
 
 
 def score_to_soft_color(score: int) -> str:
-    """Return a soft background color for a numeric score."""
     if score >= 85:
-        return THEME["success_soft"]
-    if score >= 60:
-        return THEME["warning_soft"]
-    return THEME["danger_soft"]
+        return "#f7d8dc"
+    if score >= 70:
+        return "#f5ead7"
+    return "#f3dede"
 
 
 def app_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
-    """Create a font with the shared family, size, and weight."""
     return QFont(ensure_app_font_family(), size, weight)
 
 
 def clear_layout(layout: QLayout) -> None:
-    """Safely remove all child items from a layout."""
     while layout.count():
         item = layout.takeAt(0)
         widget = item.widget()
@@ -150,129 +150,17 @@ def build_stylesheet() -> str:
     }}
 
     QMainWindow {{
-        background-color: {THEME["bg"]};
-    }}
-
-    QFrame#appHeader {{
-        background-color: {THEME["header"]};
-        border: 1px solid {THEME["header_soft"]};
-        border-radius: 20px;
-    }}
-
-    QLabel#brandTitle,
-    QLabel#headerTitle,
-    QLabel#headerClock {{
-        background-color: transparent;
-        color: #fff8ee;
-    }}
-
-    QLabel#brandCaption,
-    QLabel#headerSubtitle {{
-        background-color: transparent;
-        color: #d7c4ae;
-    }}
-
-    QLabel#headerPill {{
-        background-color: {THEME["accent_soft"]};
-        color: {THEME["accent"]};
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 13px;
-        padding: 5px 10px;
-        font-size: 11px;
-        font-weight: 600;
+        background-color: {THEME["window"]};
     }}
 
     QFrame#mainSurface {{
         background-color: {THEME["surface"]};
-        border: 1px solid {THEME["line_strong"]};
+        border: 1px solid {THEME["line_soft"]};
         border-radius: 26px;
     }}
 
-    QFrame#footerBar {{
-        background-color: {THEME["header"]};
-        border: 1px solid {THEME["header_soft"]};
-        border-radius: 18px;
-    }}
-
-    QPushButton#navButton {{
-        background-color: transparent;
-        color: #ceb8a3;
-        border: none;
-        border-radius: 16px;
-        padding: 9px 14px;
-        font-size: 13px;
-        font-weight: 700;
-    }}
-
-    QPushButton#navButton:hover {{
-        background-color: rgba(255, 255, 255, 0.08);
-        color: #fff8ee;
-    }}
-
-    QPushButton#navButton[active="true"] {{
-        background-color: {THEME["accent"]};
-        color: #fff9f3;
-    }}
-
-    QPushButton {{
-        border: none;
-        border-radius: 16px;
-        padding: 10px 14px;
-        font-size: 13px;
-        font-weight: 700;
-        background-color: {THEME["surface_alt"]};
-        color: {THEME["ink"]};
-    }}
-
-    QPushButton:hover {{
-        background-color: #eadfce;
-    }}
-
-    QPushButton:disabled {{
-        background-color: #ddd0be;
-        color: #aa9680;
-    }}
-
-    QPushButton#primaryButton {{
-        background-color: {THEME["accent"]};
-        color: #fff8f3;
-    }}
-
-    QPushButton#primaryButton:hover {{
-        background-color: {THEME["accent_hover"]};
-    }}
-
-    QPushButton#secondaryButton {{
-        background-color: {THEME["surface_soft"]};
-        color: {THEME["ink"]};
-        border: 1px solid {THEME["line"]};
-    }}
-
-    QPushButton#secondaryButton:hover {{
-        background-color: #fbf3e7;
-    }}
-
-    QPushButton#ghostButton {{
-        background-color: rgba(255, 255, 255, 0.02);
-        color: {THEME["muted"]};
-        border: 1px solid {THEME["line"]};
-    }}
-
-    QPushButton#ghostButton:hover {{
-        background-color: {THEME["surface_alt"]};
-        color: {THEME["ink"]};
-    }}
-
-    QPushButton#dangerButton {{
-        background-color: {THEME["danger_soft"]};
-        color: {THEME["danger"]};
-    }}
-
-    QPushButton#dangerButton:hover {{
-        background-color: {THEME["danger"]};
-        color: #fff7f3;
-    }}
-
+    QFrame#topBar,
+    QFrame#bottomNav,
     QFrame#panelCard,
     QFrame#heroCard,
     QFrame#statCard,
@@ -282,106 +170,103 @@ def build_stylesheet() -> str:
     QFrame#guideCard,
     QFrame#previewCard,
     QFrame#feedbackCard,
-    QFrame#emptyStateCard {{
+    QFrame#emptyStateCard,
+    QFrame#scoreCard,
+    QFrame#dimensionBarCard,
+    QFrame#historyItemCard,
+    QFrame#historyGlyphCard,
+    QFrame#softCard {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line"]};
-        border-radius: 24px;
+        border-radius: 22px;
     }}
 
     QFrame#heroCard {{
-        background-color: #f2e6d6;
-        border: 1px solid {THEME["line_strong"]};
+        background-color: transparent;
+        border: none;
     }}
 
-    QFrame#accentCard {{
-        background-color: #211711;
-        border: 1px solid #49372b;
-        border-radius: 24px;
+    QFrame#softCard,
+    QFrame#historyGlyphCard,
+    QFrame#dimensionBarCard {{
+        background-color: {THEME["surface_alt"]};
+        border: 1px solid {THEME["line_soft"]};
+    }}
+
+    QLabel#brandTitle {{
+        color: {THEME["ink"]};
+        font-size: 22px;
+        font-weight: 800;
+    }}
+
+    QLabel#pageTitle {{
+        color: {THEME["ink"]};
+        font-size: 17px;
+        font-weight: 800;
     }}
 
     QLabel#sectionTitle {{
         color: {THEME["ink"]};
-        font-size: 17px;
+        font-size: 14px;
         font-weight: 700;
     }}
 
     QLabel#sectionSubtitle,
-    QLabel#cardSubtitle,
-    QLabel#mutedLabel {{
+    QLabel#mutedLabel,
+    QLabel#cardSubtitle {{
         color: {THEME["muted"]};
     }}
 
-    QLabel#heroEyebrow,
-    QLabel#chipLabel {{
-        background-color: {THEME["gold_soft"]};
-        color: {THEME["warning"]};
-        border-radius: 12px;
-        padding: 4px 10px;
-        font-size: 11px;
-        font-weight: 600;
-    }}
-
-    QLabel#accentChip {{
-        background-color: {THEME["accent_soft"]};
+    QLabel#brandAccent,
+    QLabel#accentText {{
         color: {THEME["accent"]};
-        border-radius: 12px;
-        padding: 5px 10px;
-        font-size: 11px;
-        font-weight: 600;
-    }}
-
-    QLabel#successChip {{
-        background-color: {THEME["success_soft"]};
-        color: {THEME["success"]};
-        border-radius: 12px;
-        padding: 4px 10px;
-        font-size: 11px;
-        font-weight: 600;
-    }}
-
-    QLabel#metricValue {{
-        color: {THEME["ink"]};
-        font-size: 26px;
-        font-weight: 700;
-    }}
-
-    QLabel#scoreNumber {{
-        color: {THEME["ink"]};
-        font-size: 64px;
         font-weight: 800;
     }}
 
-    QLabel#scoreGrade {{
-        font-size: 16px;
-        font-weight: 700;
+    QLabel#scoreNumber {{
+        color: {THEME["accent"]};
+        font-size: 46px;
+        font-weight: 900;
     }}
 
-    QLabel#dimensionScore {{
-        font-size: 24px;
-        font-weight: 700;
+    QLabel#scoreGrade {{
+        color: {THEME["accent"]};
+        font-size: 18px;
+        font-weight: 800;
     }}
 
     QLabel#historyScore {{
-        font-size: 30px;
+        color: {THEME["accent"]};
+        font-size: 26px;
         font-weight: 800;
     }}
 
     QLabel#historyGrade {{
-        font-size: 12px;
+        color: {THEME["accent"]};
+        font-size: 16px;
+        font-weight: 800;
+    }}
+
+    QLabel#miniLabel {{
+        color: {THEME["muted"]};
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1px;
+    }}
+
+    QLabel#glyphLabel {{
+        color: {THEME["ink"]};
+        font-size: 28px;
+        font-weight: 800;
+    }}
+
+    QLabel#pillLabel {{
+        background-color: {THEME["accent_soft"]};
+        color: {THEME["accent"]};
+        border-radius: 12px;
+        padding: 3px 10px;
+        font-size: 10px;
         font-weight: 700;
-    }}
-
-    QFrame#previewFrame {{
-        background-color: #110d0b;
-        border: 1px solid #4a382c;
-        border-radius: 26px;
-    }}
-
-    QLabel#previewLabel {{
-        background-color: #110d0b;
-        color: #f5ebde;
-        border-radius: 22px;
-        padding: 12px;
     }}
 
     QLabel#statusPill {{
@@ -389,41 +274,84 @@ def build_stylesheet() -> str:
         color: {THEME["muted"]};
         border-radius: 12px;
         padding: 4px 10px;
-        font-size: 11px;
-        font-weight: 600;
+        font-size: 10px;
+        font-weight: 700;
     }}
 
     QLabel#statusPill[state="ready"] {{
-        background-color: {THEME["success_soft"]};
+        background-color: #e6f1ea;
         color: {THEME["success"]};
     }}
 
     QLabel#statusPill[state="working"] {{
-        background-color: {THEME["gold_soft"]};
+        background-color: #f5ead7;
         color: {THEME["warning"]};
     }}
 
     QLabel#statusPill[state="error"] {{
-        background-color: {THEME["danger_soft"]};
+        background-color: #f3dede;
         color: {THEME["danger"]};
     }}
 
-    QLabel#statusPill[state="idle"] {{
-        background-color: {THEME["surface_alt"]};
-        color: {THEME["muted"]};
-    }}
-
-    QComboBox {{
-        background-color: {THEME["surface"]};
-        border: 1px solid {THEME["line"]};
-        border-radius: 14px;
-        padding: 8px 12px;
-        min-height: 22px;
-    }}
-
-    QComboBox::drop-down {{
+    QPushButton {{
         border: none;
-        width: 24px;
+        border-radius: 18px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 700;
+        background-color: {THEME["surface_alt"]};
+        color: {THEME["ink"]};
+    }}
+
+    QPushButton:hover {{
+        background-color: #e9e3dc;
+    }}
+
+    QPushButton:disabled {{
+        background-color: #e7e0d8;
+        color: #b2aaa1;
+    }}
+
+    QPushButton#primaryButton {{
+        background-color: {THEME["accent"]};
+        color: #ffffff;
+    }}
+
+    QPushButton#primaryButton:hover {{
+        background-color: {THEME["accent_hover"]};
+    }}
+
+    QPushButton#secondaryButton {{
+        background-color: {THEME["surface_alt"]};
+        color: {THEME["ink"]};
+    }}
+
+    QPushButton#ghostButton {{
+        background-color: transparent;
+        color: {THEME["ink"]};
+        border: 1px solid {THEME["line"]};
+    }}
+
+    QPushButton#circleButton {{
+        background-color: {THEME["accent"]};
+        color: #ffffff;
+        border-radius: 28px;
+        font-size: 18px;
+        font-weight: 900;
+    }}
+
+    QPushButton#navButton {{
+        background-color: transparent;
+        color: {THEME["muted"]};
+        border: none;
+        border-radius: 14px;
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: 700;
+    }}
+
+    QPushButton#navButton[active="true"] {{
+        color: {THEME["accent"]};
     }}
 
     QScrollArea {{
@@ -432,16 +360,16 @@ def build_stylesheet() -> str:
     }}
 
     QScrollBar:vertical {{
-        width: 10px;
+        width: 8px;
         border: none;
         background: transparent;
-        margin: 4px;
+        margin: 2px;
     }}
 
     QScrollBar::handle:vertical {{
-        background: #ccb7a0;
-        border-radius: 5px;
-        min-height: 32px;
+        background: #cdc5bb;
+        border-radius: 4px;
+        min-height: 24px;
     }}
 
     QScrollBar::add-line:vertical,
@@ -454,17 +382,38 @@ def build_stylesheet() -> str:
     }}
 
     QProgressBar {{
-        background-color: #e4d5c2;
-        border: 1px solid #dbc7af;
-        border-radius: 7px;
-        min-height: 12px;
-        max-height: 12px;
+        background-color: #e9e1d8;
+        border: none;
+        border-radius: 4px;
+        min-height: 8px;
+        max-height: 8px;
         text-align: center;
     }}
 
     QProgressBar::chunk {{
         background-color: {THEME["accent"]};
-        border-radius: 6px;
+        border-radius: 4px;
+    }}
+
+    QComboBox {{
+        background-color: {THEME["surface_alt"]};
+        border: 1px solid {THEME["line"]};
+        border-radius: 14px;
+        padding: 6px 10px;
+        min-height: 24px;
+    }}
+
+    QComboBox::drop-down {{
+        border: none;
+        width: 20px;
+    }}
+
+    QLabel#previewLabel {{
+        background-color: #ebe5dd;
+        color: {THEME["muted"]};
+        border: 1px solid {THEME["line"]};
+        border-radius: 22px;
+        padding: 8px;
     }}
 
     QMessageBox {{

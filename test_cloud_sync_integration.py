@@ -53,12 +53,24 @@ def main() -> int:
             local_db_service = DatabaseService(local_db)
             result = EvaluationResult(
                 total_score=91,
-                detail_scores={"结构": 92, "笔画": 88, "平衡": 90, "韵律": 94},
-                feedback="结构稳定，笔画有力。",
+                feedback="结构稳定，笔画干净。",
                 timestamp=datetime.now(),
-                character_name="水",
-                style="楷书",
-                style_confidence=0.97,
+                character_name="永",
+                ocr_confidence=0.97,
+                quality_level="good",
+                quality_confidence=0.94,
+                dimension_scores={
+                    "structure": 92,
+                    "stroke": 88,
+                    "integrity": 90,
+                    "stability": 94,
+                },
+                score_debug={
+                    "probabilities": {"good": 0.94},
+                    "quality_features": {"center_quality": 0.93},
+                    "geometry_features": {"projection_balance": 0.87},
+                    "calibration": {"feature_quality": 0.86},
+                },
             )
             local_id = local_db_service.save(result)
 
@@ -76,7 +88,9 @@ def main() -> int:
                     timeout=2,
                 ).json()
                 items = history.get("items", [])
-                if any(item["local_record_id"] == local_id for item in items):
+                matched = next((item for item in items if item["local_record_id"] == local_id), None)
+                if matched:
+                    assert matched["dimension_scores"]["structure"] == 92
                     print(f"PASS cloud sync propagated local record {local_id}")
                     return 0
                 time.sleep(0.2)

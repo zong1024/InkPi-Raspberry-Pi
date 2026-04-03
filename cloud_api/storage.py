@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -77,6 +78,8 @@ class CloudDatabase:
                     quality_confidence REAL,
                     image_path TEXT,
                     processed_image_path TEXT,
+                    dimension_scores_json TEXT,
+                    score_debug_json TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     UNIQUE(device_name, local_record_id)
@@ -91,6 +94,8 @@ class CloudDatabase:
                 ("quality_confidence", "REAL"),
                 ("image_path", "TEXT"),
                 ("processed_image_path", "TEXT"),
+                ("dimension_scores_json", "TEXT"),
+                ("score_debug_json", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
@@ -173,6 +178,14 @@ class CloudDatabase:
         local_record_id = int(payload["local_record_id"])
         timestamp = payload.get("timestamp") or utcnow_iso()
         changed_at = utcnow_iso()
+        dimension_scores_json = self._coerce_json_text(
+            payload.get("dimension_scores_json"),
+            payload.get("dimension_scores"),
+        )
+        score_debug_json = self._coerce_json_text(
+            payload.get("score_debug_json"),
+            payload.get("score_debug"),
+        )
 
         with self._managed_connection() as conn:
             existing = conn.execute(
@@ -193,6 +206,8 @@ class CloudDatabase:
                         quality_confidence = ?,
                         image_path = ?,
                         processed_image_path = ?,
+                        dimension_scores_json = ?,
+                        score_debug_json = ?,
                         updated_at = ?
                     WHERE id = ?
                     """,
@@ -206,6 +221,8 @@ class CloudDatabase:
                         payload.get("quality_confidence"),
                         payload.get("image_path"),
                         payload.get("processed_image_path"),
+                        dimension_scores_json,
+                        score_debug_json,
                         changed_at,
                         existing["id"],
                     ),
@@ -226,10 +243,12 @@ class CloudDatabase:
                         quality_confidence,
                         image_path,
                         processed_image_path,
+                        dimension_scores_json,
+                        score_debug_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
@@ -243,6 +262,8 @@ class CloudDatabase:
                         payload.get("quality_confidence"),
                         payload.get("image_path"),
                         payload.get("processed_image_path"),
+                        dimension_scores_json,
+                        score_debug_json,
                         changed_at,
                         changed_at,
                     ),
@@ -463,7 +484,7 @@ class CloudDatabase:
     def get_result(self, result_id: int) -> dict[str, Any] | None:
         with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM results WHERE id = ?", (result_id,)).fetchone()
-        return self._result_row_to_dict(row) if row else None
+        return self._result_row_to_dict(row, include_debug=True) if row else None
 
     def delete_result(self, result_id: int) -> bool:
         with self._managed_connection() as conn:
@@ -563,10 +584,10 @@ class CloudDatabase:
 
         return "，".join(insight_parts) + "。"
 
-    def _result_row_to_dict(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+    def _result_row_to_dict(self, row: sqlite3.Row | None, include_debug: bool = False) -> dict[str, Any] | None:
         if row is None:
             return None
-        return {
+        payload = {
             "id": row["id"],
             "device_name": row["device_name"],
             "local_record_id": row["local_record_id"],
@@ -579,6 +600,26 @@ class CloudDatabase:
             "quality_confidence": row["quality_confidence"],
             "image_path": row["image_path"],
             "processed_image_path": row["processed_image_path"],
+            "dimension_scores": self._load_json_blob(row["dimension_scores_json"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
+        if include_debug:
+            payload["score_debug"] = self._load_json_blob(row["score_debug_json"])
+        return payload
+
+    def _coerce_json_text(self, raw_text: Any, raw_value: Any) -> str | None:
+        if isinstance(raw_text, str) and raw_text.strip():
+            return raw_text
+        if raw_value is None:
+            return None
+        return json.dumps(raw_value, ensure_ascii=False)
+
+    def _load_json_blob(self, raw_text: str | None) -> dict[str, Any] | None:
+        if not raw_text:
+            return None
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
