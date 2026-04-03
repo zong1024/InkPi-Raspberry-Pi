@@ -50,6 +50,7 @@ except Exception:
     sys.exit(1)
 sys.exit(0)
 PY
+            then
                 return 0
             fi
         fi
