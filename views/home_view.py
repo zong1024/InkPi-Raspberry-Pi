@@ -7,9 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtCore import QSize
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QStyle, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
@@ -33,13 +32,13 @@ class HomeView(QWidget):
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(6)
 
         header = QFrame()
         header.setObjectName("pageHeader")
-        header.setFixedHeight(52)
+        header.setFixedHeight(34)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(14, 10, 14, 10)
+        header_layout.setContentsMargins(2, 0, 2, 0)
         header_layout.setSpacing(8)
 
         brand = QLabel("InkPi")
@@ -58,10 +57,10 @@ class HomeView(QWidget):
         root.addWidget(header)
 
         hero = QWidget()
-        hero.setFixedHeight(104)
+        hero.setFixedHeight(98)
         hero_layout = QHBoxLayout(hero)
-        hero_layout.setContentsMargins(4, 4, 4, 4)
-        hero_layout.setSpacing(10)
+        hero_layout.setContentsMargins(4, 8, 4, 0)
+        hero_layout.setSpacing(12)
 
         brand_block = QVBoxLayout()
         brand_block.setContentsMargins(0, 0, 0, 0)
@@ -122,8 +121,9 @@ class HomeView(QWidget):
 
         self.latest_hint = QLabel("")
         self.latest_hint.setObjectName("miniLabel")
-        self.latest_hint.setFixedHeight(16)
+        self.latest_hint.setFixedHeight(14)
         self.latest_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.latest_hint.setFont(app_font(8, QFont.Weight.Bold))
         root.addWidget(self.latest_hint)
 
         root.addStretch()

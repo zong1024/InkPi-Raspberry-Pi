@@ -15,14 +15,12 @@ THEME = {
     "window": "#F6F1EA",
     "surface": "#FFFDFC",
     "surface_alt": "#F0EAE2",
-    "surface_soft": "#EAE4DC",
     "ink": "#2A241F",
     "muted": "#8B8379",
     "line": "#E4DDD4",
     "line_soft": "#EEE7DF",
     "accent": "#B80F1F",
     "accent_hover": "#A10D1B",
-    "accent_soft": "#F9DADF",
     "danger": "#B84E48",
 }
 
@@ -45,6 +43,7 @@ FONT_FILES = (
     Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
 )
 _RESOLVED_FONT_FAMILY: str | None = None
+_RESOLVED_ICON_FONT_FAMILY: str | None = None
 
 
 def ensure_app_font_family() -> str:
@@ -105,6 +104,30 @@ def app_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
     return QFont(ensure_app_font_family(), size, weight)
 
 
+def icon_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
+    """Resolve a font with better symbol coverage for lightweight UI icons."""
+    global _RESOLVED_ICON_FONT_FAMILY
+    if not _RESOLVED_ICON_FONT_FAMILY:
+        preferred = (
+            "Segoe UI Symbol",
+            "Segoe Fluent Icons",
+            "Noto Sans Symbols 2",
+            "Noto Sans Symbols2",
+            "Noto Sans Symbols",
+            ensure_app_font_family(),
+        )
+        if QApplication.instance() is not None:
+            families = {family.casefold(): family for family in QFontDatabase.families()}
+            for candidate in preferred:
+                match = families.get(candidate.casefold())
+                if match:
+                    _RESOLVED_ICON_FONT_FAMILY = match
+                    break
+        if not _RESOLVED_ICON_FONT_FAMILY:
+            _RESOLVED_ICON_FONT_FAMILY = preferred[-1]
+    return QFont(_RESOLVED_ICON_FONT_FAMILY, size, weight)
+
+
 def clear_layout(layout: QLayout) -> None:
     while layout.count():
         item = layout.takeAt(0)
@@ -133,32 +156,41 @@ def build_stylesheet() -> str:
         background-color: {THEME["window"]};
     }}
 
-    QFrame#mainSurface,
-    QFrame#bottomNav,
-    QFrame#pageHeader,
-    QFrame#heroCard,
-    QFrame#softCard,
-    QFrame#previewCard,
+    QFrame#mainSurface {{
+        background-color: {THEME["window"]};
+        border: none;
+        border-radius: 0px;
+    }}
+
+    QFrame#pageHeader {{
+        background: transparent;
+        border: none;
+        border-radius: 0px;
+    }}
+
     QFrame#scoreCard,
     QFrame#metricPanel,
     QFrame#historyItemCard,
     QFrame#historyGlyphCard,
-    QFrame#buttonCard {{
+    QFrame#softCard,
+    QLabel#previewLabel {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line"]};
         border-radius: 22px;
     }}
 
-    QFrame#mainSurface {{
-        background-color: {THEME["window"]};
-    }}
-
-    QFrame#softCard,
-    QFrame#historyGlyphCard,
     QFrame#metricPanel,
-    QFrame#buttonCard {{
+    QFrame#historyGlyphCard,
+    QFrame#softCard {{
         background-color: {THEME["surface_alt"]};
         border-color: {THEME["line_soft"]};
+    }}
+
+    QFrame#bottomNav {{
+        background-color: {THEME["surface"]};
+        border: none;
+        border-top: 1px solid {THEME["line"]};
+        border-radius: 0px;
     }}
 
     QLabel#brandTitle {{
@@ -193,8 +225,6 @@ def build_stylesheet() -> str:
     }}
 
     QLabel#sectionSubtitle,
-    QLabel#mutedLabel,
-    QLabel#metaLabel,
     QLabel#miniLabel {{
         color: {THEME["muted"]};
     }}
@@ -292,12 +322,7 @@ def build_stylesheet() -> str:
         background-color: {THEME["accent_hover"]};
     }}
 
-    QPushButton#ghostButton {{
-        background-color: {THEME["surface_alt"]};
-        border: 1px solid {THEME["line_soft"]};
-        color: {THEME["ink"]};
-    }}
-
+    QPushButton#ghostButton,
     QPushButton#buttonCard {{
         background-color: {THEME["surface_alt"]};
         border: 1px solid {THEME["line_soft"]};
@@ -317,7 +342,7 @@ def build_stylesheet() -> str:
         background-color: transparent;
         color: {THEME["muted"]};
         border: none;
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 700;
         padding: 0px;
     }}
@@ -380,7 +405,6 @@ def build_stylesheet() -> str:
     QLabel#previewLabel {{
         background-color: #EFE9E1;
         color: {THEME["muted"]};
-        border: 1px solid {THEME["line"]};
         border-radius: 20px;
         padding: 2px;
     }}

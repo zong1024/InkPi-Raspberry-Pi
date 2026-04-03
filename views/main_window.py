@@ -45,13 +45,13 @@ class MainWindow(QMainWindow):
             central_widget.setFixedSize(viewport_width, viewport_height)
 
         root_layout = QVBoxLayout(central_widget)
-        root_layout.setContentsMargins(4, 4, 4, 4)
-        root_layout.setSpacing(4)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
         self.surface = QFrame()
         self.surface.setObjectName("mainSurface")
         self.surface_layout = QVBoxLayout(self.surface)
-        self.surface_layout.setContentsMargins(10, 10, 10, 10)
+        self.surface_layout.setContentsMargins(14, 12, 14, 6)
         self.surface_layout.setSpacing(0)
 
         self.stack = QStackedWidget()
@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         bar.setFixedHeight(36)
 
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(10, 1, 10, 1)
+        layout.setContentsMargins(18, 1, 18, 1)
         layout.setSpacing(4)
 
         self.btn_home = QPushButton("HOME")

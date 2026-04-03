@@ -106,14 +106,15 @@ class HistoryView(QWidget):
 
         header = QFrame()
         header.setObjectName("pageHeader")
-        header.setFixedHeight(38)
+        header.setFixedHeight(34)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 4, 10, 4)
+        header_layout.setContentsMargins(2, 0, 2, 0)
         header_layout.setSpacing(8)
 
         self.btn_back = QPushButton("←")
         self.btn_back.setObjectName("headerIconButton")
         self.btn_back.setFixedSize(24, 24)
+        self.btn_back.setFont(app_font(13, QFont.Weight.Bold))
         self.btn_back.clicked.connect(self.back_requested.emit)
         header_layout.addWidget(self.btn_back)
 
