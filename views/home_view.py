@@ -1,4 +1,4 @@
-"""Home view for the touch-first InkPi interface."""
+"""Home view for the small-screen InkPi interface."""
 
 from __future__ import annotations
 
@@ -9,119 +9,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QBoxLayout, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, clear_layout, score_to_color, score_to_soft_color
-
-
-class StatCard(QFrame):
-    """Compact metric card."""
-
-    def __init__(self, title: str, value: str, hint: str = "", parent=None):
-        super().__init__(parent)
-        self.setObjectName("statCard")
-        self.setMinimumHeight(82)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(2)
-
-        title_label = QLabel(title)
-        title_label.setObjectName("mutedLabel")
-        title_label.setFont(app_font(10))
-        layout.addWidget(title_label)
-
-        value_label = QLabel(value)
-        value_label.setObjectName("metricValue")
-        value_label.setFont(app_font(24, QFont.Weight.Bold))
-        layout.addWidget(value_label)
-
-        hint_label = QLabel(hint)
-        hint_label.setObjectName("cardSubtitle")
-        hint_label.setFont(app_font(9))
-        layout.addWidget(hint_label)
-
-
-class RecentCard(QFrame):
-    """Recent evaluation card."""
-
-    selected = pyqtSignal(EvaluationResult)
-
-    def __init__(self, result: EvaluationResult, parent=None):
-        super().__init__(parent)
-        self.result = result
-        self.setObjectName("historyCard")
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
-
-        score_block = QFrame()
-        score_block.setStyleSheet(
-            f"background-color: {score_to_soft_color(result.total_score)};"
-            "border-radius: 18px;"
-        )
-        score_layout = QVBoxLayout(score_block)
-        score_layout.setContentsMargins(16, 10, 16, 10)
-        score_layout.setSpacing(0)
-
-        score_label = QLabel(str(result.total_score))
-        score_label.setObjectName("historyScore")
-        score_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
-        score_layout.addWidget(score_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        grade_label = QLabel(result.get_grade())
-        grade_label.setObjectName("historyGrade")
-        grade_label.setStyleSheet(f"color: {score_to_color(result.total_score)};")
-        score_layout.addWidget(grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        layout.addWidget(score_block)
-
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(4)
-
-        title = result.character_name or "未识别"
-        title_label = QLabel(title)
-        title_label.setObjectName("sectionTitle")
-        title_label.setFont(app_font(13, QFont.Weight.Bold))
-        info_layout.addWidget(title_label)
-
-        time_label = QLabel(result.timestamp.strftime("%m-%d %H:%M"))
-        time_label.setObjectName("cardSubtitle")
-        time_label.setFont(app_font(9))
-        info_layout.addWidget(time_label)
-
-        meta_label = QLabel(
-            f"OCR {round((result.ocr_confidence or 0.0) * 100)}% / 等级 {result.get_grade()}"
-        )
-        meta_label.setObjectName("mutedLabel")
-        meta_label.setWordWrap(True)
-        meta_label.setFont(app_font(9))
-        info_layout.addWidget(meta_label)
-
-        feedback_label = QLabel(result.feedback[:48] + ("..." if len(result.feedback) > 48 else ""))
-        feedback_label.setObjectName("sectionSubtitle")
-        feedback_label.setWordWrap(True)
-        feedback_label.setFont(app_font(9))
-        info_layout.addWidget(feedback_label)
-
-        layout.addLayout(info_layout, stretch=1)
-
-        arrow_label = QLabel("查看")
-        arrow_label.setObjectName("accentChip")
-        layout.addWidget(arrow_label, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-    def mousePressEvent(self, event) -> None:  # noqa: N802
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.selected.emit(self.result)
-        super().mousePressEvent(event)
+from views.ui_theme import app_font
 
 
 class HomeView(QWidget):
-    """Touch-friendly home dashboard."""
+    """Touch-friendly landing page."""
 
     start_evaluation = pyqtSignal()
     view_history = pyqtSignal()
@@ -130,181 +26,130 @@ class HomeView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.compact_mode = False
+        self.latest_result: EvaluationResult | None = None
         self._init_ui()
         self.refresh()
 
     def _init_ui(self) -> None:
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(2, 2, 2, 2)
+        root.setSpacing(10)
 
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-        root_layout.addWidget(self.scroll_area)
+        hero = QFrame()
+        hero.setObjectName("heroCard")
+        hero_layout = QVBoxLayout(hero)
+        hero_layout.setContentsMargins(6, 6, 6, 4)
+        hero_layout.setSpacing(8)
 
-        container = QWidget()
-        self.scroll_area.setWidget(container)
+        brand = QLabel("InkPi")
+        brand.setObjectName("brandAccent")
+        brand.setFont(app_font(28, QFont.Weight.Bold))
+        hero_layout.addWidget(brand)
 
-        self.page_layout = QVBoxLayout(container)
-        self.page_layout.setContentsMargins(4, 4, 4, 4)
-        self.page_layout.setSpacing(12)
+        subtitle = QLabel("THE MODERN CALLIGRAPHER")
+        subtitle.setObjectName("miniLabel")
+        hero_layout.addWidget(subtitle)
 
-        self.hero_card = QFrame()
-        self.hero_card.setObjectName("heroCard")
-        self.hero_card.setMinimumHeight(148)
-        self.hero_layout = QHBoxLayout(self.hero_card)
-        self.hero_layout.setContentsMargins(20, 18, 20, 18)
-        self.hero_layout.setSpacing(16)
-
-        hero_text = QVBoxLayout()
-        hero_text.setSpacing(6)
-
-        eyebrow = QLabel("树莓派触控工作台")
-        eyebrow.setObjectName("heroEyebrow")
-        hero_text.addWidget(eyebrow, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        title = QLabel("自动识别并完成整条评测链")
-        title.setObjectName("sectionTitle")
-        title.setWordWrap(True)
-        title.setFont(app_font(18, QFont.Weight.Bold))
-        hero_text.addWidget(title)
-
-        subtitle = QLabel("拍下单个汉字后，系统会自动完成预处理、OCR 识别、ONNX 评分和结果保存。")
-        subtitle.setObjectName("sectionSubtitle")
-        subtitle.setWordWrap(True)
-        subtitle.setFont(app_font(9))
-        hero_text.addWidget(subtitle)
-
-        self.button_row = QHBoxLayout()
-        self.button_row.setSpacing(10)
-
-        self.btn_start = QPushButton("开始评测")
+        self.btn_start = QPushButton("开始评测   ->")
         self.btn_start.setObjectName("primaryButton")
-        self.btn_start.setMinimumHeight(50)
+        self.btn_start.setMinimumHeight(54)
         self.btn_start.clicked.connect(self.start_evaluation.emit)
-        self.button_row.addWidget(self.btn_start)
+        hero_layout.addWidget(self.btn_start)
 
-        self.btn_history = QPushButton("查看历史")
+        root.addWidget(hero)
+
+        action_grid = QGridLayout()
+        action_grid.setHorizontalSpacing(10)
+        action_grid.setVerticalSpacing(10)
+
+        self.btn_recent = QPushButton("最近结果")
+        self.btn_recent.setObjectName("secondaryButton")
+        self.btn_recent.setMinimumHeight(48)
+        self.btn_recent.clicked.connect(self._open_latest)
+        action_grid.addWidget(self.btn_recent, 0, 0)
+
+        self.btn_history = QPushButton("历史记录")
         self.btn_history.setObjectName("secondaryButton")
-        self.btn_history.setMinimumHeight(50)
+        self.btn_history.setMinimumHeight(48)
         self.btn_history.clicked.connect(self.view_history.emit)
-        self.button_row.addWidget(self.btn_history)
+        action_grid.addWidget(self.btn_history, 0, 1)
 
-        hero_text.addLayout(self.button_row)
-        self.hero_layout.addLayout(hero_text, stretch=3)
+        self.btn_settings = QPushButton("设置")
+        self.btn_settings.setObjectName("secondaryButton")
+        self.btn_settings.setMinimumHeight(48)
+        self.btn_settings.setEnabled(False)
+        action_grid.addWidget(self.btn_settings, 1, 0)
 
-        self.cue_card = QFrame()
-        self.cue_card.setObjectName("accentCard")
-        self.cue_card.setMinimumWidth(168)
-        self.cue_card.setMaximumWidth(220)
-        cue_layout = QVBoxLayout(self.cue_card)
-        cue_layout.setContentsMargins(18, 16, 18, 16)
-        cue_layout.setSpacing(6)
+        self.quick_eval = QPushButton("+")
+        self.quick_eval.setObjectName("circleButton")
+        self.quick_eval.setFixedSize(56, 56)
+        self.quick_eval.clicked.connect(self.start_evaluation.emit)
+        action_grid.addWidget(self.quick_eval, 1, 1, alignment=Qt.AlignmentFlag.AlignRight)
 
-        cue_title = QLabel("最近状态")
-        cue_title.setStyleSheet("color: #fff4e5; font-size: 13px; font-weight: 700;")
-        cue_layout.addWidget(cue_title)
+        root.addLayout(action_grid)
 
-        self.hero_metric = QLabel("准备开始")
-        self.hero_metric.setStyleSheet("color: #fffaf1; font-size: 24px; font-weight: 800;")
-        cue_layout.addWidget(self.hero_metric)
+        self.recent_card = QFrame()
+        self.recent_card.setObjectName("softCard")
+        recent_layout = QHBoxLayout(self.recent_card)
+        recent_layout.setContentsMargins(14, 12, 14, 12)
+        recent_layout.setSpacing(12)
 
-        self.hero_hint = QLabel("完成一次评测后，这里会显示最近得分与识别结果。")
-        self.hero_hint.setStyleSheet("color: #d7c4ae; font-size: 9px;")
-        self.hero_hint.setWordWrap(True)
-        cue_layout.addWidget(self.hero_hint)
+        self.latest_score = QLabel("--")
+        self.latest_score.setObjectName("scoreNumber")
+        self.latest_score.setFont(app_font(34, QFont.Weight.Bold))
+        recent_layout.addWidget(self.latest_score)
 
-        self.hero_layout.addWidget(self.cue_card, stretch=2)
-        self.page_layout.addWidget(self.hero_card)
+        detail_layout = QVBoxLayout()
+        detail_layout.setSpacing(4)
 
-        self.stats_layout = QHBoxLayout()
-        self.stats_layout.setSpacing(10)
-        self.page_layout.addLayout(self.stats_layout)
+        self.latest_char = QLabel("暂无评测")
+        self.latest_char.setObjectName("sectionTitle")
+        self.latest_char.setFont(app_font(14, QFont.Weight.Bold))
+        detail_layout.addWidget(self.latest_char)
 
-        self.recent_header = QHBoxLayout()
-        self.recent_header.setSpacing(10)
+        self.latest_meta = QLabel("完成一次评测后，这里会显示识别字、等级和时间。")
+        self.latest_meta.setObjectName("sectionSubtitle")
+        self.latest_meta.setWordWrap(True)
+        self.latest_meta.setFont(app_font(10))
+        detail_layout.addWidget(self.latest_meta)
 
-        recent_title = QLabel("近期记录")
-        recent_title.setObjectName("sectionTitle")
-        recent_title.setFont(app_font(16, QFont.Weight.Bold))
-        self.recent_header.addWidget(recent_title)
-        self.recent_header.addStretch()
+        self.latest_feedback = QLabel("轻量模式，适合 3.5 寸触摸屏快速操作。")
+        self.latest_feedback.setObjectName("mutedLabel")
+        self.latest_feedback.setWordWrap(True)
+        self.latest_feedback.setFont(app_font(9))
+        detail_layout.addWidget(self.latest_feedback)
 
-        self.recent_hint = QLabel("自动识别结果与总分都会保存在这里")
-        self.recent_hint.setObjectName("mutedLabel")
-        self.recent_header.addWidget(self.recent_hint)
-        self.page_layout.addLayout(self.recent_header)
-
-        self.recent_container = QWidget()
-        self.recent_layout = QVBoxLayout(self.recent_container)
-        self.recent_layout.setContentsMargins(0, 0, 0, 0)
-        self.recent_layout.setSpacing(10)
-        self.page_layout.addWidget(self.recent_container)
-        self.page_layout.addStretch()
+        recent_layout.addLayout(detail_layout, stretch=1)
+        root.addWidget(self.recent_card)
+        root.addStretch()
 
     def refresh(self) -> None:
-        stats = database_service.get_statistics()
-        recent_records = database_service.get_recent(2 if self.compact_mode else 4)
-        self.scroll_area.verticalScrollBar().setValue(0)
+        recent_records = database_service.get_recent(1)
+        self.latest_result = recent_records[0] if recent_records else None
 
-        clear_layout(self.stats_layout)
-        self.stats_layout.addWidget(StatCard("累计评测", str(stats["total_count"]), "总记录数"))
-        self.stats_layout.addWidget(
-            StatCard("平均分", str(stats["average_score"]) if stats["total_count"] else "--", "最近整体表现")
-        )
-        self.stats_layout.addWidget(
-            StatCard("最好成绩", str(stats["max_score"]) if stats["total_count"] else "--", "当前最高分")
-        )
-
-        if recent_records:
-            latest = recent_records[0]
-            self.hero_metric.setText(f"{latest.total_score} 分")
-            self.hero_hint.setText(
-                f"最近一次：{latest.character_name or '未识别'} / OCR {round((latest.ocr_confidence or 0.0) * 100)}% / {latest.get_grade()}"
-            )
-        else:
-            self.hero_metric.setText("准备开始")
-            self.hero_hint.setText("完成一次评测后，这里会显示最近得分与识别结果。")
-
-        clear_layout(self.recent_layout)
-
-        if not recent_records:
-            empty_state = QFrame()
-            empty_state.setObjectName("emptyStateCard")
-            empty_layout = QVBoxLayout(empty_state)
-            empty_layout.setContentsMargins(24, 24, 24, 24)
-            empty_layout.setSpacing(8)
-
-            empty_title = QLabel("还没有评测记录")
-            empty_title.setObjectName("sectionTitle")
-            empty_layout.addWidget(empty_title)
-
-            empty_text = QLabel("完成第一次拍照评测后，识别结果、总分和反馈会自动保存在这里。")
-            empty_text.setObjectName("sectionSubtitle")
-            empty_text.setWordWrap(True)
-            empty_layout.addWidget(empty_text)
-
-            self.recent_layout.addWidget(empty_state)
+        if self.latest_result is None:
+            self.latest_score.setText("--")
+            self.latest_char.setText("暂无评测")
+            self.latest_meta.setText("完成一次评测后，这里会显示识别字、等级和时间。")
+            self.latest_feedback.setText("点击“开始评测”进入拍照 / 上传流程。")
+            self.btn_recent.setEnabled(False)
             return
 
-        for record in recent_records:
-            card = RecentCard(record)
-            card.selected.connect(self.recent_selected.emit)
-            self.recent_layout.addWidget(card)
+        result = self.latest_result
+        self.latest_score.setText(str(result.total_score))
+        self.latest_char.setText(result.character_name or "未识别")
+        self.latest_meta.setText(
+            f"{result.get_grade()} 级  |  {result.timestamp.strftime('%m-%d %H:%M')}"
+        )
+        self.latest_feedback.setText(result.feedback[:44] + ("..." if len(result.feedback) > 44 else ""))
+        self.btn_recent.setEnabled(True)
+
+    def _open_latest(self) -> None:
+        if self.latest_result is not None:
+            self.recent_selected.emit(self.latest_result)
 
     def set_compact_mode(self, compact: bool) -> None:
-        if compact == self.compact_mode:
-            return
-
         self.compact_mode = compact
-        self.page_layout.setSpacing(8 if compact else 12)
-        self.hero_card.setMinimumHeight(0 if compact else 148)
-        self.hero_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.button_row.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.stats_layout.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.recent_header.setDirection(QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight)
-        self.recent_hint.setVisible(not compact)
-        self.cue_card.setMaximumWidth(16777215 if compact else 220)
-        self.btn_start.setMinimumHeight(42 if compact else 50)
-        self.btn_history.setMinimumHeight(42 if compact else 50)
-        self.refresh()
+        self.btn_start.setMinimumHeight(50 if compact else 54)
+        for button in (self.btn_recent, self.btn_history, self.btn_settings):
+            button.setMinimumHeight(44 if compact else 48)

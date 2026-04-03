@@ -26,10 +26,27 @@ class QualityScore:
     quality_level: str
     quality_confidence: float
     probabilities: dict[str, float]
+    quality_features: dict[str, float] | None = None
+    calibration: dict[str, float | str] | None = None
 
 
 class QualityScorerService:
     """Load and run the new single-chain ONNX scoring model."""
+
+    QUALITY_FEATURE_NAMES = (
+        "fg_ratio",
+        "bbox_ratio",
+        "center_quality",
+        "component_norm",
+        "edge_touch",
+        "texture_std",
+    )
+
+    SCORE_RANGES = {
+        "bad": (44.0, 68.0),
+        "medium": (66.0, 84.0),
+        "good": (82.0, 98.0),
+    }
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -116,25 +133,30 @@ class QualityScorerService:
 
         best_index = int(np.argmax(probabilities))
         quality_level = self.labels[best_index] if best_index < len(self.labels) else self.default_level
-        extras = self._extract_quality_features(image).reshape(-1)
+        quality_features = self._extract_quality_feature_map(image)
+        extras = self._features_to_array(quality_features)
+        calibration = self._build_calibration_snapshot(
+            probabilities=probabilities,
+            quality_level=quality_level,
+            extras=extras,
+            ocr_confidence=float(ocr_confidence or 0.0),
+        )
 
         if raw_score is None:
-            total_score = self._calibrate_total_score(
-                probabilities=probabilities,
-                quality_level=quality_level,
-                extras=extras,
-                ocr_confidence=float(ocr_confidence or 0.0),
-            )
+            total_score = int(calibration["calibrated_score"])
+            calibration["score_source"] = "calibrated"
         elif raw_score <= 1.0:
-            calibrated = self._calibrate_total_score(
-                probabilities=probabilities,
-                quality_level=quality_level,
-                extras=extras,
-                ocr_confidence=float(ocr_confidence or 0.0),
-            )
+            calibrated = int(calibration["calibrated_score"])
             total_score = int(np.clip(round((raw_score * self.score_scale) * 0.35 + calibrated * 0.65), 0, 100))
+            calibration["score_source"] = "blended"
+            calibration["raw_score"] = float(raw_score)
         else:
             total_score = int(np.clip(round(raw_score), 0, 100))
+            calibration["score_source"] = "raw"
+            calibration["raw_score"] = float(raw_score)
+
+        calibration["final_score"] = float(total_score)
+        calibration["score_range_fit"] = self._score_range_fit(total_score, quality_level)
 
         return QualityScore(
             total_score=total_score,
@@ -143,6 +165,8 @@ class QualityScorerService:
             probabilities={
                 label: float(probabilities[index]) for index, label in enumerate(self.labels[: len(probabilities)])
             },
+            quality_features=quality_features,
+            calibration={key: float(value) if isinstance(value, (int, float, np.floating)) else str(value) for key, value in calibration.items()},
         )
 
     def _build_feed(
@@ -192,6 +216,9 @@ class QualityScorerService:
         return normalized[np.newaxis, np.newaxis, :, :]
 
     def _extract_quality_features(self, image: np.ndarray) -> np.ndarray:
+        return self._features_to_array(self._extract_quality_feature_map(image))
+
+    def _extract_quality_feature_map(self, image: np.ndarray) -> dict[str, float]:
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         else:
@@ -206,7 +233,7 @@ class QualityScorerService:
         points = cv2.findNonZero(binary)
         h_img, w_img = binary.shape
         if points is None:
-            return np.zeros((1, 6), dtype=np.float32)
+            return {name: 0.0 for name in self.QUALITY_FEATURE_NAMES}
 
         x, y, w, h = cv2.boundingRect(points)
         bbox_area = max(1.0, float(w * h))
@@ -233,18 +260,14 @@ class QualityScorerService:
             + np.mean(binary[:, -1] > 0)
         ) / 4.0
 
-        features = np.asarray(
-            [
-                fg_ratio,
-                bbox_ratio,
-                max(0.0, 1.0 - center_distance),
-                min(component_count / 24.0, 1.0),
-                edge_touch,
-                float(np.std(normalized.astype(np.float32) / 255.0)),
-            ],
-            dtype=np.float32,
-        )
-        return features.reshape(1, -1)
+        return {
+            "fg_ratio": float(fg_ratio),
+            "bbox_ratio": float(bbox_ratio),
+            "center_quality": float(max(0.0, 1.0 - center_distance)),
+            "component_norm": float(min(component_count / 24.0, 1.0)),
+            "edge_touch": float(edge_touch),
+            "texture_std": float(np.std(normalized.astype(np.float32) / 255.0)),
+        }
 
     def _calibrate_total_score(
         self,
@@ -253,6 +276,21 @@ class QualityScorerService:
         extras: np.ndarray,
         ocr_confidence: float,
     ) -> int:
+        details = self._build_calibration_snapshot(
+            probabilities=probabilities,
+            quality_level=quality_level,
+            extras=extras,
+            ocr_confidence=ocr_confidence,
+        )
+        return int(details["calibrated_score"])
+
+    def _build_calibration_snapshot(
+        self,
+        probabilities: np.ndarray,
+        quality_level: str,
+        extras: np.ndarray,
+        ocr_confidence: float,
+    ) -> dict[str, float]:
         fg_ratio, _bbox_ratio, center_quality, component_norm, edge_touch, texture_std = [float(x) for x in extras[:6]]
         prob_values = np.asarray(probabilities, dtype=np.float32).reshape(-1)
         if prob_values.size == 0:
@@ -278,15 +316,32 @@ class QualityScorerService:
             + 0.15 * self._normalize_band(ocr_confidence, low=0.45, high=0.99)
         )
         signal = float(np.clip(0.72 * feature_quality + 0.28 * confidence_quality, 0.0, 1.0))
-
-        ranges = {
-            "bad": (44.0, 68.0),
-            "medium": (66.0, 84.0),
-            "good": (82.0, 98.0),
-        }
-        low, high = ranges.get(quality_level, ranges["medium"])
+        low, high = self.SCORE_RANGES.get(quality_level, self.SCORE_RANGES["medium"])
         score = low + (high - low) * signal
-        return int(np.clip(round(score), 0, 100))
+        return {
+            "best_probability": float(best),
+            "second_probability": float(second),
+            "probability_margin": float(margin),
+            "probability_margin_norm": float(self._normalize_band(margin, low=0.10, high=0.90)),
+            "ocr_confidence_norm": float(self._normalize_band(ocr_confidence, low=0.45, high=0.99)),
+            "quality_confidence_norm": float(self._normalize_band(best, low=0.55, high=0.995)),
+            "feature_quality": float(feature_quality),
+            "confidence_quality": float(confidence_quality),
+            "signal": float(signal),
+            "quality_range_low": float(low),
+            "quality_range_high": float(high),
+            "calibrated_score": float(np.clip(round(score), 0, 100)),
+        }
+
+    def _score_range_fit(self, total_score: int, quality_level: str) -> float:
+        low, high = self.SCORE_RANGES.get(quality_level, self.SCORE_RANGES["medium"])
+        target = (low + high) / 2.0
+        tolerance = max((high - low) / 2.0, 1.0)
+        return float(self._target_band_score(float(total_score), target=target, tolerance=tolerance))
+
+    def _features_to_array(self, feature_map: dict[str, float]) -> np.ndarray:
+        values = [float(feature_map.get(name, 0.0)) for name in self.QUALITY_FEATURE_NAMES]
+        return np.asarray(values, dtype=np.float32).reshape(1, -1)
 
     @staticmethod
     def _target_band_score(value: float, target: float, tolerance: float) -> float:

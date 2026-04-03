@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
-from typing import Optional
+from typing import Any, Optional
 
 
 QUALITY_LABELS = {
@@ -19,6 +19,59 @@ QUALITY_COLORS = {
     "medium": "#AB6D2F",
     "bad": "#B34B3E",
 }
+
+DIMENSION_LABELS = {
+    "structure": "结构",
+    "stroke": "笔画",
+    "integrity": "完整",
+    "stability": "稳定",
+}
+
+DIMENSION_ORDER = ("structure", "stroke", "integrity", "stability")
+
+
+def _normalize_json_dict(value: Any) -> Optional[dict[str, Any]]:
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def summarize_dimension_scores(
+    dimension_scores: Optional[dict[str, int]],
+) -> Optional[dict[str, dict[str, Any]]]:
+    if not dimension_scores:
+        return None
+
+    available_items = [
+        (key, int(dimension_scores[key]))
+        for key in DIMENSION_ORDER
+        if key in dimension_scores and dimension_scores[key] is not None
+    ]
+    if not available_items:
+        return None
+
+    strongest_key, strongest_score = max(available_items, key=lambda item: (item[1], -DIMENSION_ORDER.index(item[0])))
+    weakest_key, weakest_score = min(available_items, key=lambda item: (item[1], DIMENSION_ORDER.index(item[0])))
+    return {
+        "best": {
+            "key": strongest_key,
+            "label": DIMENSION_LABELS.get(strongest_key, strongest_key),
+            "score": strongest_score,
+        },
+        "weakest": {
+            "key": weakest_key,
+            "label": DIMENSION_LABELS.get(weakest_key, weakest_key),
+            "score": weakest_score,
+        },
+    }
 
 
 @dataclass
@@ -34,10 +87,13 @@ class EvaluationResult:
     quality_confidence: Optional[float] = None
     image_path: Optional[str] = None
     processed_image_path: Optional[str] = None
+    dimension_scores: Optional[dict[str, int]] = None
+    score_debug: Optional[dict[str, Any]] = None
     id: Optional[int] = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to a serializable dictionary."""
+        dimension_scores = self.get_dimension_scores()
         return {
             "id": self.id,
             "total_score": int(self.total_score),
@@ -50,6 +106,9 @@ class EvaluationResult:
             "quality_level": self.quality_level,
             "quality_label": self.get_grade(),
             "quality_confidence": self.quality_confidence,
+            "dimension_scores": dimension_scores,
+            "dimension_summary": summarize_dimension_scores(dimension_scores),
+            "score_debug": self.score_debug,
         }
 
     def to_json(self) -> str:
@@ -57,7 +116,7 @@ class EvaluationResult:
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "EvaluationResult":
+    def from_dict(cls, data: dict[str, Any]) -> "EvaluationResult":
         """Rebuild from a dictionary."""
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
@@ -66,6 +125,8 @@ class EvaluationResult:
             timestamp = datetime.now()
 
         quality_level = data.get("quality_level") or _level_from_score(int(data.get("total_score", 0)))
+        dimension_scores = _normalize_json_dict(data.get("dimension_scores"))
+        score_debug = _normalize_json_dict(data.get("score_debug"))
 
         return cls(
             id=data.get("id"),
@@ -78,6 +139,13 @@ class EvaluationResult:
             ocr_confidence=data.get("ocr_confidence"),
             quality_level=quality_level,
             quality_confidence=data.get("quality_confidence"),
+            dimension_scores={
+                key: int(value)
+                for key, value in (dimension_scores or {}).items()
+                if key in DIMENSION_LABELS and value is not None
+            }
+            or None,
+            score_debug=score_debug,
         )
 
     def __str__(self) -> str:
@@ -96,6 +164,34 @@ class EvaluationResult:
     def get_color(self) -> str:
         """UI color helper."""
         return QUALITY_COLORS.get(self.quality_level, QUALITY_COLORS["medium"])
+
+    def get_dimension_scores(self) -> Optional[dict[str, int]]:
+        """Return normalized dimension scores in a stable order."""
+        if not self.dimension_scores:
+            return None
+        normalized = {
+            key: int(self.dimension_scores[key])
+            for key in DIMENSION_ORDER
+            if key in self.dimension_scores and self.dimension_scores[key] is not None
+        }
+        return normalized or None
+
+    def get_dimension_summary(self) -> Optional[dict[str, dict[str, Any]]]:
+        """Return strongest and weakest dimension metadata."""
+        return summarize_dimension_scores(self.get_dimension_scores())
+
+    def get_dimension_items(self) -> list[dict[str, Any]]:
+        """Return ordered dimension items for UI rendering."""
+        scores = self.get_dimension_scores() or {}
+        return [
+            {
+                "key": key,
+                "label": DIMENSION_LABELS[key],
+                "score": int(scores[key]),
+            }
+            for key in DIMENSION_ORDER
+            if key in scores
+        ]
 
 
 def _level_from_score(score: int) -> str:

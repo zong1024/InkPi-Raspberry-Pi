@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -104,6 +105,16 @@ class CloudSyncService:
             "quality_confidence": result.quality_confidence,
             "image_path": result.image_path,
             "processed_image_path": result.processed_image_path,
+            "dimension_scores": result.get_dimension_scores(),
+            "score_debug": result.score_debug,
+            "dimension_scores_json": (
+                json.dumps(result.get_dimension_scores(), ensure_ascii=False)
+                if result.get_dimension_scores() is not None
+                else None
+            ),
+            "score_debug_json": (
+                json.dumps(result.score_debug, ensure_ascii=False) if result.score_debug is not None else None
+            ),
         }
 
     def _safe_upload(self, result: EvaluationResult, local_record_id: int) -> None:

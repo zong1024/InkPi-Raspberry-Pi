@@ -4,23 +4,13 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QPushButton,
-    QStackedWidget,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
 from config import IS_RASPBERRY_PI, UI_CONFIG
 from models.evaluation_result import EvaluationResult
@@ -42,7 +32,6 @@ class MainWindow(QMainWindow):
 
         self._init_ui()
         self._connect_signals()
-        self._start_clock()
         self._apply_compact_mode(self._should_use_compact_mode())
         self.show_home()
 
@@ -59,16 +48,16 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         self.root_layout = QVBoxLayout(central_widget)
-        self.root_layout.setContentsMargins(12, 12, 12, 10)
-        self.root_layout.setSpacing(10)
+        self.root_layout.setContentsMargins(10, 8, 10, 8)
+        self.root_layout.setSpacing(8)
 
-        self.header = self._create_header()
-        self.root_layout.addWidget(self.header)
+        self.top_bar = self._create_top_bar()
+        self.root_layout.addWidget(self.top_bar)
 
         self.surface = QFrame()
         self.surface.setObjectName("mainSurface")
         self.surface_layout = QVBoxLayout(self.surface)
-        self.surface_layout.setContentsMargins(14, 14, 14, 14)
+        self.surface_layout.setContentsMargins(10, 8, 10, 8)
         self.surface_layout.setSpacing(0)
 
         self.stack = QStackedWidget()
@@ -85,86 +74,49 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.result_view)
         self.stack.addWidget(self.history_view)
 
-        self.footer = self._create_footer()
-        self.root_layout.addWidget(self.footer)
+        self.bottom_nav = self._create_bottom_nav()
+        self.root_layout.addWidget(self.bottom_nav)
 
-    def _create_header(self) -> QFrame:
-        header = QFrame()
-        header.setObjectName("appHeader")
-        self.header_layout = QHBoxLayout(header)
-        self.header_layout.setContentsMargins(20, 14, 20, 14)
-        self.header_layout.setSpacing(14)
+    def _create_top_bar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("topBar")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(10)
 
-        brand_layout = QVBoxLayout()
-        brand_layout.setSpacing(2)
+        self.brand_title = QLabel("InkPi")
+        self.brand_title.setObjectName("brandTitle")
+        self.brand_title.setFont(app_font(20, QFont.Weight.Bold))
+        layout.addWidget(self.brand_title)
 
-        brand_title = QLabel("InkPi")
-        brand_title.setObjectName("brandTitle")
-        brand_title.setFont(app_font(22, QFont.Weight.Bold))
-        brand_layout.addWidget(brand_title)
-        self.brand_title = brand_title
+        layout.addStretch()
 
-        brand_caption = QLabel("树莓派书法智能评测台")
-        brand_caption.setObjectName("brandCaption")
-        brand_caption.setFont(app_font(9))
-        brand_layout.addWidget(brand_caption)
-        self.brand_caption = brand_caption
+        self.page_title = QLabel("Home")
+        self.page_title.setObjectName("miniLabel")
+        self.page_title.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.page_title)
+        return bar
 
-        self.header_layout.addLayout(brand_layout)
-        self.header_layout.addSpacing(12)
+    def _create_bottom_nav(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("bottomNav")
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(2)
 
-        title_layout = QVBoxLayout()
-        title_layout.setSpacing(4)
-
-        self.header_title = QLabel("首页")
-        self.header_title.setObjectName("headerTitle")
-        self.header_title.setFont(app_font(20, QFont.Weight.Bold))
-        title_layout.addWidget(self.header_title)
-
-        self.header_subtitle = QLabel("准备开始新的自动识别评测")
-        self.header_subtitle.setObjectName("headerSubtitle")
-        self.header_subtitle.setFont(app_font(9))
-        title_layout.addWidget(self.header_subtitle)
-
-        self.header_layout.addLayout(title_layout, stretch=1)
-
-        side_layout = QVBoxLayout()
-        side_layout.setSpacing(8)
-        side_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-        mode_text = "树莓派触控模式" if IS_RASPBERRY_PI else "桌面演示模式"
-        self.header_pill = QLabel(mode_text)
-        self.header_pill.setObjectName("headerPill")
-        side_layout.addWidget(self.header_pill, alignment=Qt.AlignmentFlag.AlignRight)
-
-        self.header_clock = QLabel("--/-- --:--")
-        self.header_clock.setObjectName("headerClock")
-        self.header_clock.setFont(app_font(11, QFont.Weight.Medium))
-        side_layout.addWidget(self.header_clock, alignment=Qt.AlignmentFlag.AlignRight)
-
-        self.header_layout.addLayout(side_layout)
-        return header
-
-    def _create_footer(self) -> QFrame:
-        footer = QFrame()
-        footer.setObjectName("footerBar")
-        self.footer_layout = QHBoxLayout(footer)
-        self.footer_layout.setContentsMargins(10, 8, 10, 8)
-        self.footer_layout.setSpacing(6)
-
-        self.btn_home = QPushButton("首页")
+        self.btn_home = QPushButton("HOME")
         self.btn_home.setObjectName("navButton")
-        self.footer_layout.addWidget(self.btn_home)
+        layout.addWidget(self.btn_home)
 
-        self.btn_camera = QPushButton("拍照")
+        self.btn_camera = QPushButton("STUDIO")
         self.btn_camera.setObjectName("navButton")
-        self.footer_layout.addWidget(self.btn_camera)
+        layout.addWidget(self.btn_camera)
 
-        self.btn_history = QPushButton("历史")
+        self.btn_history = QPushButton("HISTORY")
         self.btn_history.setObjectName("navButton")
-        self.footer_layout.addWidget(self.btn_history)
+        layout.addWidget(self.btn_history)
 
-        return footer
+        return bar
 
     def _connect_signals(self) -> None:
         self.btn_home.clicked.connect(self.show_home)
@@ -185,40 +137,20 @@ class MainWindow(QMainWindow):
         self.history_view.back_requested.connect(self.show_home)
         self.history_view.result_selected.connect(self._open_result)
 
-    def _start_clock(self) -> None:
-        self._refresh_clock()
-        self.clock_timer = QTimer(self)
-        self.clock_timer.timeout.connect(self._refresh_clock)
-        self.clock_timer.start(30_000)
-
-    def _refresh_clock(self) -> None:
-        self.header_clock.setText(datetime.now().strftime("%m/%d %H:%M"))
-
     def _should_use_compact_mode(self) -> bool:
         return self.width() <= 540 or self.height() <= 360
 
     def _apply_compact_mode(self, compact: bool) -> None:
         self.compact_mode = compact
+        self.root_layout.setContentsMargins(6 if compact else 10, 6 if compact else 8, 6 if compact else 10, 6 if compact else 8)
+        self.root_layout.setSpacing(6 if compact else 8)
+        self.surface_layout.setContentsMargins(8 if compact else 10, 8 if compact else 8, 8 if compact else 10, 8 if compact else 8)
 
-        self.root_layout.setContentsMargins(6 if compact else 12, 6 if compact else 12, 6 if compact else 12, 6 if compact else 10)
-        self.root_layout.setSpacing(6 if compact else 10)
-        self.surface_layout.setContentsMargins(8 if compact else 14, 8 if compact else 14, 8 if compact else 14, 8 if compact else 14)
+        self.brand_title.setFont(app_font(18 if compact else 20, QFont.Weight.Bold))
+        self.page_title.setFont(app_font(9 if compact else 10, QFont.Weight.Bold))
 
-        self.header_layout.setContentsMargins(12 if compact else 20, 10 if compact else 14, 12 if compact else 20, 10 if compact else 14)
-        self.header_layout.setSpacing(10 if compact else 14)
-        self.footer_layout.setContentsMargins(6 if compact else 10, 6 if compact else 8, 6 if compact else 10, 6 if compact else 8)
-        self.footer_layout.setSpacing(4 if compact else 6)
-
-        self.brand_title.setFont(app_font(18 if compact else 22, QFont.Weight.Bold))
-        self.header_title.setFont(app_font(16 if compact else 20, QFont.Weight.Bold))
-        self.header_pill.setVisible(not compact)
-        self.brand_caption.setVisible(not compact)
-        self.header_subtitle.setVisible(not compact)
-        self.header_clock.setVisible(not compact)
-
-        nav_height = 34 if compact else 40
         for button in (self.btn_home, self.btn_camera, self.btn_history):
-            button.setMinimumHeight(nav_height)
+            button.setMinimumHeight(36 if compact else 40)
 
         for view in (self.home_view, self.camera_view, self.result_view, self.history_view):
             if hasattr(view, "set_compact_mode"):
@@ -230,30 +162,26 @@ class MainWindow(QMainWindow):
             button.style().unpolish(button)
             button.style().polish(button)
 
-    def _set_page(self, index: int, title: str, subtitle: str, active_nav: int | None) -> None:
+    def _set_page(self, index: int, title: str, active_nav: int | None) -> None:
         if index != 1:
             self.camera_view.cleanup()
         self.stack.setCurrentIndex(index)
-        self.header_title.setText(title)
-        self.header_subtitle.setText(subtitle)
+        self.page_title.setText(title)
         self._set_nav_state(active_nav)
 
     def show_home(self) -> None:
         self.home_view.refresh()
-        self._set_page(0, "首页", "查看最近成绩，并开始新的自动识别评测", 0)
+        self._set_page(0, "HOME", 0)
 
     def show_camera(self) -> None:
-        self._set_page(1, "拍照评测", "让单个汉字落在取景框中央，系统会自动识别并评分", 1)
+        self._set_page(1, "INKPI CAPTURE", 1)
 
     def show_result(self) -> None:
-        subtitle = "评测已完成，可以查看结果或继续下一次拍摄"
-        if self.current_result and self.current_result.character_name:
-            subtitle = f"自动识别：{self.current_result.character_name}"
-        self._set_page(2, "评测结果", subtitle, None)
+        self._set_page(2, "EVALUATION RESULT", None)
 
     def show_history(self) -> None:
         self.history_view.refresh_data()
-        self._set_page(3, "历史记录", "按时间筛选并回看过去的评测结果", 2)
+        self._set_page(3, "HISTORY", 2)
 
     def _open_result(self, result: EvaluationResult) -> None:
         self.current_result = result

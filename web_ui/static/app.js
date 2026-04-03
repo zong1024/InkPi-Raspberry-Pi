@@ -4,15 +4,19 @@ const state = {
   history: [],
   selectedRecordId: null,
   previewTimer: null,
-  cameraSettings: null,
+};
+
+const DIMENSION_LABELS = {
+  structure: "结构",
+  stroke: "笔画",
+  integrity: "完整",
+  stability: "稳定",
 };
 
 const els = {
   navButtons: [...document.querySelectorAll(".nav-button")],
   views: [...document.querySelectorAll(".view")],
   cameraStatusText: document.getElementById("cameraStatusText"),
-  cameraLensText: document.getElementById("cameraLensText"),
-  cameraZoomText: document.getElementById("cameraZoomText"),
   recordCountText: document.getElementById("recordCountText"),
   averageScoreText: document.getElementById("averageScoreText"),
   pageKicker: document.getElementById("pageKicker"),
@@ -27,8 +31,6 @@ const els = {
   latestResultCard: document.getElementById("latestResultCard"),
   captureStatusPill: document.getElementById("captureStatusPill"),
   cameraPreview: document.getElementById("cameraPreview"),
-  guideSquare: document.getElementById("guideSquare"),
-  guideCaption: document.getElementById("guideCaption"),
   guidancePanel: document.getElementById("guidancePanel"),
   captureButton: document.getElementById("captureButton"),
   uploadButton: document.getElementById("uploadButton"),
@@ -37,20 +39,13 @@ const els = {
   historyDetail: document.getElementById("historyDetail"),
   refreshHistoryButton: document.getElementById("refreshHistoryButton"),
   historyItemTemplate: document.getElementById("historyItemTemplate"),
-  lensPresetButtons: [...document.querySelectorAll("[data-lens-mode]")],
-  zoomOutButton: document.getElementById("zoomOutButton"),
-  zoomInButton: document.getElementById("zoomInButton"),
-  zoomSlider: document.getElementById("zoomSlider"),
-  zoomValueText: document.getElementById("zoomValueText"),
-  lensValueText: document.getElementById("lensValueText"),
-  resetViewButton: document.getElementById("resetViewButton"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
   tickClock();
   setInterval(tickClock, 30_000);
-  void loadBootstrap();
+  loadBootstrap();
 });
 
 function bindEvents() {
@@ -62,41 +57,10 @@ function bindEvents() {
     button.addEventListener("click", () => switchView(button.dataset.jump));
   });
 
-  els.captureButton?.addEventListener("click", () => {
-    void evaluateCapture();
-  });
-  els.uploadButton?.addEventListener("click", () => els.fileInput?.click());
-  els.fileInput?.addEventListener("change", (event) => {
-    void handleUpload(event);
-  });
-  els.refreshHistoryButton?.addEventListener("click", () => {
-    void loadHistory();
-  });
-
-  els.lensPresetButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      void updateCameraSettings({ lens_mode: button.dataset.lensMode });
-    });
-  });
-
-  els.zoomOutButton?.addEventListener("click", () => {
-    void updateCameraSettings({ zoom_delta: -1 });
-  });
-  els.zoomInButton?.addEventListener("click", () => {
-    void updateCameraSettings({ zoom_delta: 1 });
-  });
-
-  els.zoomSlider?.addEventListener("input", () => {
-    const zoom = Number(els.zoomSlider.value) / 10;
-    syncZoomReadout({ ...(state.cameraSettings || {}), zoom_ratio: zoom });
-  });
-  els.zoomSlider?.addEventListener("change", () => {
-    const zoom = Number(els.zoomSlider.value) / 10;
-    void updateCameraSettings({ zoom_ratio: zoom });
-  });
-  els.resetViewButton?.addEventListener("click", () => {
-    void updateCameraSettings({ reset: true });
-  });
+  els.captureButton.addEventListener("click", evaluateCapture);
+  els.uploadButton.addEventListener("click", () => els.fileInput.click());
+  els.fileInput.addEventListener("change", handleUpload);
+  els.refreshHistoryButton.addEventListener("click", loadHistory);
 }
 
 async function loadBootstrap() {
@@ -104,12 +68,12 @@ async function loadBootstrap() {
     const data = await fetchJson("/api/bootstrap");
     state.bootstrap = data;
     state.history = data.history || [];
-    state.cameraSettings = data.camera_settings || data.camera?.settings || null;
-
     renderBootstrap();
     renderHistory();
     renderLatestResult(data.last_result || state.history[0] || null);
-    renderCameraSettings(state.cameraSettings);
+    if (state.history.length) {
+      await loadRecordDetail(state.history[0].id);
+    }
     switchView(state.view);
   } catch (error) {
     showBanner(`初始化失败：${error.message}`, true);
@@ -123,6 +87,8 @@ async function loadHistory() {
     renderHistory();
     if (state.selectedRecordId) {
       await loadRecordDetail(state.selectedRecordId);
+    } else if (state.history.length) {
+      await loadRecordDetail(state.history[0].id);
     }
   } catch (error) {
     showBanner(`刷新历史失败：${error.message}`, true);
@@ -179,8 +145,10 @@ function renderLatestResult(result) {
     <div class="summary-meta">
       <span>识别字：${result.character_name}</span>
       <span>OCR：${formatConfidence(result.ocr_confidence)}</span>
+      <span>质量：${formatConfidence(result.quality_confidence)}</span>
     </div>
-    <p>${result.feedback || "暂无评语"}</p>
+    <p>${result.feedback}</p>
+    <div class="dimension-summary-strip">${buildDimensionSummary(result)}</div>
   `;
 }
 
@@ -197,19 +165,18 @@ function renderHistory() {
     node.querySelector(".history-style").textContent = `等级 ${item.quality_label} / OCR ${formatConfidence(item.ocr_confidence)}`;
     node.querySelector(".history-score").textContent = item.total_score;
     node.querySelector(".history-time").textContent = item.display_time;
+    node.querySelector(".history-dimensions").textContent = buildDimensionSummary(item);
 
     if (item.id === state.selectedRecordId || (!state.selectedRecordId && index === 0)) {
       node.classList.add("is-active");
       state.selectedRecordId = item.id;
-      renderHistoryDetail(item);
     }
 
-    node.addEventListener("click", () => {
+    node.addEventListener("click", async () => {
       state.selectedRecordId = item.id;
       renderHistory();
-      void loadRecordDetail(item.id);
+      await loadRecordDetail(item.id);
     });
-
     els.historyList.appendChild(node);
   });
 }
@@ -240,13 +207,106 @@ function renderHistoryDetail(item) {
       </div>
       <div class="detail-score" style="color:${item.color}">${item.total_score}</div>
     </div>
-    ${originalImage ? `<img src="${originalImage}" alt="作品原图" style="width:100%;border-radius:22px;max-height:280px;object-fit:cover;">` : ""}
+    ${originalImage ? `<img src="${originalImage}" alt="作品原图" class="detail-image">` : ""}
     <div class="summary-meta">
       <span>质量置信度：${formatConfidence(item.quality_confidence)}</span>
       <span>自动识别：${item.character_name}</span>
     </div>
-    <p class="detail-feedback">${item.feedback || "暂无评语"}</p>
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <h5>四维解释分</h5>
+        <span>${buildDimensionSummary(item)}</span>
+      </div>
+      ${renderDimensionGrid(item.dimension_scores)}
+    </section>
+    <section class="detail-section">
+      <div class="detail-section-head">
+        <h5>评测建议</h5>
+        <span>正式展示只保留主分与反馈</span>
+      </div>
+      <p class="detail-feedback">${item.feedback}</p>
+    </section>
+    ${renderDebugPanel(item.score_debug)}
   `;
+}
+
+function renderDimensionGrid(dimensionScores) {
+  if (!dimensionScores) {
+    return `<div class="empty-inline">老记录暂无四维评分，新评测结果会自动生成。</div>`;
+  }
+
+  const items = Object.entries(DIMENSION_LABELS)
+    .filter(([key]) => dimensionScores[key] !== undefined && dimensionScores[key] !== null)
+    .map(([key, label]) => ({ key, label, score: Number(dimensionScores[key]) }));
+
+  return `
+    <div class="dimension-grid">
+      ${items
+        .map(
+          (item) => `
+            <article class="dimension-card">
+              <div class="dimension-card-top">
+                <span>${item.label}</span>
+                <strong>${item.score}</strong>
+              </div>
+              <div class="dimension-track">
+                <div class="dimension-bar" style="width:${Math.max(0, Math.min(100, item.score))}%"></div>
+              </div>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderDebugPanel(scoreDebug) {
+  if (!scoreDebug) {
+    return "";
+  }
+
+  const blocks = [
+    { title: "概率输出", value: scoreDebug.probabilities },
+    { title: "质量特征", value: scoreDebug.quality_features },
+    { title: "几何特征", value: scoreDebug.geometry_features },
+    { title: "校准中间量", value: scoreDebug.calibration },
+  ]
+    .filter((item) => item.value)
+    .map(
+      (item) => `
+        <article class="debug-card">
+          <h6>${item.title}</h6>
+          <pre>${escapeHtml(JSON.stringify(item.value, null, 2))}</pre>
+        </article>
+      `
+    )
+    .join("");
+
+  return `
+    <details class="debug-panel">
+      <summary>调试信息展开</summary>
+      <div class="debug-grid">${blocks}</div>
+    </details>
+  `;
+}
+
+function buildDimensionSummary(item) {
+  const scores = item?.dimension_scores;
+  if (!scores) {
+    return "老记录暂无四维评分";
+  }
+
+  const values = Object.entries(DIMENSION_LABELS)
+    .filter(([key]) => scores[key] !== undefined && scores[key] !== null)
+    .map(([key, label]) => ({ key, label, score: Number(scores[key]) }));
+
+  if (!values.length) {
+    return "老记录暂无四维评分";
+  }
+
+  const strongest = [...values].sort((left, right) => right.score - left.score)[0];
+  const weakest = [...values].sort((left, right) => left.score - right.score)[0];
+  return `最强 ${strongest.label} ${strongest.score} / 待提升 ${weakest.label} ${weakest.score}`;
 }
 
 function switchView(view) {
@@ -294,81 +354,8 @@ function refreshCameraFrame() {
     els.captureStatusPill.textContent = "摄像头离线";
   };
   els.cameraPreview.onload = () => {
-    if (state.cameraSettings?.lens_label && state.cameraSettings?.total_zoom) {
-      els.captureStatusPill.textContent = `${state.cameraSettings.lens_label} ${state.cameraSettings.total_zoom.toFixed(1)}x`;
-      return;
-    }
     els.captureStatusPill.textContent = "实时在线";
   };
-}
-
-async function updateCameraSettings(payload) {
-  try {
-    const settings = await fetchJson("/api/camera/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    state.cameraSettings = settings;
-    renderCameraSettings(settings);
-    refreshCameraFrame();
-    showBanner(`已切换到 ${settings.lens_label} ${settings.total_zoom.toFixed(1)}x`);
-  } catch (error) {
-    showBanner(`调整取景失败：${error.message}`, true);
-  }
-}
-
-function renderCameraSettings(settings) {
-  if (!settings) {
-    return;
-  }
-
-  state.cameraSettings = settings;
-  els.cameraLensText.textContent = settings.lens_label;
-  els.cameraZoomText.textContent = `${settings.total_zoom.toFixed(1)}x`;
-  syncZoomReadout(settings);
-
-  els.lensPresetButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.lensMode === settings.lens_mode);
-  });
-
-  if (els.guideSquare) {
-    const guideScale = Number(settings.guide_scale || 0.7);
-    const insetPercent = ((1 - guideScale) * 100) / 2;
-    els.guideSquare.style.inset = `${insetPercent}%`;
-  }
-
-  updateGuideCaption(settings);
-}
-
-function syncZoomReadout(settings) {
-  const zoomRatio = Number(settings.zoom_ratio || 1);
-  const totalZoom = Number(settings.total_zoom || zoomRatio);
-
-  if (els.zoomSlider) {
-    els.zoomSlider.min = String(Math.round((settings.zoom_min || 1) * 10));
-    els.zoomSlider.max = String(Math.round((settings.zoom_max || 3) * 10));
-    els.zoomSlider.value = String(Math.round(zoomRatio * 10));
-  }
-
-  if (els.zoomValueText) {
-    els.zoomValueText.textContent = `${totalZoom.toFixed(1)}x`;
-  }
-  if (els.lensValueText && settings.lens_label) {
-    els.lensValueText.textContent = `${settings.lens_label} / 数码 ${zoomRatio.toFixed(1)}x`;
-  }
-}
-
-function updateGuideCaption(settings) {
-  if (!els.guideCaption) {
-    return;
-  }
-
-  if (settings?.lens_label && settings?.total_zoom) {
-    els.guideCaption.textContent = `AUTO OCR · ${settings.lens_label} ${settings.total_zoom.toFixed(1)}x`;
-  } else {
-    els.guideCaption.textContent = "AUTO OCR";
-  }
 }
 
 async function evaluateCapture() {
@@ -377,6 +364,7 @@ async function evaluateCapture() {
     const payload = await fetchJson("/api/evaluate/capture", { method: "POST" });
     const result = payload.result;
     ingestNewResult(result);
+    await loadRecordDetail(result.id);
     showBanner(`评测完成：${result.character_name} / ${result.total_score} 分 / ${result.quality_label}`);
     switchView("history");
   } catch (error) {
@@ -403,6 +391,7 @@ async function handleUpload(event) {
     });
     const result = payload.result;
     ingestNewResult(result);
+    await loadRecordDetail(result.id);
     showBanner(`图片评测完成：${result.character_name} / ${result.total_score} 分 / ${result.quality_label}`);
     switchView("history");
   } catch (error) {
@@ -414,21 +403,13 @@ async function handleUpload(event) {
 }
 
 function ingestNewResult(result) {
-  const existed = state.history.some((item) => item.id === result.id);
   state.history = [result, ...state.history.filter((item) => item.id !== result.id)];
   state.selectedRecordId = result.id;
-
   renderLatestResult(result);
   renderHistory();
-  renderHistoryDetail(result);
-
   if (state.bootstrap) {
-    state.bootstrap.last_result = result;
-    state.bootstrap.history = state.history.slice(0, 8);
-    if (!existed) {
-      const total = Number(els.recordCountText.textContent || "0") + 1;
-      els.recordCountText.textContent = String(total);
-    }
+    const total = Number(els.recordCountText.textContent || "0") + 1;
+    els.recordCountText.textContent = String(total);
     els.latestScoreText.textContent = `${result.total_score}`;
     els.latestCharacterText.textContent = result.character_name;
     els.latestLevelText.textContent = result.quality_label;
@@ -436,22 +417,17 @@ function ingestNewResult(result) {
 }
 
 function handleEvaluationError(error) {
-  if (error.payload?.guidance) {
-    const message = `${error.payload.message} ${error.payload.guidance}`;
-    els.guidancePanel.textContent = message;
-    showBanner(message, true);
-    return;
+  if (error.payload && error.payload.guidance) {
+    els.guidancePanel.textContent = `${error.payload.message} ${error.payload.guidance}`;
+    showBanner(`${error.payload.message} ${error.payload.guidance}`, true);
+  } else {
+    showBanner(error.message, true);
   }
-  showBanner(error.message, true);
 }
 
 function setBusy(isBusy, text = "") {
-  if (els.captureButton) {
-    els.captureButton.disabled = isBusy;
-  }
-  if (els.uploadButton) {
-    els.uploadButton.disabled = isBusy;
-  }
+  els.captureButton.disabled = isBusy;
+  els.uploadButton.disabled = isBusy;
   els.captureStatusPill.textContent = isBusy ? "评测中" : "待机";
   if (text) {
     els.guidancePanel.textContent = text;
@@ -475,17 +451,20 @@ function tickClock() {
 }
 
 function metricWidth(value) {
-  if (value === "--") {
-    return 0;
-  }
+  if (value === "--") return 0;
   return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
 function formatConfidence(value) {
-  if (typeof value !== "number") {
-    return "--";
-  }
+  if (typeof value !== "number") return "--";
   return `${Math.round(value * 100)}%`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 async function fetchJson(url, options = {}) {

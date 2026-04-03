@@ -1,6 +1,13 @@
 const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 
+const DIMENSION_LABELS = {
+  structure: '结构',
+  stroke: '笔画',
+  integrity: '完整',
+  stability: '稳定',
+};
+
 function getScorePalette(score) {
   if (score >= 85) {
     return {
@@ -33,11 +40,36 @@ function formatConfidence(value) {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
+function buildDimensionCards(dimensionScores = null) {
+  if (!dimensionScores) {
+    return [];
+  }
+
+  return Object.entries(DIMENSION_LABELS)
+    .filter(([key]) => dimensionScores[key] !== undefined && dimensionScores[key] !== null)
+    .map(([key, label]) => ({
+      key,
+      label,
+      score: Number(dimensionScores[key]),
+    }));
+}
+
+function buildDimensionSummary(cards = []) {
+  if (!cards.length) {
+    return '老记录暂无四维评分';
+  }
+  const strongest = [...cards].sort((left, right) => right.score - left.score)[0];
+  const weakest = [...cards].sort((left, right) => left.score - right.score)[0];
+  return `最强项：${strongest.label} ${strongest.score} 分 / 待提升：${weakest.label} ${weakest.score} 分`;
+}
+
 Page({
   data: {
     loading: true,
     result: null,
     metrics: [],
+    dimensionCards: [],
+    dimensionSummary: '',
     error: '',
     deleting: false,
   },
@@ -61,6 +93,7 @@ Page({
       const data = await api.getResultDetail(this.resultId);
       const rawResult = data.result || {};
       const palette = getScorePalette(rawResult.total_score || 0);
+      const dimensionCards = buildDimensionCards(rawResult.dimension_scores);
 
       const result = {
         ...rawResult,
@@ -84,13 +117,18 @@ Page({
           note: `模型置信度 ${result.qualityText}`,
         },
         {
-          title: '单链路',
+          title: '评测链路',
           value: 'OCR + ONNX',
-          note: '当前版本固定使用自动 OCR 与 ONNX 评分模型。',
+          note: '当前版本固定使用单链路评测，四维解释分用于帮助理解主分。',
         },
       ];
 
-      this.setData({ result, metrics });
+      this.setData({
+        result,
+        metrics,
+        dimensionCards,
+        dimensionSummary: buildDimensionSummary(dimensionCards),
+      });
     } catch (error) {
       this.setData({ error: '加载详情失败，请返回历史页后重试。' });
     } finally {

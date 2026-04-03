@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import EVALUATION_CONFIG, QUALITY_SCORER_CONFIG
 from models.evaluation_result import EvaluationResult
+from services.dimension_scorer_service import dimension_scorer_service
 from services.local_ocr_service import local_ocr_service
 from services.preprocessing_service import PreprocessingError
 from services.quality_scorer_service import quality_scorer_service
@@ -79,6 +80,13 @@ class EvaluationService:
             character=recognition.character,
             ocr_confidence=recognition.confidence,
         )
+        dimension_result = dimension_scorer_service.score(
+            processed_image,
+            probabilities=scored.probabilities,
+            quality_features=scored.quality_features or {},
+            calibration=scored.calibration or {},
+            ocr_confidence=recognition.confidence,
+        )
         feedback = self._build_feedback(scored.quality_level, scored.total_score, recognition.character)
 
         result = EvaluationResult(
@@ -91,6 +99,13 @@ class EvaluationService:
             ocr_confidence=recognition.confidence,
             quality_level=scored.quality_level,
             quality_confidence=scored.quality_confidence,
+            dimension_scores=dimension_result.dimension_scores,
+            score_debug={
+                "probabilities": scored.probabilities,
+                "quality_features": scored.quality_features or {},
+                "geometry_features": dimension_result.geometry_features,
+                "calibration": scored.calibration or {},
+            },
         )
         self.logger.info(
             "Single-chain evaluation finished: char=%s score=%s level=%s ocr=%.3f",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -55,10 +56,21 @@ class DatabaseService:
                     character_name TEXT,
                     ocr_confidence REAL,
                     quality_level TEXT,
-                    quality_confidence REAL
+                    quality_confidence REAL,
+                    dimension_scores_json TEXT,
+                    score_debug_json TEXT
                 )
                 """
             )
+
+            cursor.execute(f"PRAGMA table_info({self.table_name})")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+            for column_name, column_type in (
+                ("dimension_scores_json", "TEXT"),
+                ("score_debug_json", "TEXT"),
+            ):
+                if column_name not in existing_columns:
+                    cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {column_name} {column_type}")
 
             cursor.execute(
                 f"""
@@ -87,9 +99,11 @@ class DatabaseService:
                     character_name,
                     ocr_confidence,
                     quality_level,
-                    quality_confidence
+                    quality_confidence,
+                    dimension_scores_json,
+                    score_debug_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.total_score,
@@ -101,6 +115,10 @@ class DatabaseService:
                     result.ocr_confidence,
                     result.quality_level,
                     result.quality_confidence,
+                    json.dumps(result.get_dimension_scores(), ensure_ascii=False)
+                    if result.get_dimension_scores() is not None
+                    else None,
+                    json.dumps(result.score_debug, ensure_ascii=False) if result.score_debug is not None else None,
                 ),
             )
             record_id = int(cursor.lastrowid)
@@ -231,6 +249,8 @@ class DatabaseService:
             ocr_confidence=row["ocr_confidence"],
             quality_level=row["quality_level"] or "medium",
             quality_confidence=row["quality_confidence"],
+            dimension_scores=self._load_json_blob(row["dimension_scores_json"]),
+            score_debug=self._load_json_blob(row["score_debug_json"]),
         )
 
     def _cleanup_old_records(self) -> None:
@@ -254,6 +274,16 @@ class DatabaseService:
             conn.commit()
 
         self.logger.info("Trimmed %s old local records", delete_count)
+
+    @staticmethod
+    def _load_json_blob(value: str | None) -> dict | None:
+        if not value:
+            return None
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
 
 database_service = DatabaseService()
