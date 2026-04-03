@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 from PyQt6.QtCore import QThread, Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QImage, QPixmap
-from PyQt6.QtWidgets import QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFileDialog, QFrame, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from config import IMAGES_DIR
 from models.evaluation_result import EvaluationResult
@@ -59,70 +59,72 @@ class CameraView(QWidget):
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
-        self.compact_mode = False
         self._init_ui()
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
+        root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(8)
 
-        self.preview_label = QLabel("正在准备摄像头...")
+        header = QFrame()
+        header.setObjectName("pageHeader")
+        header.setFixedHeight(34)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(10, 4, 10, 4)
+        header_layout.setSpacing(8)
+
+        self.btn_back = QPushButton("← 返回")
+        self.btn_back.setObjectName("headerIconButton")
+        self.btn_back.setFixedHeight(24)
+        self.btn_back.clicked.connect(self.cancelled.emit)
+        header_layout.addWidget(self.btn_back)
+
+        header_layout.addStretch()
+
+        title = QLabel("INKPI CAPTURE")
+        title.setObjectName("pageTitle")
+        title.setFont(app_font(12, QFont.Weight.Bold))
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        self.camera_state = QLabel("等待相机")
+        self.camera_state.setObjectName("statusPill")
+        header_layout.addWidget(self.camera_state)
+        root.addWidget(header)
+
+        self.preview_label = QLabel("正在准备画面…")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumHeight(176)
+        self.preview_label.setFixedHeight(194)
         self.preview_label.setFont(app_font(11))
-        self.preview_label.setWordWrap(True)
-        root.addWidget(self.preview_label, stretch=1)
+        root.addWidget(self.preview_label)
 
-        hint_row = QHBoxLayout()
-        hint_row.setSpacing(8)
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 0, 0, 0)
+        bottom_row.setSpacing(12)
 
-        self.back_label = QLabel("< 返回")
-        self.back_label.setObjectName("miniLabel")
-        hint_row.addWidget(self.back_label)
-
-        hint_row.addStretch()
-
-        self.camera_state = QLabel("等待连接")
-        self.camera_state.setObjectName("statusPill")
-        hint_row.addWidget(self.camera_state)
-        root.addLayout(hint_row)
-
-        self.guide_label = QLabel("请将单字尽量放在框内")
-        self.guide_label.setObjectName("mutedLabel")
-        self.guide_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self.guide_label)
-
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(10)
-        actions.setVerticalSpacing(8)
-
-        self.btn_load = QPushButton("上传图片")
-        self.btn_load.setObjectName("secondaryButton")
-        self.btn_load.setMinimumHeight(44)
+        self.btn_load = QPushButton("上传\n图片")
+        self.btn_load.setObjectName("buttonCard")
+        self.btn_load.setFixedSize(82, 56)
+        self.btn_load.setFont(app_font(10, QFont.Weight.Bold))
         self.btn_load.clicked.connect(self._on_load_image)
-        actions.addWidget(self.btn_load, 0, 0)
+        bottom_row.addWidget(self.btn_load)
 
-        self.btn_capture = QPushButton("拍照")
-        self.btn_capture.setObjectName("circleButton")
-        self.btn_capture.setMinimumHeight(52)
+        self.btn_capture = QPushButton("拍")
+        self.btn_capture.setObjectName("floatingButton")
+        self.btn_capture.setFixedSize(60, 60)
+        self.btn_capture.setFont(app_font(15, QFont.Weight.Bold))
         self.btn_capture.clicked.connect(self._on_capture)
-        actions.addWidget(self.btn_capture, 0, 1)
+        bottom_row.addWidget(self.btn_capture, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        self.btn_eval = QPushButton("开始评测")
+        self.btn_eval = QPushButton("PROCEED\n开始评测")
         self.btn_eval.setObjectName("primaryButton")
-        self.btn_eval.setMinimumHeight(44)
+        self.btn_eval.setFixedSize(178, 56)
+        self.btn_eval.setFont(app_font(11, QFont.Weight.Bold))
         self.btn_eval.clicked.connect(self._on_capture)
-        actions.addWidget(self.btn_eval, 0, 2)
-
-        self.btn_cancel = QPushButton("返回首页")
-        self.btn_cancel.setObjectName("ghostButton")
-        self.btn_cancel.setMinimumHeight(40)
-        self.btn_cancel.clicked.connect(self.cancelled.emit)
-        actions.addWidget(self.btn_cancel, 1, 0, 1, 3)
-
-        root.addLayout(actions)
+        bottom_row.addWidget(self.btn_eval)
+        root.addLayout(bottom_row)
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -141,7 +143,7 @@ class CameraView(QWidget):
     def _start_camera(self) -> None:
         self._set_camera_state("连接中", "working")
         if not camera_service.open():
-            self.preview_label.setText("摄像头暂时不可用\n你仍然可以上传图片完成评测。")
+            self.preview_label.setText("摄像头暂不可用\n仍可直接上传图片进行评测")
             self.btn_capture.setEnabled(False)
             self.btn_eval.setEnabled(False)
             self._set_camera_state("离线", "error")
@@ -176,32 +178,42 @@ class CameraView(QWidget):
     def _add_guide_overlay(self, frame: np.ndarray) -> np.ndarray:
         overlay = frame.copy()
         height, width = overlay.shape[:2]
-        box_size = min(width - 80, height - 40)
-        x1 = max(20, (width - box_size) // 2)
-        y1 = max(20, (height - box_size) // 2)
+
+        box_size = min(width - 110, height - 70)
+        x1 = (width - box_size) // 2
+        y1 = (height - box_size) // 2
         x2 = x1 + box_size
         y2 = y1 + box_size
+        accent = (31, 15, 184)
+        muted = (110, 104, 96)
 
-        color = (40, 40, 180)
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, 2)
-        cv2.line(overlay, ((x1 + x2) // 2, y1), ((x1 + x2) // 2, y2), color, 1)
-        cv2.line(overlay, (x1, (y1 + y2) // 2), (x2, (y1 + y2) // 2), color, 1)
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), accent, 2)
+        corner = 18
+        for origin, a, b in (
+            ((x1, y1), (x1 + corner, y1), (x1, y1 + corner)),
+            ((x2, y1), (x2 - corner, y1), (x2, y1 + corner)),
+            ((x1, y2), (x1 + corner, y2), (x1, y2 - corner)),
+            ((x2, y2), (x2 - corner, y2), (x2, y2 - corner)),
+        ):
+            cv2.line(overlay, origin, a, accent, 3)
+            cv2.line(overlay, origin, b, accent, 3)
+
         cv2.putText(
             overlay,
-            "Place one character in frame",
-            (max(12, x1 - 10), min(height - 12, y2 + 22)),
+            "请将单字放在框内",
+            (max(18, x1 - 8), min(height - 14, y2 + 24)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
-            (100, 100, 120),
+            muted,
             1,
         )
         return overlay
 
     def _build_retry_guidance(self, exc: PreprocessingError) -> str:
         error_guidance = {
-            "too_dark": "请把作品移到更亮的位置后重试。",
-            "too_bright": "请避开强反光，再对准单字重试。",
-            "low_contrast": "请换一张更清晰、字迹更明显的图片。",
+            "too_dark": "请把作品移到更亮的位置后再试。",
+            "too_bright": "请避开反光，重新对准单字。",
+            "low_contrast": "请换一张更清晰、笔画更明显的图片。",
             "empty_shot": "请让单字尽量占据取景框中央区域。",
             "obstruction": "请移开手和杂物，只保留目标单字。",
             "not_calligraphy": "当前画面不像单字书法，请重新对准作品。",
@@ -209,7 +221,7 @@ class CameraView(QWidget):
             "scattered_content": "请靠近一点，让目标字更集中。",
             "ocr_failed": "这次未能稳定识别，请让主体更完整后重试。",
         }
-        return error_guidance.get(exc.error_type, "请重新对准单字并再试一次。")
+        return error_guidance.get(exc.error_type, "请重新对准单字后再试一次。")
 
     def _handle_preprocessing_failure(self, exc: PreprocessingError, dialog_title: str) -> None:
         retry_guidance = self._build_retry_guidance(exc)
@@ -232,7 +244,7 @@ class CameraView(QWidget):
 
     def _on_capture(self) -> None:
         if self.current_frame is None:
-            QMessageBox.information(self, "暂无画面", "请等待摄像头预览稳定后再开始评测。")
+            QMessageBox.information(self, "暂无画面", "请等待摄像头画面稳定后再开始评测。")
             return
 
         self.btn_capture.setEnabled(False)
@@ -278,7 +290,7 @@ class CameraView(QWidget):
 
     def _evaluate_image(self, image: np.ndarray, original_path: Path) -> None:
         self.btn_load.setEnabled(False)
-        self.btn_load.setText("评测中...")
+        self.btn_load.setText("评测中")
         try:
             result = self._run_evaluation(image, original_path)
             self._set_camera_state("完成", "ready")
@@ -290,7 +302,7 @@ class CameraView(QWidget):
             QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)
-            self.btn_load.setText("上传图片")
+            self.btn_load.setText("上传\n图片")
 
     def _read_image(self, file_path: str) -> np.ndarray | None:
         try:
@@ -305,5 +317,4 @@ class CameraView(QWidget):
         self._stop_camera()
 
     def set_compact_mode(self, compact: bool) -> None:
-        self.compact_mode = compact
-        self.preview_label.setMinimumHeight(162 if compact else 176)
+        del compact

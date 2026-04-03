@@ -172,6 +172,17 @@ GitHub Actions 里的 Python CI 建议只跑跨平台逻辑，不直接覆盖树
 - [文档索引](docs/README.md)
 - [训练说明](training/README.md)
 
+## Desktop Simulator
+
+If you want to debug the PyQt6 small-screen UI on your local PC instead of moving to Raspberry Pi every time, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup_desktop_sim.ps1
+powershell -ExecutionPolicy Bypass -File scripts\run_desktop_sim.ps1
+```
+
+This mode creates `.venv-desktop-sim`, starts the Qt app in `480x320`, enables `INKPI_DESKTOP_SIM=1`, falls back to a simulated camera feed when no real camera is available, and keeps the evaluation flow usable even when local PaddleOCR is not installed.
+
 ## 四维解释分
 
 当前代码已经落地单字四维解释分，固定维度为：

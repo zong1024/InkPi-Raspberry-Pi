@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
 from models.evaluation_result import DIMENSION_LABELS, EvaluationResult
 from services.led_service import led_service
@@ -17,35 +17,34 @@ from services.speech_service import speech_service
 from views.ui_theme import app_font
 
 
-class DimensionBar(QFrame):
-    """Simple progress row for a dimension score."""
+class DimensionRow(QWidget):
+    """Compact score row inside the dimension panel."""
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
-        self.setObjectName("dimensionBarCard")
-
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(8)
+        top = QHBoxLayout()
+        top.setContentsMargins(0, 0, 0, 0)
+        top.setSpacing(6)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("sectionTitle")
         self.title_label.setFont(app_font(11, QFont.Weight.Bold))
-        top_row.addWidget(self.title_label)
-
-        top_row.addStretch()
+        top.addWidget(self.title_label)
+        top.addStretch()
 
         self.value_label = QLabel("--")
-        self.value_label.setObjectName("accentText")
+        self.value_label.setObjectName("sectionTitle")
         self.value_label.setFont(app_font(11, QFont.Weight.Bold))
-        top_row.addWidget(self.value_label)
-        layout.addLayout(top_row)
+        top.addWidget(self.value_label)
+        layout.addLayout(top)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
+        self.progress.setTextVisible(False)
         layout.addWidget(self.progress)
 
     def set_score(self, score: int | None) -> None:
@@ -58,7 +57,7 @@ class DimensionBar(QFrame):
 
 
 class ResultView(QWidget):
-    """Evaluation result page."""
+    """Evaluation result page matched to the provided reference structure."""
 
     back_requested = pyqtSignal()
     new_evaluation_requested = pyqtSignal()
@@ -67,125 +66,138 @@ class ResultView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.result: EvaluationResult | None = None
-        self.compact_mode = False
-        self.dimension_bars: dict[str, DimensionBar] = {}
+        self.dimension_rows: dict[str, DimensionRow] = {}
         self._init_ui()
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
+
+        header = QFrame()
+        header.setObjectName("pageHeader")
+        header.setFixedHeight(38)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(12, 6, 12, 6)
+        header_layout.setSpacing(8)
+
+        brand = QLabel("InkPi")
+        brand.setObjectName("brandAccent")
+        brand.setFont(app_font(16, QFont.Weight.Bold))
+        header_layout.addWidget(brand)
+
+        title = QLabel("EVALUATION RESULT")
+        title.setObjectName("pageTitle")
+        title.setFont(app_font(10, QFont.Weight.Bold))
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        self.btn_share = QPushButton("↗")
+        self.btn_share.setObjectName("headerIconButton")
+        self.btn_share.setFixedSize(22, 22)
+        self.btn_share.clicked.connect(self._on_speak)
+        header_layout.addWidget(self.btn_share)
+
+        self.btn_new = QPushButton("↓")
+        self.btn_new.setObjectName("headerIconButton")
+        self.btn_new.setFixedSize(22, 22)
+        self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
+        header_layout.addWidget(self.btn_new)
+        root.addWidget(header)
 
         top_row = QHBoxLayout()
+        top_row.setContentsMargins(0, 0, 0, 0)
         top_row.setSpacing(10)
 
         self.score_card = QFrame()
         self.score_card.setObjectName("scoreCard")
+        self.score_card.setFixedSize(150, 166)
         score_layout = QVBoxLayout(self.score_card)
-        score_layout.setContentsMargins(18, 16, 18, 16)
-        score_layout.setSpacing(8)
+        score_layout.setContentsMargins(14, 12, 14, 12)
+        score_layout.setSpacing(3)
 
-        title = QLabel("TOTAL")
-        title.setObjectName("miniLabel")
-        score_layout.addWidget(title)
+        total_label = QLabel("TOTAL")
+        total_label.setObjectName("miniLabel")
+        total_label.setFont(app_font(9, QFont.Weight.Bold))
+        score_layout.addWidget(total_label)
 
         self.total_score_label = QLabel("--")
         self.total_score_label.setObjectName("scoreNumber")
         self.total_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.total_score_label.setFont(app_font(44, QFont.Weight.Bold))
-        score_layout.addWidget(self.total_score_label)
+        self.total_score_label.setFont(app_font(48, QFont.Weight.Bold))
+        score_layout.addWidget(self.total_score_label, stretch=1)
 
         self.grade_label = QLabel("--")
         self.grade_label.setObjectName("scoreGrade")
         self.grade_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        score_layout.addWidget(self.grade_label)
+        self.grade_label.setFont(app_font(16, QFont.Weight.Bold))
+        self.grade_label.setFixedWidth(40)
+        score_layout.addWidget(self.grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.feedback_short = QLabel("等待评测")
         self.feedback_short.setObjectName("sectionSubtitle")
         self.feedback_short.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.feedback_short.setWordWrap(True)
-        self.feedback_short.setFont(app_font(10))
+        self.feedback_short.setFixedHeight(18)
+        self.feedback_short.setFont(app_font(9))
         score_layout.addWidget(self.feedback_short)
+        top_row.addWidget(self.score_card)
 
-        top_row.addWidget(self.score_card, stretch=4)
-
-        right_card = QFrame()
-        right_card.setObjectName("resultCard")
-        right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(14, 14, 14, 14)
-        right_layout.setSpacing(8)
-
-        self.result_title = QLabel("Evaluation Result")
-        self.result_title.setObjectName("sectionTitle")
-        self.result_title.setFont(app_font(13, QFont.Weight.Bold))
-        right_layout.addWidget(self.result_title)
-
-        self.meta_label = QLabel("识别字 / 时间 / 置信度")
-        self.meta_label.setObjectName("mutedLabel")
-        self.meta_label.setWordWrap(True)
-        self.meta_label.setFont(app_font(10))
-        right_layout.addWidget(self.meta_label)
+        metrics_panel = QFrame()
+        metrics_panel.setObjectName("metricPanel")
+        metrics_panel.setFixedHeight(166)
+        metrics_layout = QVBoxLayout(metrics_panel)
+        metrics_layout.setContentsMargins(12, 12, 12, 12)
+        metrics_layout.setSpacing(7)
 
         for key in ("structure", "stroke", "integrity", "stability"):
-            bar = DimensionBar(DIMENSION_LABELS[key])
-            self.dimension_bars[key] = bar
-            right_layout.addWidget(bar)
+            row = DimensionRow(DIMENSION_LABELS[key])
+            self.dimension_rows[key] = row
+            metrics_layout.addWidget(row)
 
-        top_row.addWidget(right_card, stretch=6)
+        top_row.addWidget(metrics_panel, stretch=1)
         root.addLayout(top_row)
 
-        self.summary_card = QFrame()
-        self.summary_card.setObjectName("softCard")
-        summary_layout = QVBoxLayout(self.summary_card)
-        summary_layout.setContentsMargins(14, 12, 14, 12)
-        summary_layout.setSpacing(6)
+        self.summary_label = QLabel("最强项 / 待提升项")
+        self.summary_label.setObjectName("sectionTitle")
+        self.summary_label.setFixedHeight(18)
+        self.summary_label.setFont(app_font(10, QFont.Weight.Bold))
+        root.addWidget(self.summary_label)
 
-        summary_title = QLabel("评价摘要")
-        summary_title.setObjectName("sectionTitle")
-        summary_layout.addWidget(summary_title)
-
-        self.dimension_summary = QLabel("新结果会显示最强项与待提升项。")
-        self.dimension_summary.setObjectName("sectionSubtitle")
-        self.dimension_summary.setWordWrap(True)
-        self.dimension_summary.setFont(app_font(10))
-        summary_layout.addWidget(self.dimension_summary)
-
-        self.feedback_label = QLabel("")
-        self.feedback_label.setObjectName("mutedLabel")
-        self.feedback_label.setWordWrap(True)
-        self.feedback_label.setFont(app_font(10))
-        summary_layout.addWidget(self.feedback_label)
-        root.addWidget(self.summary_card)
-
-        actions = QGridLayout()
-        actions.setHorizontalSpacing(10)
-        actions.setVerticalSpacing(8)
+        button_row = QHBoxLayout()
+        button_row.setContentsMargins(0, 0, 0, 0)
+        button_row.setSpacing(10)
 
         self.btn_history = QPushButton("查看历史")
-        self.btn_history.setObjectName("secondaryButton")
-        self.btn_history.setMinimumHeight(44)
+        self.btn_history.setObjectName("ghostButton")
+        self.btn_history.setFixedSize(128, 48)
+        self.btn_history.setFont(app_font(11, QFont.Weight.Bold))
         self.btn_history.clicked.connect(self.history_requested.emit)
-        actions.addWidget(self.btn_history, 0, 0)
+        button_row.addWidget(self.btn_history)
 
         self.btn_home = QPushButton("返回首页")
         self.btn_home.setObjectName("primaryButton")
-        self.btn_home.setMinimumHeight(44)
+        self.btn_home.setFixedSize(192, 48)
+        self.btn_home.setFont(app_font(11, QFont.Weight.Bold))
         self.btn_home.clicked.connect(self.back_requested.emit)
-        actions.addWidget(self.btn_home, 0, 1)
+        button_row.addWidget(self.btn_home)
+        root.addLayout(button_row)
 
-        self.btn_new = QPushButton("再次评测")
-        self.btn_new.setObjectName("secondaryButton")
-        self.btn_new.setMinimumHeight(40)
-        self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
-        actions.addWidget(self.btn_new, 1, 0)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.setSpacing(6)
 
-        self.btn_speak = QPushButton("语音播报")
-        self.btn_speak.setObjectName("ghostButton")
-        self.btn_speak.setMinimumHeight(40)
-        self.btn_speak.clicked.connect(self._on_speak)
-        actions.addWidget(self.btn_speak, 1, 1)
+        self.footer_left = QLabel("Evaluation ID: --")
+        self.footer_left.setObjectName("miniLabel")
+        self.footer_left.setFont(app_font(8, QFont.Weight.Bold))
+        footer.addWidget(self.footer_left)
 
-        root.addLayout(actions)
+        footer.addStretch()
+
+        footer_right = QLabel("VERIFIED MASTER SCALE")
+        footer_right.setObjectName("miniLabel")
+        footer_right.setFont(app_font(8, QFont.Weight.Bold))
+        footer.addWidget(footer_right)
+        root.addLayout(footer)
 
     def set_result(self, result: EvaluationResult) -> None:
         self.result = result
@@ -197,33 +209,46 @@ class ResultView(QWidget):
 
         result = self.result
         self.total_score_label.setText(str(result.total_score))
-        self.grade_label.setText(result.get_grade())
-        self.result_title.setText(result.character_name or "未识别")
-        self.meta_label.setText(
-            f"{result.timestamp.strftime('%Y-%m-%d %H:%M')}  |  OCR {round((result.ocr_confidence or 0.0) * 100)}%"
-        )
-        self.feedback_short.setText(result.feedback[:18] + ("..." if len(result.feedback) > 18 else ""))
-        self.feedback_label.setText(result.feedback)
+        self.grade_label.setText(self._display_grade(result))
+
+        self.feedback_short.setText(self._short_tip(result))
 
         dimension_items = {item["key"]: item["score"] for item in result.get_dimension_items()}
-        for key, bar in self.dimension_bars.items():
-            bar.set_score(dimension_items.get(key))
+        for key, row in self.dimension_rows.items():
+            row.set_score(dimension_items.get(key))
 
         summary = result.get_dimension_summary()
         if summary:
-            self.dimension_summary.setText(
-                f"最强项：{summary['best']['label']} {summary['best']['score']}  |  "
-                f"待提升：{summary['weakest']['label']} {summary['weakest']['score']}"
+            self.summary_label.setText(
+                f"最强项 {summary['best']['label']} {summary['best']['score']} · 待提升 {summary['weakest']['label']} {summary['weakest']['score']}"
             )
         else:
-            self.dimension_summary.setText("老记录暂无四维评分。")
+            self.summary_label.setText("当前记录暂无四维评分")
 
+        self.footer_left.setText(f"Evaluation ID: {result.id or '--'}")
         led_service.show_score(result.total_score)
+
+    def _display_grade(self, result: EvaluationResult) -> str:
+        mapping = {"good": "A", "medium": "B", "bad": "C"}
+        return mapping.get(result.quality_level, result.get_grade())
+
+    def _clip(self, text: str, limit: int) -> str:
+        if len(text) <= limit:
+            return text
+        return text[: limit - 1] + "…"
+
+    def _short_tip(self, result: EvaluationResult) -> str:
+        default_tip = {
+            "good": "书写流畅，结构端正",
+            "medium": "整体成型，仍可提升",
+            "bad": "基础偏弱，建议重练",
+        }
+        tip = default_tip.get(result.quality_level, "评测已完成")
+        return self._clip(tip, 12)
 
     def _on_speak(self) -> None:
         if self.result is not None:
             speech_service.speak_score(self.result.total_score, self.result.feedback)
 
     def set_compact_mode(self, compact: bool) -> None:
-        self.compact_mode = compact
-        self.total_score_label.setFont(app_font(40 if compact else 44, QFont.Weight.Bold))
+        del compact

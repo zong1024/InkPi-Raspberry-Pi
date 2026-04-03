@@ -9,13 +9,13 @@ from typing import Any, Optional
 
 
 QUALITY_LABELS = {
-    "good": "好",
-    "medium": "中",
-    "bad": "坏",
+    "good": "甲",
+    "medium": "乙",
+    "bad": "丙",
 }
 
 QUALITY_COLORS = {
-    "good": "#3F8451",
+    "good": "#B90F1F",
     "medium": "#AB6D2F",
     "bad": "#B34B3E",
 }

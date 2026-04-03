@@ -1,4 +1,4 @@
-"""Home view for the small-screen InkPi interface."""
+"""Home view tuned for a 480x320 touch screen."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtCore import QSize
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QStyle, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
@@ -17,7 +18,7 @@ from views.ui_theme import app_font
 
 
 class HomeView(QWidget):
-    """Touch-friendly landing page."""
+    """Landing page that closely follows the provided reference layout."""
 
     start_evaluation = pyqtSignal()
     view_history = pyqtSignal()
@@ -25,131 +26,135 @@ class HomeView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.compact_mode = False
         self.latest_result: EvaluationResult | None = None
         self._init_ui()
         self.refresh()
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(8)
 
-        hero = QFrame()
-        hero.setObjectName("heroCard")
-        hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(6, 6, 6, 4)
-        hero_layout.setSpacing(8)
+        header = QFrame()
+        header.setObjectName("pageHeader")
+        header.setFixedHeight(52)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(14, 10, 14, 10)
+        header_layout.setSpacing(8)
 
         brand = QLabel("InkPi")
-        brand.setObjectName("brandAccent")
-        brand.setFont(app_font(28, QFont.Weight.Bold))
-        hero_layout.addWidget(brand)
+        brand.setObjectName("brandTitle")
+        brand.setFont(app_font(20, QFont.Weight.Bold))
+        header_layout.addWidget(brand)
+        header_layout.addStretch()
 
-        subtitle = QLabel("THE MODERN CALLIGRAPHER")
-        subtitle.setObjectName("miniLabel")
-        hero_layout.addWidget(subtitle)
+        self.btn_refresh = self._build_icon_button(QStyle.StandardPixmap.SP_BrowserReload)
+        self.btn_refresh.clicked.connect(self.refresh)
+        header_layout.addWidget(self.btn_refresh)
 
-        self.btn_start = QPushButton("开始评测   ->")
+        self.btn_settings = self._build_icon_button(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+        self.btn_settings.setEnabled(False)
+        header_layout.addWidget(self.btn_settings)
+        root.addWidget(header)
+
+        hero = QWidget()
+        hero.setFixedHeight(104)
+        hero_layout = QHBoxLayout(hero)
+        hero_layout.setContentsMargins(4, 4, 4, 4)
+        hero_layout.setSpacing(10)
+
+        brand_block = QVBoxLayout()
+        brand_block.setContentsMargins(0, 0, 0, 0)
+        brand_block.setSpacing(0)
+        brand_block.addStretch()
+
+        hero_logo = QLabel("InkPi")
+        hero_logo.setObjectName("brandAccent")
+        hero_logo.setFont(app_font(32, QFont.Weight.Bold))
+        brand_block.addWidget(hero_logo)
+
+        hero_subtitle = QLabel("THE MODERN CALLIGRAPHER")
+        hero_subtitle.setObjectName("miniLabel")
+        hero_subtitle.setFont(app_font(9, QFont.Weight.Bold))
+        brand_block.addWidget(hero_subtitle)
+        brand_block.addStretch()
+        hero_layout.addLayout(brand_block, stretch=3)
+
+        self.btn_start = QPushButton("开始评测        →")
         self.btn_start.setObjectName("primaryButton")
-        self.btn_start.setMinimumHeight(54)
+        self.btn_start.setFixedSize(206, 54)
+        self.btn_start.setFont(app_font(14, QFont.Weight.Bold))
         self.btn_start.clicked.connect(self.start_evaluation.emit)
-        hero_layout.addWidget(self.btn_start)
-
+        hero_layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
         root.addWidget(hero)
 
-        action_grid = QGridLayout()
-        action_grid.setHorizontalSpacing(10)
-        action_grid.setVerticalSpacing(10)
+        action_row = QHBoxLayout()
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(10)
 
-        self.btn_recent = QPushButton("最近结果")
-        self.btn_recent.setObjectName("secondaryButton")
-        self.btn_recent.setMinimumHeight(48)
-        self.btn_recent.clicked.connect(self._open_latest)
-        action_grid.addWidget(self.btn_recent, 0, 0)
+        self.btn_studio = QPushButton("笔")
+        self.btn_studio.setObjectName("buttonCard")
+        self.btn_studio.setFixedSize(54, 54)
+        self.btn_studio.setFont(app_font(18, QFont.Weight.Bold))
+        self.btn_studio.clicked.connect(self.start_evaluation.emit)
+        action_row.addWidget(self.btn_studio)
 
         self.btn_history = QPushButton("历史记录")
-        self.btn_history.setObjectName("secondaryButton")
-        self.btn_history.setMinimumHeight(48)
+        self.btn_history.setObjectName("buttonCard")
+        self.btn_history.setFixedSize(118, 54)
+        self.btn_history.setFont(app_font(11, QFont.Weight.Bold))
         self.btn_history.clicked.connect(self.view_history.emit)
-        action_grid.addWidget(self.btn_history, 0, 1)
+        action_row.addWidget(self.btn_history)
 
-        self.btn_settings = QPushButton("设置")
-        self.btn_settings.setObjectName("secondaryButton")
-        self.btn_settings.setMinimumHeight(48)
-        self.btn_settings.setEnabled(False)
-        action_grid.addWidget(self.btn_settings, 1, 0)
+        self.btn_settings_tile = QPushButton("设置")
+        self.btn_settings_tile.setObjectName("buttonCard")
+        self.btn_settings_tile.setFixedSize(72, 54)
+        self.btn_settings_tile.setFont(app_font(11, QFont.Weight.Bold))
+        self.btn_settings_tile.setEnabled(False)
+        action_row.addWidget(self.btn_settings_tile)
 
-        self.quick_eval = QPushButton("+")
-        self.quick_eval.setObjectName("circleButton")
-        self.quick_eval.setFixedSize(56, 56)
-        self.quick_eval.clicked.connect(self.start_evaluation.emit)
-        action_grid.addWidget(self.quick_eval, 1, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        self.btn_plus = QPushButton("+")
+        self.btn_plus.setObjectName("floatingButton")
+        self.btn_plus.setFixedSize(54, 54)
+        self.btn_plus.clicked.connect(self._open_latest_or_start)
+        action_row.addWidget(self.btn_plus)
+        root.addLayout(action_row)
 
-        root.addLayout(action_grid)
+        self.latest_hint = QLabel("")
+        self.latest_hint.setObjectName("miniLabel")
+        self.latest_hint.setFixedHeight(16)
+        self.latest_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        root.addWidget(self.latest_hint)
 
-        self.recent_card = QFrame()
-        self.recent_card.setObjectName("softCard")
-        recent_layout = QHBoxLayout(self.recent_card)
-        recent_layout.setContentsMargins(14, 12, 14, 12)
-        recent_layout.setSpacing(12)
-
-        self.latest_score = QLabel("--")
-        self.latest_score.setObjectName("scoreNumber")
-        self.latest_score.setFont(app_font(34, QFont.Weight.Bold))
-        recent_layout.addWidget(self.latest_score)
-
-        detail_layout = QVBoxLayout()
-        detail_layout.setSpacing(4)
-
-        self.latest_char = QLabel("暂无评测")
-        self.latest_char.setObjectName("sectionTitle")
-        self.latest_char.setFont(app_font(14, QFont.Weight.Bold))
-        detail_layout.addWidget(self.latest_char)
-
-        self.latest_meta = QLabel("完成一次评测后，这里会显示识别字、等级和时间。")
-        self.latest_meta.setObjectName("sectionSubtitle")
-        self.latest_meta.setWordWrap(True)
-        self.latest_meta.setFont(app_font(10))
-        detail_layout.addWidget(self.latest_meta)
-
-        self.latest_feedback = QLabel("轻量模式，适合 3.5 寸触摸屏快速操作。")
-        self.latest_feedback.setObjectName("mutedLabel")
-        self.latest_feedback.setWordWrap(True)
-        self.latest_feedback.setFont(app_font(9))
-        detail_layout.addWidget(self.latest_feedback)
-
-        recent_layout.addLayout(detail_layout, stretch=1)
-        root.addWidget(self.recent_card)
         root.addStretch()
+
+    def _build_icon_button(self, icon_type: QStyle.StandardPixmap) -> QPushButton:
+        button = QPushButton("")
+        button.setObjectName("headerIconButton")
+        button.setFixedSize(24, 24)
+        button.setIcon(self.style().standardIcon(icon_type))
+        button.setIconSize(QSize(14, 14))
+        return button
 
     def refresh(self) -> None:
         recent_records = database_service.get_recent(1)
         self.latest_result = recent_records[0] if recent_records else None
 
         if self.latest_result is None:
-            self.latest_score.setText("--")
-            self.latest_char.setText("暂无评测")
-            self.latest_meta.setText("完成一次评测后，这里会显示识别字、等级和时间。")
-            self.latest_feedback.setText("点击“开始评测”进入拍照 / 上传流程。")
-            self.btn_recent.setEnabled(False)
+            self.latest_hint.setText("本地 480x320 小屏模式已开启")
             return
 
         result = self.latest_result
-        self.latest_score.setText(str(result.total_score))
-        self.latest_char.setText(result.character_name or "未识别")
-        self.latest_meta.setText(
-            f"{result.get_grade()} 级  |  {result.timestamp.strftime('%m-%d %H:%M')}"
+        char_text = result.character_name or "未识别"
+        self.latest_hint.setText(
+            f"最近一次：{char_text} · {result.total_score} 分 · {result.timestamp.strftime('%m-%d %H:%M')}"
         )
-        self.latest_feedback.setText(result.feedback[:44] + ("..." if len(result.feedback) > 44 else ""))
-        self.btn_recent.setEnabled(True)
 
-    def _open_latest(self) -> None:
+    def _open_latest_or_start(self) -> None:
         if self.latest_result is not None:
             self.recent_selected.emit(self.latest_result)
+            return
+        self.start_evaluation.emit()
 
     def set_compact_mode(self, compact: bool) -> None:
-        self.compact_mode = compact
-        self.btn_start.setMinimumHeight(50 if compact else 54)
-        for button in (self.btn_recent, self.btn_history, self.btn_settings):
-            button.setMinimumHeight(44 if compact else 48)
+        del compact

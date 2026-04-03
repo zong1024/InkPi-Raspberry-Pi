@@ -15,6 +15,8 @@ from config.settings import (
     HARDWARE_CONFIG,
     CLOUD_CONFIG,
     DEV_CONFIG,
+    DESKTOP_SIM_CONFIG,
+    DESKTOP_SIM_MODE,
     IS_RASPBERRY_PI,
     # 兼容配置（main.py 需要的）
     UI_CONFIG,
@@ -46,6 +48,8 @@ __all__ = [
     "HARDWARE_CONFIG",
     "CLOUD_CONFIG",
     "DEV_CONFIG",
+    "DESKTOP_SIM_CONFIG",
+    "DESKTOP_SIM_MODE",
     "IS_RASPBERRY_PI",
     # 兼容配置
     "UI_CONFIG",

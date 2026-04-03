@@ -17,7 +17,7 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import CAMERA_CONFIG, IMAGE_CONFIG, IS_RASPBERRY_PI
+from config import CAMERA_CONFIG, DESKTOP_SIM_CONFIG, DESKTOP_SIM_MODE, IMAGE_CONFIG, IS_RASPBERRY_PI
 
 
 @contextmanager
@@ -182,6 +182,91 @@ class _Picamera2Capture:
         return 0.0
 
 
+class _SimulatedCapture:
+    """Simple desktop simulator camera source for local UI debugging."""
+
+    def __init__(self, config: dict, logger: logging.Logger):
+        self.logger = logger
+        self.config = config
+        self._width = int(config.get("preview_width", 640))
+        self._height = int(config.get("preview_height", 480))
+        self._fps = max(1, int(DESKTOP_SIM_CONFIG.get("camera_fps", 15)))
+        self._opened = True
+        source = str(DESKTOP_SIM_CONFIG.get("camera_source", "") or "").strip()
+        self._source_path = Path(source).expanduser() if source else None
+        self._cached_frame: np.ndarray | None = None
+
+    def isOpened(self):
+        return self._opened
+
+    def read(self):
+        if not self._opened:
+            return False, None
+        frame = self._load_or_generate_frame()
+        return True, frame.copy()
+
+    def release(self):
+        self._opened = False
+
+    def set(self, prop_id, value):
+        value = int(value)
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH and value > 0:
+            self._width = value
+            self._cached_frame = None
+            return True
+        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT and value > 0:
+            self._height = value
+            self._cached_frame = None
+            return True
+        return True
+
+    def get(self, prop_id):
+        if prop_id == cv2.CAP_PROP_FRAME_WIDTH:
+            return float(self._width)
+        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT:
+            return float(self._height)
+        if prop_id == cv2.CAP_PROP_FPS:
+            return float(self._fps)
+        return 0.0
+
+    def _load_or_generate_frame(self) -> np.ndarray:
+        if self._cached_frame is not None:
+            return self._cached_frame
+
+        if self._source_path and self._source_path.exists():
+            frame = cv2.imread(str(self._source_path))
+            if frame is not None:
+                self._cached_frame = cv2.resize(frame, (self._width, self._height), interpolation=cv2.INTER_AREA)
+                return self._cached_frame
+
+        canvas = np.full((self._height, self._width, 3), (243, 239, 232), dtype=np.uint8)
+        noise = np.random.default_rng(7).normal(0, 6, canvas.shape).astype(np.int16)
+        canvas = np.clip(canvas.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+        cv2.rectangle(canvas, (28, 20), (self._width - 28, self._height - 56), (231, 226, 219), -1)
+        cv2.rectangle(canvas, (28, 20), (self._width - 28, self._height - 56), (208, 201, 191), 2)
+
+        center_x = self._width // 2
+        center_y = self._height // 2
+        stroke_color = (72, 72, 82)
+        cv2.line(canvas, (center_x - 30, center_y - 54), (center_x - 6, center_y + 54), stroke_color, 11)
+        cv2.line(canvas, (center_x + 18, center_y - 54), (center_x - 10, center_y + 52), stroke_color, 10)
+        cv2.line(canvas, (center_x - 52, center_y - 6), (center_x + 58, center_y - 6), stroke_color, 10)
+        cv2.line(canvas, (center_x - 44, center_y + 34), (center_x + 38, center_y + 34), stroke_color, 9)
+        cv2.ellipse(canvas, (center_x + 44, center_y + 50), (18, 10), 10, 0, 300, stroke_color, 8)
+
+        cv2.putText(
+            canvas,
+            f"SIM {DESKTOP_SIM_CONFIG.get('default_character', 'Y')}",
+            (32, self._height - 18),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (110, 104, 96),
+            1,
+        )
+        self._cached_frame = canvas
+        return self._cached_frame
+
+
 class CameraService:
     """摄像头服务"""
     
@@ -244,6 +329,10 @@ class CameraService:
 
     def _create_capture(self, index: int, backend) -> cv2.VideoCapture:
         """根据后端创建 VideoCapture，并在需要时回退到默认实现。"""
+        if DESKTOP_SIM_MODE:
+            self.logger.info("Desktop simulation mode enabled; using simulated camera source.")
+            return _SimulatedCapture(self.config, self.logger)
+
         if backend == "picamera2":
             try:
                 return _Picamera2Capture(index, self.config, self.logger)

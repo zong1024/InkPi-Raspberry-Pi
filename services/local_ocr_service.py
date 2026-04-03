@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 import requests
 
-from config import OCR_CONFIG
+from config import DESKTOP_SIM_CONFIG, DESKTOP_SIM_MODE, OCR_CONFIG
 
 
 @dataclass
@@ -80,7 +80,7 @@ class LocalOcrService:
 
     @property
     def available(self) -> bool:
-        return (self._available and self._ocr is not None) or self.remote_available
+        return (self._available and self._ocr is not None) or self.remote_available or DESKTOP_SIM_MODE
 
     @property
     def remote_available(self) -> bool:
@@ -95,7 +95,22 @@ class LocalOcrService:
         if self.remote_available:
             return self._recognize_remote(image)
 
+        if DESKTOP_SIM_MODE:
+            return self._recognize_simulated(image)
+
         return None
+
+    def _recognize_simulated(self, image: np.ndarray) -> Optional[OcrRecognition]:
+        """Return a stable simulated OCR result for desktop UI debugging."""
+        default_character = str(DESKTOP_SIM_CONFIG.get("default_character", "永")).strip() or "永"
+        confidence = 0.92
+        height, width = image.shape[:2]
+        return OcrRecognition(
+            character=default_character[0],
+            confidence=confidence,
+            source="desktop-sim",
+            bbox=(0.15 * width, 0.15 * height, 0.85 * width, 0.85 * height),
+        )
 
     def _recognize_local(self, image: np.ndarray) -> Optional[OcrRecognition]:
         """Run the local OCR engine."""

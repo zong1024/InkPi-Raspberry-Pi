@@ -41,6 +41,7 @@ for key, path in PATHS.items():
 
 
 IS_RASPBERRY_PI = _detect_raspberry_pi()
+DESKTOP_SIM_MODE = os.environ.get("INKPI_DESKTOP_SIM", "false").lower() in {"1", "true", "yes", "on"}
 
 
 # =========================
@@ -148,6 +149,12 @@ EVALUATION_CONFIG = {
         "threshold_method": "otsu",  # otsu, adaptive, fixed
     },
 }
+
+if DESKTOP_SIM_MODE:
+    APP_CONFIG["window"]["width"] = 480
+    APP_CONFIG["window"]["height"] = 320
+    APP_CONFIG["window"]["fullscreen"] = False
+    APP_CONFIG["debug"] = True
 
 
 # =========================
@@ -258,6 +265,13 @@ DEV_CONFIG = {
     },
 }
 
+DESKTOP_SIM_CONFIG = {
+    "enabled": DESKTOP_SIM_MODE,
+    "default_character": os.environ.get("INKPI_SIM_DEFAULT_CHAR", "永"),
+    "camera_source": os.environ.get("INKPI_SIM_CAMERA_SOURCE", "").strip(),
+    "camera_fps": int(os.environ.get("INKPI_SIM_CAMERA_FPS", "15")),
+}
+
 
 # =========================
 # UI 配置（兼容 PyInstaller）
@@ -326,7 +340,7 @@ FEEDBACK_TEMPLATES = EVALUATION_CONFIG["feedback_templates"]
 # =========================
 # 数据库配置
 # =========================
-DB_PATH = DATA_DIR / "inkpi.db"
+DB_PATH = DATA_DIR / ("inkpi-sim.db" if DESKTOP_SIM_MODE else "inkpi.db")
 DB_CONFIG = {
     "table_name": "evaluation_records",
     "max_records": 1000,
