@@ -29,15 +29,22 @@ if [ -d "${VENV_DIR}" ]; then
     source "${VENV_DIR}/bin/activate"
 fi
 
-if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
-    # shellcheck disable=SC1091
-    source "${PROJECT_DIR}/.inkpi/cloud.env"
-fi
+load_env_file() {
+    local env_file="$1"
+    if [ ! -f "${env_file}" ]; then
+        return 0
+    fi
 
-if [ -f "${PROJECT_DIR}/.inkpi/server.env" ]; then
-    # shellcheck disable=SC1091
-    source "${PROJECT_DIR}/.inkpi/server.env"
-fi
+    # Export simple KEY=VALUE pairs from local env files so child processes
+    # inherit runtime settings such as remote OCR and cloud sync endpoints.
+    set -a
+    # shellcheck disable=SC1090
+    source "${env_file}"
+    set +a
+}
+
+load_env_file "${PROJECT_DIR}/.inkpi/cloud.env"
+load_env_file "${PROJECT_DIR}/.inkpi/server.env"
 
 if command -v python >/dev/null 2>&1; then
     qt_plugin_dir="$(python - <<'PY'
