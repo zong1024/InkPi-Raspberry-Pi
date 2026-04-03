@@ -1,11 +1,10 @@
-"""Local OCR service backed by the official PaddleOCR recognizer."""
+"""Local OCR service backed by PaddleOCR with an optional remote fallback."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
 import os
-from pathlib import Path
 import threading
 from typing import Optional, Sequence
 
@@ -13,7 +12,7 @@ import cv2
 import numpy as np
 import requests
 
-from config import DESKTOP_SIM_CONFIG, DESKTOP_SIM_MODE, OCR_CONFIG
+from config import OCR_CONFIG
 
 
 @dataclass
@@ -27,7 +26,7 @@ class OcrRecognition:
 
 
 class LocalOcrService:
-    """Run a local official OCR model and keep only the most likely single character."""
+    """Run local OCR first and fall back to the cloud OCR endpoint when configured."""
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -80,7 +79,7 @@ class LocalOcrService:
 
     @property
     def available(self) -> bool:
-        return (self._available and self._ocr is not None) or self.remote_available or DESKTOP_SIM_MODE
+        return (self._available and self._ocr is not None) or self.remote_available
 
     @property
     def remote_available(self) -> bool:
@@ -95,26 +94,9 @@ class LocalOcrService:
         if self.remote_available:
             return self._recognize_remote(image)
 
-        if DESKTOP_SIM_MODE:
-            return self._recognize_simulated(image)
-
         return None
 
-    def _recognize_simulated(self, image: np.ndarray) -> Optional[OcrRecognition]:
-        """Return a stable simulated OCR result for desktop UI debugging."""
-        default_character = str(DESKTOP_SIM_CONFIG.get("default_character", "永")).strip() or "永"
-        confidence = 0.92
-        height, width = image.shape[:2]
-        return OcrRecognition(
-            character=default_character[0],
-            confidence=confidence,
-            source="desktop-sim",
-            bbox=(0.15 * width, 0.15 * height, 0.85 * width, 0.85 * height),
-        )
-
     def _recognize_local(self, image: np.ndarray) -> Optional[OcrRecognition]:
-        """Run the local OCR engine."""
-
         if not (self._available and self._ocr is not None):
             return None
 
@@ -143,8 +125,6 @@ class LocalOcrService:
         )
 
     def _recognize_remote(self, image: np.ndarray) -> Optional[OcrRecognition]:
-        """Fallback to the server-side OCR endpoint for desktop testing environments."""
-
         try:
             ok, encoded = cv2.imencode(".jpg", image)
             if not ok:
@@ -161,6 +141,7 @@ class LocalOcrService:
             payload = response.json()
             if not payload.get("ok"):
                 return None
+
             item = payload.get("item") or {}
             character = str(item.get("character", "")).strip()
             if not character:
@@ -180,7 +161,7 @@ class LocalOcrService:
         try:
             with self._infer_lock:
                 self._init_ocr()
-                if not self.available:
+                if not ((self._available and self._ocr is not None) or self.remote_available):
                     return None
                 return self._run_ocr(prepared)
         except Exception as retry_exc:  # noqa: BLE001
@@ -205,12 +186,12 @@ class LocalOcrService:
         if float(np.mean(normalized)) < 127:
             normalized = 255 - normalized
 
-        h, w = normalized.shape[:2]
-        canvas_size = max(320, h, w)
+        height, width = normalized.shape[:2]
+        canvas_size = max(320, height, width)
         canvas = np.full((canvas_size, canvas_size), 255, dtype=np.uint8)
-        y = (canvas_size - h) // 2
-        x = (canvas_size - w) // 2
-        canvas[y : y + h, x : x + w] = normalized
+        top = (canvas_size - height) // 2
+        left = (canvas_size - width) // 2
+        canvas[top : top + height, left : left + width] = normalized
         canvas = cv2.resize(canvas, (max(320, canvas_size), max(320, canvas_size)), interpolation=cv2.INTER_CUBIC)
         return cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
 
@@ -221,7 +202,6 @@ class LocalOcrService:
         height, width = int(shape[0]), int(shape[1])
         parsed: list[dict] = []
 
-        # PaddleOCR 3.x payload
         if result and not (isinstance(result[0], list) and result[0] and isinstance(result[0][0], list)):
             for page in result:
                 payload = getattr(page, "json", None)
@@ -243,7 +223,6 @@ class LocalOcrService:
                         parsed.append(item)
             return parsed
 
-        # PaddleOCR 2.x payload
         for line in result:
             if not isinstance(line, list):
                 continue
@@ -257,14 +236,7 @@ class LocalOcrService:
                     parsed.append(candidate)
         return parsed
 
-    def _build_candidate(
-        self,
-        text,
-        score,
-        poly,
-        width: int,
-        height: int,
-    ) -> dict | None:
+    def _build_candidate(self, text, score, poly, width: int, height: int) -> dict | None:
         character = self._normalize_text(text)
         if not character:
             return None

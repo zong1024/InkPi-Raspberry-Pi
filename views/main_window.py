@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
-from config import DESKTOP_SIM_MODE, IS_RASPBERRY_PI, UI_CONFIG
+from config import UI_CONFIG
 from models.evaluation_result import EvaluationResult
 from views.camera_view import CameraView
 from views.history_view import HistoryView
@@ -25,8 +25,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.logger = logging.getLogger(__name__)
         self.current_result: EvaluationResult | None = None
-        self.compact_mode = False
-
         self._init_ui()
         self._connect_signals()
         self.show_home()
@@ -35,14 +33,11 @@ class MainWindow(QMainWindow):
         self.setObjectName("mainWindow")
         self.setWindowTitle(UI_CONFIG["window_title"])
 
-        viewport_width = 480 if IS_RASPBERRY_PI else UI_CONFIG["window_width"]
-        viewport_height = 320 if IS_RASPBERRY_PI else UI_CONFIG["window_height"]
+        viewport_width = UI_CONFIG["window_width"]
+        viewport_height = UI_CONFIG["window_height"]
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-
-        if DESKTOP_SIM_MODE and not IS_RASPBERRY_PI:
-            central_widget.setFixedSize(viewport_width, viewport_height)
 
         root_layout = QVBoxLayout(central_widget)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -71,12 +66,8 @@ class MainWindow(QMainWindow):
         self.bottom_nav = self._create_bottom_nav()
         root_layout.addWidget(self.bottom_nav)
 
-        if DESKTOP_SIM_MODE and not IS_RASPBERRY_PI:
-            self.adjustSize()
-            self.setFixedSize(self.sizeHint())
-        else:
-            self.resize(viewport_width, viewport_height)
-            self.setMinimumSize(viewport_width, viewport_height)
+        self.resize(viewport_width, viewport_height)
+        self.setMinimumSize(viewport_width, viewport_height)
 
     def _create_bottom_nav(self) -> QFrame:
         bar = QFrame()

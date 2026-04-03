@@ -1,28 +1,28 @@
-"""
-InkPi 书法评测系统 - 摄像头服务
+"""Camera service used by both the Qt UI and the local WebUI."""
 
-跨平台摄像头支持：
-- Windows: DirectShow (CAP_DSHOW)
-- Linux/RPi: v4l2 (CAP_V4L2)
-"""
-import cv2
-import numpy as np
-from typing import Optional, Tuple, List
+from __future__ import annotations
+
 from contextlib import contextmanager
 import logging
 import os
-import threading
 from pathlib import Path
 import sys
+import threading
 import time
+from typing import List, Optional
+
+import cv2
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import CAMERA_CONFIG, DESKTOP_SIM_CONFIG, DESKTOP_SIM_MODE, IMAGE_CONFIG, IS_RASPBERRY_PI
+
+from config import CAMERA_CONFIG, IMAGE_CONFIG, IS_RASPBERRY_PI
 
 
 @contextmanager
 def _suppress_opencv_videoio_logs():
     """Temporarily silence noisy native OpenCV video I/O warnings."""
+
     previous_level = None
     try:
         previous_level = cv2.utils.logging.getLogLevel()
@@ -41,7 +41,7 @@ def _suppress_opencv_videoio_logs():
 
 
 class _Picamera2Capture:
-    """对 Picamera2 做一层 VideoCapture 风格适配。"""
+    """Adapt Picamera2 to a VideoCapture-like interface."""
 
     _frame_rate_controls_supported = None
     _unsupported_controls_logged = False
@@ -53,7 +53,6 @@ class _Picamera2Capture:
         from picamera2 import Picamera2
 
         self.logger = logger
-        self.config = config
         self._width = int(config.get("preview_width", 640))
         self._height = int(config.get("preview_height", 480))
         self._fps = int(config.get("fps", 30))
@@ -64,16 +63,18 @@ class _Picamera2Capture:
             self.picam = Picamera2(camera_num=camera_index)
         except TypeError:
             self.picam = Picamera2()
+
         try:
             self._configure(self._width, self._height)
         except Exception:
             self.release()
             raise
 
-    def _configure(self, width: int, height: int):
+    def _configure(self, width: int, height: int) -> None:
         controls = {}
         if self._fps > 0 and self.__class__._frame_rate_controls_supported is not False:
             controls = {"FrameRate": self._fps}
+
         camera_config = self.picam.create_preview_configuration(
             main={"size": (int(width), int(height)), "format": "RGB888"},
             controls=controls,
@@ -107,6 +108,7 @@ class _Picamera2Capture:
                 self.picam.start()
             else:
                 raise
+
         self._opened = True
         time.sleep(0.2)
 
@@ -121,28 +123,24 @@ class _Picamera2Capture:
             frame = self.picam.capture_array()
             if frame is None:
                 return False, None
-
             if frame.ndim == 3 and frame.shape[2] == 4:
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
             elif frame.ndim == 3:
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
             return True, frame
-        except Exception as e:
-            self.logger.error(f"Picamera2 读取帧失败: {e}")
+        except Exception as exc:  # noqa: BLE001
+            self.logger.error("Picamera2 frame read failed: %s", exc)
             return False, None
 
     def release(self):
         if self.picam is None:
             return
-
         if self._opened:
             try:
                 self.picam.stop()
             except Exception:
                 pass
             self._opened = False
-
         try:
             self.picam.close()
         except Exception:
@@ -153,22 +151,19 @@ class _Picamera2Capture:
     def set(self, prop_id, value):
         value = int(value)
         if prop_id == cv2.CAP_PROP_FRAME_WIDTH and value > 0:
-            if value == self._width:
-                return True
-            self._width = value
-            self._configure(self._width, self._height)
+            if value != self._width:
+                self._width = value
+                self._configure(self._width, self._height)
             return True
         if prop_id == cv2.CAP_PROP_FRAME_HEIGHT and value > 0:
-            if value == self._height:
-                return True
-            self._height = value
-            self._configure(self._width, self._height)
+            if value != self._height:
+                self._height = value
+                self._configure(self._width, self._height)
             return True
         if prop_id == cv2.CAP_PROP_FPS and value > 0:
-            if value == self._fps:
-                return True
-            self._fps = value
-            self._configure(self._width, self._height)
+            if value != self._fps:
+                self._fps = value
+                self._configure(self._width, self._height)
             return True
         return False
 
@@ -182,162 +177,56 @@ class _Picamera2Capture:
         return 0.0
 
 
-class _SimulatedCapture:
-    """Simple desktop simulator camera source for local UI debugging."""
-
-    def __init__(self, config: dict, logger: logging.Logger):
-        self.logger = logger
-        self.config = config
-        self._width = int(config.get("preview_width", 640))
-        self._height = int(config.get("preview_height", 480))
-        self._fps = max(1, int(DESKTOP_SIM_CONFIG.get("camera_fps", 15)))
-        self._opened = True
-        source = str(DESKTOP_SIM_CONFIG.get("camera_source", "") or "").strip()
-        self._source_path = Path(source).expanduser() if source else None
-        self._cached_frame: np.ndarray | None = None
-
-    def isOpened(self):
-        return self._opened
-
-    def read(self):
-        if not self._opened:
-            return False, None
-        frame = self._load_or_generate_frame()
-        return True, frame.copy()
-
-    def release(self):
-        self._opened = False
-
-    def set(self, prop_id, value):
-        value = int(value)
-        if prop_id == cv2.CAP_PROP_FRAME_WIDTH and value > 0:
-            self._width = value
-            self._cached_frame = None
-            return True
-        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT and value > 0:
-            self._height = value
-            self._cached_frame = None
-            return True
-        return True
-
-    def get(self, prop_id):
-        if prop_id == cv2.CAP_PROP_FRAME_WIDTH:
-            return float(self._width)
-        if prop_id == cv2.CAP_PROP_FRAME_HEIGHT:
-            return float(self._height)
-        if prop_id == cv2.CAP_PROP_FPS:
-            return float(self._fps)
-        return 0.0
-
-    def _load_or_generate_frame(self) -> np.ndarray:
-        if self._cached_frame is not None:
-            return self._cached_frame
-
-        if self._source_path and self._source_path.exists():
-            frame = cv2.imread(str(self._source_path))
-            if frame is not None:
-                self._cached_frame = cv2.resize(frame, (self._width, self._height), interpolation=cv2.INTER_AREA)
-                return self._cached_frame
-
-        canvas = np.full((self._height, self._width, 3), (243, 239, 232), dtype=np.uint8)
-        noise = np.random.default_rng(7).normal(0, 6, canvas.shape).astype(np.int16)
-        canvas = np.clip(canvas.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-        cv2.rectangle(canvas, (28, 20), (self._width - 28, self._height - 56), (231, 226, 219), -1)
-        cv2.rectangle(canvas, (28, 20), (self._width - 28, self._height - 56), (208, 201, 191), 2)
-
-        center_x = self._width // 2
-        center_y = self._height // 2
-        stroke_color = (72, 72, 82)
-        cv2.line(canvas, (center_x - 30, center_y - 54), (center_x - 6, center_y + 54), stroke_color, 11)
-        cv2.line(canvas, (center_x + 18, center_y - 54), (center_x - 10, center_y + 52), stroke_color, 10)
-        cv2.line(canvas, (center_x - 52, center_y - 6), (center_x + 58, center_y - 6), stroke_color, 10)
-        cv2.line(canvas, (center_x - 44, center_y + 34), (center_x + 38, center_y + 34), stroke_color, 9)
-        cv2.ellipse(canvas, (center_x + 44, center_y + 50), (18, 10), 10, 0, 300, stroke_color, 8)
-
-        cv2.putText(
-            canvas,
-            f"SIM {DESKTOP_SIM_CONFIG.get('default_character', 'Y')}",
-            (32, self._height - 18),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (110, 104, 96),
-            1,
-        )
-        self._cached_frame = canvas
-        return self._cached_frame
-
-
 class CameraService:
-    """摄像头服务"""
-    
-    def __init__(self):
+    """Shared camera access layer."""
+
+    def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self.config = CAMERA_CONFIG
-        
-        # 摄像头设备
-        self.camera: Optional[cv2.VideoCapture] = None
+        self.camera: Optional[object] = None
         self.is_opened = False
-        
-        # 预览线程控制
         self._preview_thread: Optional[threading.Thread] = None
         self._stop_preview = threading.Event()
         self._current_frame: Optional[np.ndarray] = None
         self._frame_lock = threading.Lock()
-        
-    def open(self, camera_index: int = None) -> bool:
-        """
-        打开摄像头
-        
-        Args:
-            camera_index: 摄像头索引，None 则使用配置中的默认值
-            
-        Returns:
-            是否成功打开
-        """
+
+    def open(self, camera_index: int | None = None) -> bool:
         if self.is_opened:
-            self.logger.warning("摄像头已经打开")
+            self.logger.warning("Camera is already open.")
             return True
-            
+
         index = camera_index if camera_index is not None else self.config.get(
             "camera_index",
-            self.config.get("device_index", 0)
+            self.config.get("device_index", 0),
         )
         backend_name = self.config.get("backend", "auto")
         backend = self._resolve_backend(backend_name)
-        
-        self.logger.info(f"正在打开摄像头: index={index}, backend={backend_name}")
-        
+        self.logger.info("Opening camera index=%s backend=%s", index, backend_name)
+
         try:
             self.camera = self._create_capture(index, backend)
-        except Exception as e:
-            self.logger.exception(f"Failed to create camera backend: {e}")
+        except Exception as exc:  # noqa: BLE001
+            self.logger.exception("Failed to create camera backend: %s", exc)
             self.camera = None
             self.is_opened = False
             return False
-        
-        if not self.camera.isOpened():
-            self.logger.error("无法打开摄像头")
+
+        if not self.camera or not self.camera.isOpened():
+            self.logger.error("Unable to open camera.")
             self.is_opened = False
             return False
-            
-        # 设置摄像头参数
+
         self._configure_camera()
-        
         self.is_opened = True
-        self.logger.info("摄像头已打开")
+        self.logger.info("Camera opened successfully.")
         return True
 
-    def _create_capture(self, index: int, backend) -> cv2.VideoCapture:
-        """根据后端创建 VideoCapture，并在需要时回退到默认实现。"""
-        if DESKTOP_SIM_MODE:
-            self.logger.info("Desktop simulation mode enabled; using simulated camera source.")
-            return _SimulatedCapture(self.config, self.logger)
-
+    def _create_capture(self, index: int, backend):
         if backend == "picamera2":
             try:
                 return _Picamera2Capture(index, self.config, self.logger)
-            except Exception as e:
-                self.logger.warning(f"Picamera2 backend failed, falling back to OpenCV: {e}")
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning("Picamera2 backend failed; falling back to OpenCV: %s", exc)
                 backend = getattr(cv2, "CAP_V4L2", cv2.CAP_ANY) if sys.platform.startswith("linux") else cv2.CAP_ANY
 
         if backend == cv2.CAP_ANY:
@@ -345,17 +234,16 @@ class CameraService:
                 return cv2.VideoCapture(index)
 
         with _suppress_opencv_videoio_logs():
-            cap = cv2.VideoCapture(index, backend)
-        if cap.isOpened():
-            return cap
+            capture = cv2.VideoCapture(index, backend)
+        if capture.isOpened():
+            return capture
 
-        self.logger.warning("指定后端打开失败，回退到 OpenCV 默认后端")
-        cap.release()
+        self.logger.warning("Configured backend failed; falling back to OpenCV default backend.")
+        capture.release()
         with _suppress_opencv_videoio_logs():
             return cv2.VideoCapture(index)
 
     def _resolve_backend(self, backend_name):
-        """将配置中的后端名称映射到 OpenCV 后端常量。"""
         if isinstance(backend_name, int):
             return backend_name
 
@@ -380,186 +268,123 @@ class CameraService:
             return getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
         if backend_name == "dshow":
             return getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
-
         return cv2.CAP_ANY
 
     def _picamera2_available(self) -> bool:
-        """检测 Picamera2 是否可用。"""
         try:
             os.environ.setdefault("LIBCAMERA_LOG_LEVELS", "*:ERROR")
             logging.getLogger("picamera2").setLevel(logging.WARNING)
             logging.getLogger("picamera2.picamera2").setLevel(logging.WARNING)
             from picamera2 import Picamera2  # noqa: F401
+
             return True
         except Exception:
             return False
-    
-    def _configure_camera(self):
-        """配置摄像头参数"""
-        # 预览分辨率
+
+    def _configure_camera(self) -> None:
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, IMAGE_CONFIG["preview_width"])
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, IMAGE_CONFIG["preview_height"])
         self.camera.set(cv2.CAP_PROP_FPS, self.config["fps"])
-        
-        # 获取实际配置
+
         actual_width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
         actual_height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
         actual_fps = self.camera.get(cv2.CAP_PROP_FPS)
-        
-        self.logger.debug(f"摄像头配置: {actual_width}x{actual_height} @ {actual_fps}fps")
-    
-    def close(self):
-        """关闭摄像头"""
+        self.logger.debug("Camera configured to %.0fx%.0f @ %.1ffps", actual_width, actual_height, actual_fps)
+
+    def close(self) -> None:
         self.stop_preview()
-        
         if self.camera:
             self.camera.release()
             self.camera = None
-            
         self.is_opened = False
-        self.logger.info("摄像头已关闭")
+        self.logger.info("Camera closed.")
 
-    def release(self):
-        """兼容旧接口。"""
+    def release(self) -> None:
         self.close()
-    
+
     def capture_frame(self) -> Optional[np.ndarray]:
-        """
-        捕获单帧图像
-        
-        Returns:
-            图像数组或 None
-        """
         if not self.is_opened or self.camera is None:
-            self.logger.error("摄像头未打开")
+            self.logger.error("Camera is not open.")
             return None
-            
-        ret, frame = self.camera.read()
-        
-        if not ret:
-            self.logger.error("捕获图像失败")
+
+        ok, frame = self.camera.read()
+        if not ok:
+            self.logger.error("Failed to capture frame.")
             return None
-            
         return frame
-    
+
     def capture_high_res(self) -> Optional[np.ndarray]:
-        """
-        捕获高分辨率图像
-        
-        Returns:
-            图像数组或 None
-        """
         if not self.is_opened or self.camera is None:
-            self.logger.error("摄像头未打开")
+            self.logger.error("Camera is not open.")
             return None
-            
-        # 临时切换到高分辨率
+
         original_width = self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)
         original_height = self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        
+
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, IMAGE_CONFIG["capture_width"])
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, IMAGE_CONFIG["capture_height"])
-        
-        # 等待摄像头稳定
-        import time
         time.sleep(0.2)
-        
-        # 捕获图像
-        ret, frame = self.camera.read()
-        
-        # 恢复原始分辨率
+        ok, frame = self.camera.read()
         self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, original_width)
         self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, original_height)
-        
-        if not ret:
-            self.logger.error("捕获高分辨率图像失败")
+
+        if not ok:
+            self.logger.error("Failed to capture high-resolution frame.")
             return None
-            
-        self.logger.info(f"捕获高分辨率图像: {frame.shape[1]}x{frame.shape[0]}")
+
+        self.logger.info("Captured image: %sx%s", frame.shape[1], frame.shape[0])
         return frame
-    
-    def start_preview(self, callback=None):
-        """
-        启动预览线程
-        
-        Args:
-            callback: 每帧回调函数，接收 frame 参数
-        """
+
+    def start_preview(self, callback=None) -> None:
         if self._preview_thread and self._preview_thread.is_alive():
-            self.logger.warning("预览已经在运行")
+            self.logger.warning("Preview is already running.")
             return
-            
-        if not self.is_opened:
-            if not self.open():
-                return
-                
+
+        if not self.is_opened and not self.open():
+            return
+
         self._stop_preview.clear()
-        self._preview_thread = threading.Thread(
-            target=self._preview_loop,
-            args=(callback,),
-            daemon=True
-        )
+        self._preview_thread = threading.Thread(target=self._preview_loop, args=(callback,), daemon=True)
         self._preview_thread.start()
-        self.logger.info("预览已启动")
-    
-    def stop_preview(self):
-        """停止预览线程"""
+        self.logger.info("Preview started.")
+
+    def stop_preview(self) -> None:
         if not self._preview_thread or not self._preview_thread.is_alive():
             return
-            
+
         self._stop_preview.set()
         self._preview_thread.join(timeout=2.0)
         self._preview_thread = None
-        self.logger.info("预览已停止")
-    
-    def _preview_loop(self, callback):
-        """
-        预览循环
-        
-        Args:
-            callback: 每帧回调函数
-        """
+        self.logger.info("Preview stopped.")
+
+    def _preview_loop(self, callback) -> None:
         while not self._stop_preview.is_set():
             if self.camera is None or not self.camera.isOpened():
                 break
-                
-            ret, frame = self.camera.read()
-            
-            if ret:
+
+            ok, frame = self.camera.read()
+            if ok:
                 with self._frame_lock:
                     self._current_frame = frame.copy()
-                    
                 if callback:
                     try:
                         callback(frame)
-                    except Exception as e:
-                        self.logger.error(f"预览回调错误: {e}")
+                    except Exception as exc:  # noqa: BLE001
+                        self.logger.error("Preview callback failed: %s", exc)
             else:
-                self.logger.warning("预览帧捕获失败")
-                
-        self.logger.debug("预览循环结束")
-    
+                self.logger.warning("Preview frame capture failed.")
+
+        self.logger.debug("Preview loop exited.")
+
     def get_current_frame(self) -> Optional[np.ndarray]:
-        """
-        获取当前帧（线程安全）
-        
-        Returns:
-            当前帧图像
-        """
         with self._frame_lock:
-            if self._current_frame is not None:
-                return self._current_frame.copy()
-            return None
-    
+            if self._current_frame is None:
+                return None
+            return self._current_frame.copy()
+
     @staticmethod
     def list_cameras() -> List[int]:
-        """
-        列出可用摄像头
-        
-        Returns:
-            可用摄像头索引列表
-        """
-        available = []
+        available: List[int] = []
         backend = cv2.CAP_ANY
 
         if IS_RASPBERRY_PI:
@@ -568,6 +393,7 @@ class CameraService:
                 logging.getLogger("picamera2").setLevel(logging.WARNING)
                 logging.getLogger("picamera2.picamera2").setLevel(logging.WARNING)
                 from picamera2 import Picamera2
+
                 camera_info = Picamera2.global_camera_info()
                 return list(range(len(camera_info)))
             except Exception:
@@ -577,35 +403,29 @@ class CameraService:
             backend = getattr(cv2, "CAP_DSHOW", cv2.CAP_ANY)
         elif sys.platform.startswith("linux"):
             backend = getattr(cv2, "CAP_V4L2", cv2.CAP_ANY)
-        
-        # 常见设备索引通常落在 0-4，避免无意义地探测过多设备。
-        for i in range(5):
+
+        for index in range(5):
             with _suppress_opencv_videoio_logs():
-                cap = cv2.VideoCapture(i, backend) if backend != cv2.CAP_ANY else cv2.VideoCapture(i)
-            if cap.isOpened():
-                available.append(i)
-                cap.release()
-                
+                capture = cv2.VideoCapture(index, backend) if backend != cv2.CAP_ANY else cv2.VideoCapture(index)
+            if capture.isOpened():
+                available.append(index)
+                capture.release()
         return available
 
     @property
     def available(self) -> bool:
-        """兼容旧测试逻辑，返回当前环境是否探测到可用摄像头。"""
         try:
             return bool(self.list_cameras())
         except Exception:
             return False
-    
+
     def __enter__(self):
-        """上下文管理器入口"""
         self.open()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """上下文管理器出口"""
         self.close()
         return False
 
 
-# 创建全局服务实例
 camera_service = CameraService()

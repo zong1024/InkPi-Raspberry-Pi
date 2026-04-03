@@ -1,14 +1,13 @@
-"""
-InkPi 配置设置
+"""Runtime settings for InkPi."""
 
-参考 DeepVision 的 Configuration 类设计
-"""
-from pathlib import Path
+from __future__ import annotations
+
 import os
+from pathlib import Path
 
 
 def _detect_raspberry_pi() -> bool:
-    """检测当前是否运行在树莓派环境。"""
+    """Return whether the current machine is a Raspberry Pi."""
     model_path = Path("/proc/device-tree/model")
     try:
         return model_path.exists() and "Raspberry Pi" in model_path.read_text(
@@ -18,9 +17,24 @@ def _detect_raspberry_pi() -> bool:
     except OSError:
         return False
 
-# =========================
-# 路径配置
-# =========================
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 PATHS = {
@@ -34,69 +48,44 @@ PATHS = {
     "screenshots_dir": PROJECT_ROOT / "screenshots",
 }
 
-# 确保必要的目录存在
 for key, path in PATHS.items():
     if key.endswith("_dir"):
         path.mkdir(parents=True, exist_ok=True)
 
 
 IS_RASPBERRY_PI = _detect_raspberry_pi()
-DESKTOP_SIM_MODE = os.environ.get("INKPI_DESKTOP_SIM", "false").lower() in {"1", "true", "yes", "on"}
 
 
-# =========================
-# 应用配置
-# =========================
 APP_CONFIG = {
     "app_name": "InkPi",
     "version": "2.0.0",
-    "debug": False,
-    "log_level": "INFO",
-    
-    # 窗口配置
+    "debug": _env_flag("INKPI_DEBUG", False),
+    "log_level": os.environ.get("INKPI_LOG_LEVEL", "INFO"),
     "window": {
-        "width": 800,
-        "height": 480,
-        "fullscreen": True,  # 树莓派默认全屏
+        "width": _env_int("INKPI_WINDOW_WIDTH", 800),
+        "height": _env_int("INKPI_WINDOW_HEIGHT", 480),
+        "fullscreen": _env_flag("INKPI_FULLSCREEN", IS_RASPBERRY_PI),
         "title": "InkPi 书法评测系统",
     },
-    
-    # 服务端配置
     "server": {
-        "host": "0.0.0.0",
-        "port": 5000,
+        "host": os.environ.get("INKPI_WEB_HOST", "0.0.0.0"),
+        "port": _env_int("INKPI_WEB_PORT", 5000),
     },
 }
 
 
-# =========================
-# 相机配置
-# =========================
 CAMERA_CONFIG = {
-    # 相机设备
     "device_index": 0,
-    "camera_index": 0,      # 兼容旧服务层命名
-    "backend": "auto",      # auto, picamera, opencv, ffmpeg
-    
-    # 预览分辨率
+    "camera_index": 0,
+    "backend": os.environ.get("INKPI_CAMERA_BACKEND", "auto"),
     "preview_width": 640,
     "preview_height": 480,
-    
-    # 捕获分辨率
     "capture_width": 1280,
     "capture_height": 960,
-    
-    # 帧率
-    "fps": 30,
-    
-    # 预览配置
-    "preview_duration": 3,  # 预览时间（秒）
-    
-    # 自动捕获
+    "fps": _env_int("INKPI_CAMERA_FPS", 30),
+    "preview_duration": 3,
     "auto_capture": False,
-    "capture_delay": 2,  # 自动捕获延迟
-    
-    # 图像增强
+    "capture_delay": 2,
     "brightness": 50,
     "contrast": 50,
     "saturation": 0,
@@ -104,26 +93,17 @@ CAMERA_CONFIG = {
 }
 
 
-# =========================
-# 评测配置
-# =========================
 EVALUATION_CONFIG = {
-    # 评分范围
     "score_range": (0, 100),
-
-    # 等级阈值
     "quality_thresholds": {
         "good": 85,
         "medium": 70,
     },
-
     "quality_labels": {
         "good": "好",
         "medium": "中",
-        "bad": "坏",
+        "bad": "差",
     },
-
-    # 反馈模板
     "feedback_templates": {
         "good": [
             "整体状态很稳，已经接近比赛演示级效果。",
@@ -138,40 +118,26 @@ EVALUATION_CONFIG = {
         "bad": [
             "这张作品波动比较明显，建议重拍或重新书写后再试。",
             "当前作品整体状态偏弱，建议先调整字形和用笔。",
-            "这张图还能识别，但评测结果提示基础质量偏低。",
+            "这张图还能识别到，但评测结果提示基础质量偏低。",
         ],
     },
-
-    # 图像预处理
     "preprocessing": {
         "target_size": 224,
         "blur_kernel": 3,
-        "threshold_method": "otsu",  # otsu, adaptive, fixed
+        "threshold_method": "otsu",
     },
 }
 
-if DESKTOP_SIM_MODE:
-    APP_CONFIG["window"]["width"] = 480
-    APP_CONFIG["window"]["height"] = 320
-    APP_CONFIG["window"]["fullscreen"] = False
-    APP_CONFIG["debug"] = True
 
-
-# =========================
-# OCR 配置
-# =========================
 OCR_CONFIG = {
     "engine": "paddleocr",
     "language": "ch",
     "device": os.environ.get("INKPI_LOCAL_OCR_DEVICE", "cpu"),
     "min_confidence": float(os.environ.get("INKPI_LOCAL_OCR_MIN_CONFIDENCE", "0.32")),
-    "warmup": os.environ.get("INKPI_LOCAL_OCR_WARMUP", "true").lower() == "true",
+    "warmup": _env_flag("INKPI_LOCAL_OCR_WARMUP", True),
 }
 
 
-# =========================
-# 质量评分 ONNX 配置
-# =========================
 QUALITY_SCORER_CONFIG = {
     "onnx_path": PATHS["models_dir"] / "quality_scorer.onnx",
     "input_size": 32,
@@ -187,9 +153,6 @@ QUALITY_SCORER_CONFIG = {
 }
 
 
-# =========================
-# 模型资产配置
-# =========================
 MODEL_CONFIG = {
     "ocr_engine": OCR_CONFIG["engine"],
     "quality_scorer_path": QUALITY_SCORER_CONFIG["onnx_path"],
@@ -198,26 +161,18 @@ MODEL_CONFIG = {
 }
 
 
-# =========================
-# 硬件配置 (树莓派)
-# =========================
 HARDWARE_CONFIG = {
-    # LED 指示灯
     "led": {
         "enabled": True,
         "gpio_pin": 18,
         "blink_interval": 0.5,
     },
-    
-    # 语音播报
     "speech": {
         "enabled": True,
-        "engine": "espeak",  # espeak, pyttsx3
+        "engine": "espeak",
         "language": "zh",
         "rate": 150,
     },
-    
-    # 按钮
     "button": {
         "enabled": True,
         "gpio_pin": 17,
@@ -226,13 +181,8 @@ HARDWARE_CONFIG = {
 }
 
 
-# =========================
-# 云服务配置
-# =========================
 CLOUD_CONFIG = {
     "enabled": True,
-    
-    # 微信云开发
     "wechat": {
         "env_id": "your-env-id",
         "functions": {
@@ -241,23 +191,13 @@ CLOUD_CONFIG = {
             "get_stats": "getStats",
         },
     },
-    
-    # 离线模式
-    "offline_mode": True,  # 离线时仍可本地评测
+    "offline_mode": True,
 }
 
 
-# =========================
-# 开发配置
-# =========================
 DEV_CONFIG = {
-    # 测试模式
-    "test_mode": os.environ.get("INKPI_TEST_MODE", "false").lower() == "true",
-    
-    # 性能分析
+    "test_mode": _env_flag("INKPI_TEST_MODE", False),
     "profiling": False,
-    
-    # 调试选项
     "debug": {
         "show_camera_preview": True,
         "save_debug_images": False,
@@ -265,17 +205,7 @@ DEV_CONFIG = {
     },
 }
 
-DESKTOP_SIM_CONFIG = {
-    "enabled": DESKTOP_SIM_MODE,
-    "default_character": os.environ.get("INKPI_SIM_DEFAULT_CHAR", "永"),
-    "camera_source": os.environ.get("INKPI_SIM_CAMERA_SOURCE", "").strip(),
-    "camera_fps": int(os.environ.get("INKPI_SIM_CAMERA_FPS", "15")),
-}
 
-
-# =========================
-# UI 配置（兼容 PyInstaller）
-# =========================
 UI_CONFIG = {
     "window_title": f"{APP_CONFIG['app_name']} 书法评测系统",
     "window_width": APP_CONFIG["window"]["width"],
@@ -284,26 +214,20 @@ UI_CONFIG = {
     "radar_chart_size": 200,
 }
 
-# =========================
-# 日志配置
-# =========================
+
 LOG_CONFIG = {
     "level": APP_CONFIG["log_level"],
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "log_file": PATHS["logs_dir"] / "inkpi.log",
 }
 
-# =========================
-# 数据目录（简化版）
-# =========================
+
 DATA_DIR = PATHS["data_dir"]
 MODELS_DIR = PATHS["models_dir"]
 IMAGES_DIR = PATHS["images_dir"]
 PROCESSED_DIR = PATHS["processed_dir"]
 
-# =========================
-# 图像配置
-# =========================
+
 IMAGE_CONFIG = {
     "target_size": 512,
     "adaptive_block_size": 11,
@@ -315,9 +239,7 @@ IMAGE_CONFIG = {
     "capture_height": CAMERA_CONFIG["capture_height"],
 }
 
-# =========================
-# 图像预检配置
-# =========================
+
 PRECHECK_CONFIG = {
     "min_brightness": 40,
     "max_brightness": 245,
@@ -332,23 +254,17 @@ PRECHECK_CONFIG = {
     "max_blob_area_ratio": 0.18,
 }
 
-# =========================
-# 反馈模板
-# =========================
+
 FEEDBACK_TEMPLATES = EVALUATION_CONFIG["feedback_templates"]
 
-# =========================
-# 数据库配置
-# =========================
-DB_PATH = DATA_DIR / ("inkpi-sim.db" if DESKTOP_SIM_MODE else "inkpi.db")
+
+DB_PATH = DATA_DIR / "inkpi.db"
 DB_CONFIG = {
     "table_name": "evaluation_records",
     "max_records": 1000,
 }
 
-# =========================
-# LED 配置
-# =========================
+
 LED_CONFIG = {
     "enabled": HARDWARE_CONFIG["led"]["enabled"],
     "num_leds": 8,
@@ -358,9 +274,7 @@ LED_CONFIG = {
     "gpio_pin": 10,
 }
 
-# =========================
-# TTS 语音配置
-# =========================
+
 TTS_CONFIG = {
     "rate": HARDWARE_CONFIG["speech"]["rate"],
     "volume": 0.9,
@@ -368,16 +282,7 @@ TTS_CONFIG = {
 
 
 def get_config(key: str, default=None):
-    """
-    获取配置值
-    
-    Args:
-        key: 配置键，支持点分隔符 (如 "window.width")
-        default: 默认值
-        
-    Returns:
-        配置值
-    """
+    """Get a config value using dot-separated access."""
     configs = {
         "app": APP_CONFIG,
         "camera": CAMERA_CONFIG,
@@ -395,14 +300,14 @@ def get_config(key: str, default=None):
         "led": LED_CONFIG,
         "tts": TTS_CONFIG,
     }
-    
+
     keys = key.split(".")
     value = configs.get(keys[0], {})
-    
-    for k in keys[1:]:
+
+    for item in keys[1:]:
         if isinstance(value, dict):
-            value = value.get(k, default)
+            value = value.get(item, default)
         else:
             return default
-    
+
     return value if value is not None else default

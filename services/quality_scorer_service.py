@@ -15,7 +15,7 @@ except Exception as exc:  # noqa: BLE001
     ort = None  # type: ignore[assignment]
     _ORT_IMPORT_ERROR = exc
 
-from config import DESKTOP_SIM_MODE, QUALITY_SCORER_CONFIG
+from config import QUALITY_SCORER_CONFIG
 
 
 @dataclass
@@ -91,14 +91,12 @@ class QualityScorerService:
 
     @property
     def available(self) -> bool:
-        return self._session is not None or DESKTOP_SIM_MODE
+        return self._session is not None
 
     def score(self, image: np.ndarray, character: str, ocr_confidence: float | None = None) -> QualityScore:
         """Run the ONNX scorer and return a stable total score and level."""
 
         if self._session is None:
-            if DESKTOP_SIM_MODE:
-                return self._score_simulated(image, character=character, ocr_confidence=ocr_confidence)
             raise RuntimeError(f"Quality scorer ONNX model missing: {self.model_path}")
 
         roi = self._prepare_image(image)
@@ -369,51 +367,6 @@ class QualityScorerService:
         shifted = values - np.max(values)
         exps = np.exp(shifted)
         return exps / np.sum(exps)
-
-    def _score_simulated(self, image: np.ndarray, character: str, ocr_confidence: float | None = None) -> QualityScore:
-        """Fallback scorer used by desktop simulator when ONNX is unavailable."""
-        quality_features = self._extract_quality_feature_map(image)
-        extras = self._features_to_array(quality_features)
-
-        feature_quality = (
-            0.25 * self._target_band_score(quality_features["fg_ratio"], target=0.46, tolerance=0.24)
-            + 0.25 * self._normalize_band(quality_features["center_quality"], low=0.72, high=0.99)
-            + 0.15 * self._target_band_score(quality_features["component_norm"], target=0.58, tolerance=0.50)
-            + 0.15 * self._target_band_score(quality_features["edge_touch"], target=0.48, tolerance=0.30)
-            + 0.20 * self._target_band_score(quality_features["texture_std"], target=0.145, tolerance=0.055)
-        )
-        ocr_signal = self._normalize_band(float(ocr_confidence or 0.0), low=0.45, high=0.99)
-        combined = float(np.clip(0.72 * feature_quality + 0.28 * ocr_signal, 0.0, 1.0))
-
-        if combined >= 0.72:
-            quality_level = "good"
-            probabilities = np.asarray([0.08, 0.24, 0.68], dtype=np.float32)
-        elif combined >= 0.48:
-            quality_level = "medium"
-            probabilities = np.asarray([0.18, 0.64, 0.18], dtype=np.float32)
-        else:
-            quality_level = "bad"
-            probabilities = np.asarray([0.72, 0.20, 0.08], dtype=np.float32)
-
-        calibration = self._build_calibration_snapshot(
-            probabilities=probabilities,
-            quality_level=quality_level,
-            extras=extras,
-            ocr_confidence=float(ocr_confidence or 0.0),
-        )
-        total_score = int(calibration["calibrated_score"])
-        calibration["score_source"] = "desktop-sim"
-        calibration["final_score"] = float(total_score)
-        calibration["score_range_fit"] = self._score_range_fit(total_score, quality_level)
-
-        return QualityScore(
-            total_score=total_score,
-            quality_level=quality_level,
-            quality_confidence=float(max(probabilities)),
-            probabilities={label: float(probabilities[index]) for index, label in enumerate(self.labels[: len(probabilities)])},
-            quality_features=quality_features,
-            calibration={key: float(value) if isinstance(value, (int, float, np.floating)) else str(value) for key, value in calibration.items()},
-        )
 
 
 quality_scorer_service = QualityScorerService()

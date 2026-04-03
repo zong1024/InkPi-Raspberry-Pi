@@ -54,7 +54,7 @@ class EvaluationService:
         self.logger.info("Starting single-chain calligraphy evaluation...")
 
         if not local_ocr_service.available:
-            raise RuntimeError("Local OCR model is unavailable. Please install PaddleOCR or use desktop simulator mode.")
+            raise RuntimeError("Local OCR is unavailable. Install PaddleOCR or configure the remote OCR fallback.")
         if not quality_scorer_service.available:
             raise RuntimeError(f"Quality scorer ONNX is unavailable: {quality_scorer_service.model_path}")
 
