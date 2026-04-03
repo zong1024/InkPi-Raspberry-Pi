@@ -38,6 +38,25 @@ if [ -f "${PROJECT_DIR}/.inkpi/server.env" ]; then
     source "${PROJECT_DIR}/.inkpi/server.env"
 fi
 
+if command -v python >/dev/null 2>&1; then
+    qt_plugin_dir="$(python - <<'PY'
+from pathlib import Path
+
+try:
+    import PyQt6
+except Exception:
+    raise SystemExit(0)
+
+plugin_root = Path(PyQt6.__file__).resolve().parent / "Qt6" / "plugins"
+print(plugin_root)
+PY
+)"
+    if [ -n "${qt_plugin_dir:-}" ] && [ -d "${qt_plugin_dir}/platforms" ]; then
+        export QT_PLUGIN_PATH="${qt_plugin_dir}"
+        export QT_QPA_PLATFORM_PLUGIN_PATH="${qt_plugin_dir}/platforms"
+    fi
+fi
+
 find_xfce_session_pid() {
     pgrep -u "${USER}" -n -f "xfce4-session|xfdesktop|xfwm4" || true
 }
