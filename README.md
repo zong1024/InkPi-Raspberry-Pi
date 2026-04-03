@@ -70,6 +70,12 @@ Start the full stack:
 bash scripts/start_server_stack.sh
 ```
 
+Install tty1 kiosk autostart for the full stack:
+
+```bash
+INKPI_KIOSK_MODE=stack bash scripts/install_kiosk.sh
+```
+
 Stop the full stack:
 
 ```bash
@@ -105,6 +111,11 @@ INKPI_CLOUD_BACKEND_URL=http://127.0.0.1:5001
 INKPI_CLOUD_DEVICE_KEY=your-device-key
 INKPI_CLOUD_DEVICE_NAME=InkPi-XFCE
 ```
+
+Raspberry Pi note:
+
+- `paddlepaddle` / `paddleocr` are installed only on supported `x86_64` / `AMD64` environments
+- ARM devices can still evaluate through the built-in remote OCR fallback when `INKPI_CLOUD_BACKEND_URL` and `INKPI_CLOUD_DEVICE_KEY` are configured
 
 ## Local Development
 
