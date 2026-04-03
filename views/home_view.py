@@ -7,13 +7,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QStyle, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font
+from views.ui_theme import app_font, icon_font
 
 
 class HomeView(QWidget):
@@ -47,11 +47,11 @@ class HomeView(QWidget):
         header_layout.addWidget(brand)
         header_layout.addStretch()
 
-        self.btn_refresh = self._build_icon_button(QStyle.StandardPixmap.SP_BrowserReload)
+        self.btn_refresh = self._build_icon_button("↻")
         self.btn_refresh.clicked.connect(self.refresh)
         header_layout.addWidget(self.btn_refresh)
 
-        self.btn_settings = self._build_icon_button(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+        self.btn_settings = self._build_icon_button("☰")
         self.btn_settings.setEnabled(False)
         header_layout.addWidget(self.btn_settings)
         root.addWidget(header)
@@ -121,19 +121,18 @@ class HomeView(QWidget):
 
         self.latest_hint = QLabel("")
         self.latest_hint.setObjectName("miniLabel")
-        self.latest_hint.setFixedHeight(14)
+        self.latest_hint.setFixedHeight(16)
         self.latest_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.latest_hint.setFont(app_font(8, QFont.Weight.Bold))
         root.addWidget(self.latest_hint)
 
         root.addStretch()
 
-    def _build_icon_button(self, icon_type: QStyle.StandardPixmap) -> QPushButton:
-        button = QPushButton("")
+    def _build_icon_button(self, symbol: str) -> QPushButton:
+        button = QPushButton(symbol)
         button.setObjectName("headerIconButton")
-        button.setFixedSize(24, 24)
-        button.setIcon(self.style().standardIcon(icon_type))
-        button.setIconSize(QSize(14, 14))
+        button.setFixedSize(26, 26)
+        button.setFont(icon_font(13, QFont.Weight.Bold))
         return button
 
     def refresh(self) -> None:
@@ -141,14 +140,12 @@ class HomeView(QWidget):
         self.latest_result = recent_records[0] if recent_records else None
 
         if self.latest_result is None:
-            self.latest_hint.setText("本地 480x320 小屏模式已开启")
+            self.latest_hint.setText("")
             return
 
         result = self.latest_result
-        char_text = result.character_name or "未识别"
-        self.latest_hint.setText(
-            f"最近一次：{char_text} · {result.total_score} 分 · {result.timestamp.strftime('%m-%d %H:%M')}"
-        )
+        char_text = result.character_name or "N/A"
+        self.latest_hint.setText(f"Latest: {char_text} / {result.total_score} / {result.timestamp.strftime('%m-%d %H:%M')}")
 
     def _open_latest_or_start(self) -> None:
         if self.latest_result is not None:

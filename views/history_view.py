@@ -7,13 +7,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QStyle, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, clear_layout
+from views.ui_theme import app_font, clear_layout, icon_font
 
 
 class HistoryItem(QFrame):
@@ -113,8 +113,8 @@ class HistoryView(QWidget):
 
         self.btn_back = QPushButton("←")
         self.btn_back.setObjectName("headerIconButton")
-        self.btn_back.setFixedSize(24, 24)
-        self.btn_back.setFont(app_font(13, QFont.Weight.Bold))
+        self.btn_back.setFixedSize(26, 26)
+        self.btn_back.setFont(icon_font(13, QFont.Weight.Bold))
         self.btn_back.clicked.connect(self.back_requested.emit)
         header_layout.addWidget(self.btn_back)
 
@@ -124,19 +124,17 @@ class HistoryView(QWidget):
         header_layout.addWidget(title)
         header_layout.addStretch()
 
-        self.btn_refresh = QPushButton("")
+        self.btn_refresh = QPushButton("↻")
         self.btn_refresh.setObjectName("headerIconButton")
-        self.btn_refresh.setFixedSize(24, 24)
-        self.btn_refresh.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
-        self.btn_refresh.setIconSize(QSize(14, 14))
+        self.btn_refresh.setFixedSize(26, 26)
+        self.btn_refresh.setFont(icon_font(13, QFont.Weight.Bold))
         self.btn_refresh.clicked.connect(self.refresh_data)
         header_layout.addWidget(self.btn_refresh)
 
-        self.btn_settings = QPushButton("")
+        self.btn_settings = QPushButton("☰")
         self.btn_settings.setObjectName("headerIconButton")
-        self.btn_settings.setFixedSize(24, 24)
-        self.btn_settings.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
-        self.btn_settings.setIconSize(QSize(14, 14))
+        self.btn_settings.setFixedSize(26, 26)
+        self.btn_settings.setFont(icon_font(13, QFont.Weight.Bold))
         self.btn_settings.setEnabled(False)
         header_layout.addWidget(self.btn_settings)
         root.addWidget(header)
