@@ -46,6 +46,22 @@ load_env_file() {
 load_env_file "${PROJECT_DIR}/.inkpi/cloud.env"
 load_env_file "${PROJECT_DIR}/.inkpi/server.env"
 
+prepend_pythonpath() {
+    local entry="$1"
+    if [ -z "${entry}" ] || [ ! -d "${entry}" ]; then
+        return 0
+    fi
+    case ":${PYTHONPATH:-}:" in
+        *":${entry}:"*) ;;
+        *) export PYTHONPATH="${entry}${PYTHONPATH:+:${PYTHONPATH}}" ;;
+    esac
+}
+
+if [ "$(uname -s)" = "Linux" ]; then
+    prepend_pythonpath "/usr/lib/python3/dist-packages"
+    prepend_pythonpath "/usr/local/lib/python3/dist-packages"
+fi
+
 if command -v python >/dev/null 2>&1; then
     qt_plugin_dir="$(python - <<'PY'
 from pathlib import Path
