@@ -6,16 +6,17 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
-from config import UI_CONFIG
+from config import IS_RASPBERRY_PI, UI_CONFIG
 from models.evaluation_result import EvaluationResult
 from views.camera_view import CameraView
 from views.history_view import HistoryView
 from views.home_view import HomeView
 from views.result_view import ResultView
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class MainWindow(QMainWindow):
@@ -31,10 +32,10 @@ class MainWindow(QMainWindow):
 
     def _init_ui(self) -> None:
         self.setObjectName("mainWindow")
-        self.setWindowTitle(UI_CONFIG["window_title"])
+        self.setWindowTitle("InkPi 书法评测系统")
 
-        viewport_width = UI_CONFIG["window_width"]
-        viewport_height = UI_CONFIG["window_height"]
+        viewport_width = int(UI_CONFIG["window_width"])
+        viewport_height = int(UI_CONFIG["window_height"])
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -46,12 +47,12 @@ class MainWindow(QMainWindow):
         self.surface = QFrame()
         self.surface.setObjectName("mainSurface")
         self.surface_layout = QVBoxLayout(self.surface)
-        self.surface_layout.setContentsMargins(14, 12, 14, 6)
+        self.surface_layout.setContentsMargins(14, 12, 14, 0)
         self.surface_layout.setSpacing(0)
+        root_layout.addWidget(self.surface, stretch=1)
 
         self.stack = QStackedWidget()
         self.surface_layout.addWidget(self.stack)
-        root_layout.addWidget(self.surface, stretch=1)
 
         self.home_view = HomeView()
         self.camera_view = CameraView()
@@ -66,17 +67,20 @@ class MainWindow(QMainWindow):
         self.bottom_nav = self._create_bottom_nav()
         root_layout.addWidget(self.bottom_nav)
 
-        self.resize(viewport_width, viewport_height)
-        self.setMinimumSize(viewport_width, viewport_height)
+        if IS_RASPBERRY_PI:
+            self.resize(viewport_width, viewport_height)
+            self.setMinimumSize(viewport_width, viewport_height)
+        else:
+            self.setFixedSize(viewport_width + 16, viewport_height + 40)
 
     def _create_bottom_nav(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("bottomNav")
-        bar.setFixedHeight(36)
+        bar.setFixedHeight(44)
 
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(18, 1, 18, 1)
-        layout.setSpacing(4)
+        layout.setContentsMargins(14, 4, 14, 4)
+        layout.setSpacing(8)
 
         self.btn_home = QPushButton("HOME")
         self.btn_home.setObjectName("navButton")
@@ -89,6 +93,11 @@ class MainWindow(QMainWindow):
         self.btn_history = QPushButton("HISTORY")
         self.btn_history.setObjectName("navButton")
         layout.addWidget(self.btn_history)
+
+        self.btn_profile = QPushButton("ME")
+        self.btn_profile.setObjectName("navButton")
+        self.btn_profile.setEnabled(False)
+        layout.addWidget(self.btn_profile)
 
         return bar
 
@@ -112,7 +121,8 @@ class MainWindow(QMainWindow):
         self.history_view.result_selected.connect(self._open_result)
 
     def _set_nav_state(self, active_index: int | None) -> None:
-        for index, button in enumerate([self.btn_home, self.btn_camera, self.btn_history]):
+        nav_buttons = [self.btn_home, self.btn_camera, self.btn_history, self.btn_profile]
+        for index, button in enumerate(nav_buttons):
             button.setProperty("active", active_index is not None and index == active_index)
             button.style().unpolish(button)
             button.style().polish(button)

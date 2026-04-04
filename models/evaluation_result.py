@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import json
-from typing import Any, Optional
+from typing import Any
 
 
 QUALITY_LABELS = {
@@ -30,7 +30,7 @@ DIMENSION_LABELS = {
 DIMENSION_ORDER = ("structure", "stroke", "integrity", "stability")
 
 
-def _normalize_json_dict(value: Any) -> Optional[dict[str, Any]]:
+def _normalize_json_dict(value: Any) -> dict[str, Any] | None:
     if value is None or value == "":
         return None
     if isinstance(value, str):
@@ -45,8 +45,8 @@ def _normalize_json_dict(value: Any) -> Optional[dict[str, Any]]:
 
 
 def summarize_dimension_scores(
-    dimension_scores: Optional[dict[str, int]],
-) -> Optional[dict[str, dict[str, Any]]]:
+    dimension_scores: dict[str, int] | None,
+) -> dict[str, dict[str, Any]] | None:
     if not dimension_scores:
         return None
 
@@ -81,15 +81,15 @@ class EvaluationResult:
     total_score: int
     feedback: str
     timestamp: datetime
-    character_name: Optional[str] = None
-    ocr_confidence: Optional[float] = None
+    character_name: str | None = None
+    ocr_confidence: float | None = None
     quality_level: str = "medium"
-    quality_confidence: Optional[float] = None
-    image_path: Optional[str] = None
-    processed_image_path: Optional[str] = None
-    dimension_scores: Optional[dict[str, int]] = None
-    score_debug: Optional[dict[str, Any]] = None
-    id: Optional[int] = None
+    quality_confidence: float | None = None
+    image_path: str | None = None
+    processed_image_path: str | None = None
+    dimension_scores: dict[str, int] | None = None
+    score_debug: dict[str, Any] | None = None
+    id: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a serializable dictionary."""
@@ -149,7 +149,6 @@ class EvaluationResult:
         )
 
     def __str__(self) -> str:
-        """Readable representation."""
         return (
             f"EvaluationResult(total={self.total_score}, "
             f"character={self.character_name}, "
@@ -165,7 +164,7 @@ class EvaluationResult:
         """UI color helper."""
         return QUALITY_COLORS.get(self.quality_level, QUALITY_COLORS["medium"])
 
-    def get_dimension_scores(self) -> Optional[dict[str, int]]:
+    def get_dimension_scores(self) -> dict[str, int] | None:
         """Return normalized dimension scores in a stable order."""
         if not self.dimension_scores:
             return None
@@ -176,7 +175,7 @@ class EvaluationResult:
         }
         return normalized or None
 
-    def get_dimension_summary(self) -> Optional[dict[str, dict[str, Any]]]:
+    def get_dimension_summary(self) -> dict[str, dict[str, Any]] | None:
         """Return strongest and weakest dimension metadata."""
         return summarize_dimension_scores(self.get_dimension_scores())
 

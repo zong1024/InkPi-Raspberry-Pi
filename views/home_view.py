@@ -1,11 +1,9 @@
-"""Home view tuned for a 480x320 touch screen."""
+"""Home view tuned for the 480x320 InkPi product screen."""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -13,11 +11,13 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayou
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, icon_font
+from views.ui_theme import app_font, display_font, icon_font
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class HomeView(QWidget):
-    """Landing page that closely follows the provided reference layout."""
+    """Landing page that follows the product reference on a small screen."""
 
     start_evaluation = pyqtSignal()
     view_history = pyqtSignal()
@@ -43,7 +43,7 @@ class HomeView(QWidget):
 
         brand = QLabel("InkPi")
         brand.setObjectName("brandTitle")
-        brand.setFont(app_font(20, QFont.Weight.Bold))
+        brand.setFont(display_font(20, QFont.Weight.Bold))
         header_layout.addWidget(brand)
         header_layout.addStretch()
 
@@ -51,15 +51,15 @@ class HomeView(QWidget):
         self.btn_refresh.clicked.connect(self.refresh)
         header_layout.addWidget(self.btn_refresh)
 
-        self.btn_settings = self._build_icon_button("☰")
+        self.btn_settings = self._build_icon_button("⚙")
         self.btn_settings.setEnabled(False)
         header_layout.addWidget(self.btn_settings)
         root.addWidget(header)
 
         hero = QWidget()
-        hero.setFixedHeight(98)
+        hero.setFixedHeight(102)
         hero_layout = QHBoxLayout(hero)
-        hero_layout.setContentsMargins(4, 8, 4, 0)
+        hero_layout.setContentsMargins(2, 6, 2, 0)
         hero_layout.setSpacing(12)
 
         brand_block = QVBoxLayout()
@@ -69,7 +69,7 @@ class HomeView(QWidget):
 
         hero_logo = QLabel("InkPi")
         hero_logo.setObjectName("brandAccent")
-        hero_logo.setFont(app_font(32, QFont.Weight.Bold))
+        hero_logo.setFont(display_font(32, QFont.Weight.Bold))
         brand_block.addWidget(hero_logo)
 
         hero_subtitle = QLabel("THE MODERN CALLIGRAPHER")
@@ -79,22 +79,22 @@ class HomeView(QWidget):
         brand_block.addStretch()
         hero_layout.addLayout(brand_block, stretch=3)
 
-        self.btn_start = QPushButton("开始评测        →")
+        self.btn_start = QPushButton("开始评测           →")
         self.btn_start.setObjectName("primaryButton")
-        self.btn_start.setFixedSize(206, 54)
-        self.btn_start.setFont(app_font(14, QFont.Weight.Bold))
+        self.btn_start.setFixedSize(208, 56)
+        self.btn_start.setFont(display_font(14, QFont.Weight.Bold))
         self.btn_start.clicked.connect(self.start_evaluation.emit)
         hero_layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
         root.addWidget(hero)
 
         action_row = QHBoxLayout()
-        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setContentsMargins(0, 4, 0, 0)
         action_row.setSpacing(10)
 
         self.btn_studio = QPushButton("笔")
         self.btn_studio.setObjectName("buttonCard")
         self.btn_studio.setFixedSize(54, 54)
-        self.btn_studio.setFont(app_font(18, QFont.Weight.Bold))
+        self.btn_studio.setFont(display_font(20, QFont.Weight.Bold))
         self.btn_studio.clicked.connect(self.start_evaluation.emit)
         action_row.addWidget(self.btn_studio)
 
@@ -115,13 +115,14 @@ class HomeView(QWidget):
         self.btn_plus = QPushButton("+")
         self.btn_plus.setObjectName("floatingButton")
         self.btn_plus.setFixedSize(54, 54)
+        self.btn_plus.setFont(display_font(22, QFont.Weight.Bold))
         self.btn_plus.clicked.connect(self._open_latest_or_start)
         action_row.addWidget(self.btn_plus)
         root.addLayout(action_row)
 
-        self.latest_hint = QLabel("")
+        self.latest_hint = QLabel("准备就绪，轻触开始评测。")
         self.latest_hint.setObjectName("miniLabel")
-        self.latest_hint.setFixedHeight(16)
+        self.latest_hint.setFixedHeight(18)
         self.latest_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.latest_hint.setFont(app_font(8, QFont.Weight.Bold))
         root.addWidget(self.latest_hint)
@@ -140,12 +141,14 @@ class HomeView(QWidget):
         self.latest_result = recent_records[0] if recent_records else None
 
         if self.latest_result is None:
-            self.latest_hint.setText("")
+            self.latest_hint.setText("准备就绪，轻触开始评测。")
             return
 
         result = self.latest_result
-        char_text = result.character_name or "N/A"
-        self.latest_hint.setText(f"Latest: {char_text} / {result.total_score} / {result.timestamp.strftime('%m-%d %H:%M')}")
+        char_text = result.character_name or "未识别"
+        self.latest_hint.setText(
+            f"最近评测：{char_text} · {result.total_score} 分 · {result.timestamp.strftime('%m-%d %H:%M')}"
+        )
 
     def _open_latest_or_start(self) -> None:
         if self.latest_result is not None:
