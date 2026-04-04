@@ -5,15 +5,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from models.evaluation_result import EvaluationResult
 from services.database_service import database_service
-from views.ui_theme import app_font, clear_layout, icon_font
+from views.ui_theme import app_font, clear_layout, display_font, icon_font
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class HistoryItem(QFrame):
@@ -38,10 +38,10 @@ class HistoryItem(QFrame):
         glyph_layout = QVBoxLayout(glyph_card)
         glyph_layout.setContentsMargins(0, 0, 0, 0)
 
-        glyph = QLabel(result.character_name or "字")
+        glyph = QLabel(result.character_name or "未")
         glyph.setObjectName("glyphLabel")
         glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        glyph.setFont(app_font(22, QFont.Weight.Bold))
+        glyph.setFont(display_font(22, QFont.Weight.Bold))
         glyph_layout.addWidget(glyph)
         layout.addWidget(glyph_card)
 
@@ -56,7 +56,7 @@ class HistoryItem(QFrame):
 
         title = QLabel(result.character_name or "未识别")
         title.setObjectName("sectionTitle")
-        title.setFont(app_font(17, QFont.Weight.Bold))
+        title.setFont(display_font(17, QFont.Weight.Bold))
         info.addWidget(title)
 
         time_label = QLabel(result.timestamp.strftime("%Y.%m.%d %H:%M"))
@@ -73,13 +73,13 @@ class HistoryItem(QFrame):
         grade_label = QLabel(f"等级 {result.get_grade()}")
         grade_label.setObjectName("historyGrade")
         grade_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        grade_label.setFont(app_font(15, QFont.Weight.Bold))
+        grade_label.setFont(display_font(15, QFont.Weight.Bold))
         right.addWidget(grade_label)
 
         score = QLabel(f"总分 {result.total_score}")
         score.setObjectName("historyScore")
         score.setAlignment(Qt.AlignmentFlag.AlignRight)
-        score.setFont(app_font(18, QFont.Weight.Bold))
+        score.setFont(display_font(18, QFont.Weight.Bold))
         right.addWidget(score)
         layout.addLayout(right)
 
@@ -120,7 +120,7 @@ class HistoryView(QWidget):
 
         title = QLabel("History")
         title.setObjectName("headlineTitle")
-        title.setFont(app_font(17, QFont.Weight.Bold))
+        title.setFont(display_font(17, QFont.Weight.Bold))
         header_layout.addWidget(title)
         header_layout.addStretch()
 
@@ -131,7 +131,7 @@ class HistoryView(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_data)
         header_layout.addWidget(self.btn_refresh)
 
-        self.btn_settings = QPushButton("☰")
+        self.btn_settings = QPushButton("⚙")
         self.btn_settings.setObjectName("headerIconButton")
         self.btn_settings.setFixedSize(26, 26)
         self.btn_settings.setFont(icon_font(13, QFont.Weight.Bold))
@@ -143,10 +143,10 @@ class HistoryView(QWidget):
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(8)
 
-        subtitle = QLabel('Past <span style="color:#B80F1F;">Evaluations</span>')
+        subtitle = QLabel('Past <span style="color:#BA0F22;">Evaluations</span>')
         subtitle.setTextFormat(Qt.TextFormat.RichText)
         subtitle.setObjectName("headlineTitle")
-        subtitle.setFont(app_font(16, QFont.Weight.Bold))
+        subtitle.setFont(display_font(16, QFont.Weight.Bold))
         title_row.addWidget(subtitle)
         title_row.addStretch()
 
@@ -181,12 +181,12 @@ class HistoryView(QWidget):
             empty_layout.setContentsMargins(16, 14, 16, 14)
             empty_layout.setSpacing(4)
 
-            title = QLabel("暂无历史记录")
+            title = QLabel("还没有历史记录")
             title.setObjectName("sectionTitle")
-            title.setFont(app_font(12, QFont.Weight.Bold))
+            title.setFont(display_font(12, QFont.Weight.Bold))
             empty_layout.addWidget(title)
 
-            body = QLabel("完成一次新的评测后，结果会自动出现在这里。")
+            body = QLabel("完成一次新的书法评测后，结果会自动出现在这里。")
             body.setObjectName("sectionSubtitle")
             body.setWordWrap(True)
             body.setFont(app_font(10))
