@@ -1,4 +1,4 @@
-"""Shared UI theme tokens for the 3.5-inch InkPi interface."""
+"""Shared theme helpers for the InkPi 3.5-inch product UI."""
 
 from __future__ import annotations
 
@@ -12,29 +12,45 @@ from config import IS_RASPBERRY_PI
 
 
 THEME = {
-    "window": "#F6F1EA",
-    "surface": "#FFFDFC",
-    "surface_alt": "#F0EAE2",
-    "ink": "#2A241F",
-    "muted": "#8B8379",
-    "line": "#E4DDD4",
-    "line_soft": "#EEE7DF",
-    "accent": "#B80F1F",
-    "accent_hover": "#A10D1B",
-    "danger": "#B84E48",
+    "window": "#F4EEE6",
+    "window_deep": "#EFE4D7",
+    "surface": "#FFFDF9",
+    "surface_alt": "#F4ECE1",
+    "surface_soft": "#FAF5EE",
+    "ink": "#241A14",
+    "ink_soft": "#5C4A3D",
+    "muted": "#8D7967",
+    "line": "#E4D9CC",
+    "line_soft": "#EDE3D7",
+    "accent": "#BA0F22",
+    "accent_hover": "#9D0C1C",
+    "accent_soft": "#F9E7EA",
+    "success": "#2B7A59",
+    "warning": "#A36A2B",
+    "danger": "#B54745",
 }
 
-FONT_FAMILY = "Noto Sans CJK SC" if IS_RASPBERRY_PI else "Microsoft YaHei UI"
-FONT_CANDIDATES = (
-    "Noto Sans CJK SC",
-    "Noto Sans SC",
+DISPLAY_FONT_FILES = (
+    Path(__file__).resolve().parent.parent / "assets" / "fonts" / "SmileySans-Oblique.ttf",
+)
+
+DISPLAY_FONT_CANDIDATES = (
+    "Smiley Sans",
+    "Smiley Sans Oblique",
+    "得意黑",
+)
+
+BODY_FONT_CANDIDATES = (
     "Microsoft YaHei UI",
     "Microsoft YaHei",
-    "SimHei",
-    "SimSun",
+    "Noto Sans CJK SC",
+    "Noto Sans SC",
+    "PingFang SC",
     "Source Han Sans SC",
+    "SimHei",
 )
-FONT_FILES = (
+
+BODY_FONT_FILES = (
     Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "msyh.ttc",
     Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "msyhbd.ttc",
     Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "simhei.ttf",
@@ -42,90 +58,110 @@ FONT_FILES = (
     Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
     Path("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"),
 )
-_RESOLVED_FONT_FAMILY: str | None = None
-_RESOLVED_ICON_FONT_FAMILY: str | None = None
+
+_DISPLAY_FAMILY: str | None = None
+_BODY_FAMILY: str | None = None
+_ICON_FAMILY: str | None = None
 
 
-def ensure_app_font_family() -> str:
-    """Resolve and register a usable Simplified Chinese UI font."""
-    global _RESOLVED_FONT_FAMILY
-    if _RESOLVED_FONT_FAMILY:
-        return _RESOLVED_FONT_FAMILY
-
+def _font_families() -> dict[str, str]:
     if QApplication.instance() is None:
-        return FONT_FAMILY
+        return {}
+    return {family.casefold(): family for family in QFontDatabase.families()}
 
-    families = {family.casefold(): family for family in QFontDatabase.families()}
-    normalized_candidates = {candidate.casefold() for candidate in FONT_CANDIDATES}
 
-    for candidate in FONT_CANDIDATES:
-        match = families.get(candidate.casefold())
-        if match:
-            _RESOLVED_FONT_FAMILY = match
-            return match
-
-    for font_file in FONT_FILES:
+def _register_font_files(files: tuple[Path, ...]) -> list[str]:
+    families: list[str] = []
+    for font_file in files:
         if not font_file.exists():
             continue
         font_id = QFontDatabase.addApplicationFont(str(font_file))
         if font_id < 0:
             continue
-        registered = QFontDatabase.applicationFontFamilies(font_id)
+        families.extend(QFontDatabase.applicationFontFamilies(font_id))
+    return families
+
+
+def ensure_display_font_family() -> str:
+    global _DISPLAY_FAMILY
+    if _DISPLAY_FAMILY:
+        return _DISPLAY_FAMILY
+
+    families = _font_families()
+    for candidate in DISPLAY_FONT_CANDIDATES:
+        match = families.get(candidate.casefold())
+        if match:
+            _DISPLAY_FAMILY = match
+            return match
+
+    registered = _register_font_files(DISPLAY_FONT_FILES)
+    if registered:
+        preferred = registered[0]
         for family in registered:
-            if family.casefold() in normalized_candidates:
-                _RESOLVED_FONT_FAMILY = family
-                return family
-        if registered:
-            _RESOLVED_FONT_FAMILY = registered[0]
-            return registered[0]
+            if family.casefold() == "smiley sans":
+                preferred = family
+                break
+        _DISPLAY_FAMILY = preferred
+        return preferred
 
-    _RESOLVED_FONT_FAMILY = FONT_FAMILY
-    return FONT_FAMILY
+    _DISPLAY_FAMILY = ensure_body_font_family()
+    return _DISPLAY_FAMILY
 
 
-def font_stack() -> str:
-    primary = ensure_app_font_family()
-    fallbacks = [
-        '"Noto Sans CJK SC"',
-        '"Noto Sans SC"',
-        '"Microsoft YaHei UI"',
-        '"Microsoft YaHei"',
-        '"SimHei"',
-        '"SimSun"',
-        '"PingFang SC"',
-        "sans-serif",
-    ]
-    quoted_primary = f'"{primary}"'
-    ordered = [quoted_primary] + [item for item in fallbacks if item != quoted_primary]
-    return ", ".join(ordered)
+def ensure_body_font_family() -> str:
+    global _BODY_FAMILY
+    if _BODY_FAMILY:
+        return _BODY_FAMILY
+
+    families = _font_families()
+    for candidate in BODY_FONT_CANDIDATES:
+        match = families.get(candidate.casefold())
+        if match:
+            _BODY_FAMILY = match
+            return match
+
+    registered = _register_font_files(BODY_FONT_FILES)
+    if registered:
+        _BODY_FAMILY = registered[0]
+        return registered[0]
+
+    _BODY_FAMILY = "Noto Sans CJK SC" if IS_RASPBERRY_PI else "Microsoft YaHei UI"
+    return _BODY_FAMILY
+
+
+def ensure_app_font_family() -> str:
+    return ensure_body_font_family()
+
+
+def body_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
+    return QFont(ensure_body_font_family(), size, weight)
+
+
+def display_font(size: int, weight: int = int(QFont.Weight.Bold)) -> QFont:
+    return QFont(ensure_display_font_family(), size, weight)
 
 
 def app_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
-    return QFont(ensure_app_font_family(), size, weight)
+    return body_font(size, weight)
 
 
 def icon_font(size: int, weight: int = int(QFont.Weight.Normal)) -> QFont:
-    """Resolve a font with better symbol coverage for lightweight UI icons."""
-    global _RESOLVED_ICON_FONT_FAMILY
-    if not _RESOLVED_ICON_FONT_FAMILY:
-        preferred = (
-            "Segoe UI Symbol",
+    global _ICON_FAMILY
+    if not _ICON_FAMILY:
+        families = _font_families()
+        for candidate in (
             "Segoe Fluent Icons",
+            "Segoe UI Symbol",
             "Noto Sans Symbols 2",
-            "Noto Sans Symbols2",
-            "Noto Sans Symbols",
-            ensure_app_font_family(),
-        )
-        if QApplication.instance() is not None:
-            families = {family.casefold(): family for family in QFontDatabase.families()}
-            for candidate in preferred:
-                match = families.get(candidate.casefold())
-                if match:
-                    _RESOLVED_ICON_FONT_FAMILY = match
-                    break
-        if not _RESOLVED_ICON_FONT_FAMILY:
-            _RESOLVED_ICON_FONT_FAMILY = preferred[-1]
-    return QFont(_RESOLVED_ICON_FONT_FAMILY, size, weight)
+            ensure_body_font_family(),
+        ):
+            match = families.get(candidate.casefold())
+            if match:
+                _ICON_FAMILY = match
+                break
+        if not _ICON_FAMILY:
+            _ICON_FAMILY = ensure_body_font_family()
+    return QFont(_ICON_FAMILY, size, weight)
 
 
 def clear_layout(layout: QLayout) -> None:
@@ -141,31 +177,56 @@ def clear_layout(layout: QLayout) -> None:
             clear_layout(child_layout)
 
 
+def font_stack() -> str:
+    ordered = [
+        f'"{ensure_body_font_family()}"',
+        '"Noto Sans CJK SC"',
+        '"Microsoft YaHei UI"',
+        '"Microsoft YaHei"',
+        '"PingFang SC"',
+        "sans-serif",
+    ]
+    return ", ".join(dict.fromkeys(ordered))
+
+
+def display_stack() -> str:
+    ordered = [
+        f'"{ensure_display_font_family()}"',
+        f'"{ensure_body_font_family()}"',
+        '"Noto Sans CJK SC"',
+        '"Microsoft YaHei UI"',
+        "sans-serif",
+    ]
+    return ", ".join(dict.fromkeys(ordered))
+
+
 def build_stylesheet() -> str:
-    stack = font_stack()
+    body_stack = font_stack()
+    heading_stack = display_stack()
     return f"""
     QWidget {{
-        font-family: {stack};
-        color: {THEME["ink"]};
         background: transparent;
+        color: {THEME["ink"]};
+        font-family: {body_stack};
         selection-background-color: {THEME["accent"]};
         selection-color: #ffffff;
     }}
 
     QMainWindow {{
-        background-color: {THEME["window"]};
+        background: qlineargradient(
+            x1: 0,
+            y1: 0,
+            x2: 1,
+            y2: 1,
+            stop: 0 {THEME["window"]},
+            stop: 1 {THEME["window_deep"]}
+        );
     }}
 
-    QFrame#mainSurface {{
-        background-color: {THEME["window"]};
-        border: none;
-        border-radius: 0px;
-    }}
-
+    QFrame#mainSurface,
     QFrame#pageHeader {{
-        background: transparent;
         border: none;
-        border-radius: 0px;
+        background: transparent;
     }}
 
     QFrame#scoreCard,
@@ -173,48 +234,65 @@ def build_stylesheet() -> str:
     QFrame#historyItemCard,
     QFrame#historyGlyphCard,
     QFrame#softCard,
+    QFrame#heroCard,
+    QFrame#actionCard,
+    QFrame#resultSummaryCard,
+    QFrame#feedbackCard,
     QLabel#previewLabel {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line"]};
-        border-radius: 22px;
+        border-radius: 28px;
     }}
 
     QFrame#metricPanel,
     QFrame#historyGlyphCard,
-    QFrame#softCard {{
+    QFrame#softCard,
+    QFrame#actionCard {{
         background-color: {THEME["surface_alt"]};
         border-color: {THEME["line_soft"]};
     }}
 
     QFrame#bottomNav {{
-        background-color: {THEME["surface"]};
-        border: none;
+        background: rgba(255, 252, 247, 0.88);
         border-top: 1px solid {THEME["line"]};
-        border-radius: 0px;
+    }}
+
+    QLabel#brandTitle,
+    QLabel#brandAccent,
+    QLabel#headlineTitle,
+    QLabel#pageTitle,
+    QLabel#sectionTitle,
+    QLabel#scoreNumber,
+    QLabel#scoreGrade,
+    QPushButton#primaryButton,
+    QPushButton#secondaryButton,
+    QPushButton#floatingButton,
+    QPushButton#navButton {{
+        font-family: {heading_stack};
     }}
 
     QLabel#brandTitle {{
         color: {THEME["ink"]};
-        font-size: 20px;
-        font-weight: 800;
+        font-size: 22px;
+        font-weight: 700;
     }}
 
     QLabel#brandAccent {{
         color: {THEME["accent"]};
-        font-size: 28px;
-        font-weight: 900;
+        font-size: 34px;
+        font-weight: 800;
     }}
 
     QLabel#pageTitle {{
-        color: {THEME["ink"]};
-        font-size: 12px;
-        font-weight: 800;
+        color: {THEME["muted"]};
+        font-size: 11px;
+        font-weight: 700;
         letter-spacing: 1px;
     }}
 
     QLabel#headlineTitle {{
         color: {THEME["ink"]};
-        font-size: 22px;
+        font-size: 21px;
         font-weight: 800;
     }}
 
@@ -237,7 +315,7 @@ def build_stylesheet() -> str:
 
     QLabel#scoreNumber {{
         color: {THEME["accent"]};
-        font-size: 52px;
+        font-size: 56px;
         font-weight: 900;
     }}
 
@@ -245,20 +323,20 @@ def build_stylesheet() -> str:
         color: #ffffff;
         background-color: {THEME["accent"]};
         border-radius: 18px;
-        padding: 6px 12px;
-        font-size: 20px;
+        padding: 5px 12px;
+        font-size: 18px;
         font-weight: 800;
     }}
 
     QLabel#historyScore {{
         color: {THEME["ink"]};
-        font-size: 28px;
+        font-size: 26px;
         font-weight: 800;
     }}
 
     QLabel#historyGrade {{
         color: {THEME["accent"]};
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 900;
     }}
 
@@ -266,95 +344,102 @@ def build_stylesheet() -> str:
         color: {THEME["ink"]};
         font-size: 24px;
         font-weight: 900;
+        font-family: {heading_stack};
     }}
 
     QLabel#statusPill {{
         background-color: {THEME["surface_alt"]};
         color: {THEME["muted"]};
-        border-radius: 12px;
-        padding: 4px 10px;
+        border-radius: 13px;
+        padding: 5px 10px;
         font-size: 10px;
         font-weight: 700;
     }}
 
     QLabel#statusPill[state="ready"] {{
-        background-color: #E6F0E9;
-        color: #2F7D57;
+        background-color: #E6F1EA;
+        color: {THEME["success"]};
     }}
 
     QLabel#statusPill[state="working"] {{
-        background-color: #F6E9D8;
-        color: #AD742D;
+        background-color: #F6E8D7;
+        color: {THEME["warning"]};
     }}
 
     QLabel#statusPill[state="error"] {{
-        background-color: #F4DFDE;
+        background-color: #F5E0DF;
         color: {THEME["danger"]};
     }}
 
     QPushButton {{
-        border: none;
-        border-radius: 20px;
-        padding: 8px 14px;
-        font-size: 12px;
-        font-weight: 700;
         background-color: {THEME["surface_alt"]};
         color: {THEME["ink"]};
+        border: none;
+        border-radius: 22px;
+        padding: 10px 16px;
+        font-size: 12px;
+        font-weight: 700;
     }}
 
     QPushButton:hover {{
-        background-color: #E8E1D9;
+        background-color: #EDE2D6;
+    }}
+
+    QPushButton:pressed {{
+        background-color: #E3D7CA;
     }}
 
     QPushButton:disabled {{
-        background-color: #ECE5DD;
-        color: #B3A99E;
+        background-color: #F1EBE3;
+        color: #B4A89B;
     }}
 
     QPushButton#primaryButton {{
         background-color: {THEME["accent"]};
         color: #ffffff;
-        padding-left: 18px;
-        padding-right: 18px;
+        border-radius: 26px;
+        padding-left: 20px;
+        padding-right: 20px;
     }}
 
     QPushButton#primaryButton:hover {{
         background-color: {THEME["accent_hover"]};
     }}
 
+    QPushButton#secondaryButton,
     QPushButton#ghostButton,
     QPushButton#buttonCard {{
-        background-color: {THEME["surface_alt"]};
-        border: 1px solid {THEME["line_soft"]};
+        background-color: {THEME["surface"]};
         color: {THEME["ink"]};
-        border-radius: 20px;
+        border: 1px solid {THEME["line_soft"]};
+        border-radius: 24px;
     }}
 
     QPushButton#floatingButton {{
         background-color: {THEME["accent"]};
         color: #ffffff;
-        border-radius: 26px;
-        font-size: 20px;
+        border-radius: 28px;
+        font-size: 22px;
         font-weight: 900;
     }}
 
     QPushButton#headerIconButton {{
-        background-color: transparent;
-        color: {THEME["muted"]};
-        border: none;
-        font-size: 16px;
+        background-color: {THEME["surface"]};
+        color: {THEME["ink_soft"]};
+        border: 1px solid {THEME["line_soft"]};
+        border-radius: 14px;
+        font-size: 14px;
         font-weight: 700;
-        padding: 0px;
+        padding: 0;
     }}
 
     QPushButton#navButton {{
-        background-color: transparent;
+        background: transparent;
         color: {THEME["muted"]};
-        border: none;
-        border-radius: 14px;
-        padding: 4px 8px;
-        font-size: 11px;
-        font-weight: 700;
+        border-radius: 12px;
+        padding: 4px 0;
+        font-size: 10px;
+        font-weight: 800;
     }}
 
     QPushButton#navButton[active="true"] {{
@@ -374,7 +459,7 @@ def build_stylesheet() -> str:
     }}
 
     QScrollBar::handle:vertical {{
-        background: #D5CCC1;
+        background: #D6CABC;
         border-radius: 3px;
         min-height: 18px;
     }}
@@ -385,28 +470,28 @@ def build_stylesheet() -> str:
     QScrollBar::sub-page:vertical {{
         border: none;
         background: transparent;
-        height: 0px;
+        height: 0;
     }}
 
     QProgressBar {{
-        background-color: #EAE2D8;
+        background-color: #EAE2D9;
         border: none;
-        border-radius: 4px;
-        min-height: 8px;
-        max-height: 8px;
+        border-radius: 5px;
+        min-height: 10px;
+        max-height: 10px;
         text-align: center;
     }}
 
     QProgressBar::chunk {{
         background-color: {THEME["accent"]};
-        border-radius: 4px;
+        border-radius: 5px;
     }}
 
     QLabel#previewLabel {{
-        background-color: #EFE9E1;
+        background-color: {THEME["surface_soft"]};
         color: {THEME["muted"]};
-        border-radius: 20px;
-        padding: 2px;
+        border-radius: 26px;
+        padding: 4px;
     }}
 
     QMessageBox {{

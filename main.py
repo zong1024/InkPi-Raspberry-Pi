@@ -37,6 +37,7 @@ def configure_application(app: QApplication) -> None:
     app.setApplicationVersion(APP_CONFIG["version"])
     app.setStyleSheet(build_stylesheet())
     app.setFont(QFont(ensure_app_font_family(), 10))
+    app.setQuitOnLastWindowClosed(True)
 
 
 def main() -> None:
