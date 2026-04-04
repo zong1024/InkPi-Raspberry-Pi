@@ -11,8 +11,8 @@ function ThreeBackdrop() {
     }
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, mount.clientWidth / mount.clientHeight, 0.1, 100);
-    camera.position.z = 7;
+    const camera = new THREE.PerspectiveCamera(42, mount.clientWidth / mount.clientHeight, 0.1, 100);
+    camera.position.z = 12;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -22,38 +22,47 @@ function ThreeBackdrop() {
     const group = new THREE.Group();
     scene.add(group);
 
-    const orb = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(1.35, 1),
-      new THREE.MeshBasicMaterial({ color: 0x50f0ff, wireframe: true, transparent: true, opacity: 0.4 }),
-    );
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(2.4, 0.03, 16, 160),
-      new THREE.MeshBasicMaterial({ color: 0xff375f, transparent: true, opacity: 0.65 }),
-    );
-    ring.rotation.x = Math.PI / 2.4;
+    const paneMaterial = new THREE.MeshBasicMaterial({
+      color: 0x5b9cff,
+      transparent: true,
+      opacity: 0.06,
+      side: THREE.DoubleSide,
+    });
+    const paneEdgeMaterial = new THREE.LineBasicMaterial({
+      color: 0xc9ddff,
+      transparent: true,
+      opacity: 0.22,
+    });
 
-    const pointsGeometry = new THREE.BufferGeometry();
-    const points = [];
-    for (let i = 0; i < 800; i += 1) {
-      points.push((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 12);
+    const panes = [];
+    for (let index = 0; index < 3; index += 1) {
+      const width = 7.2 - index * 0.8;
+      const height = 4.2 - index * 0.3;
+      const geometry = new THREE.PlaneGeometry(width, height);
+      const mesh = new THREE.Mesh(geometry, paneMaterial.clone());
+      mesh.position.set(index * 0.8 - 1.2, 1.6 - index * 0.7, -index * 0.7);
+      mesh.rotation.x = -0.16;
+      mesh.rotation.y = 0.22;
+
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), paneEdgeMaterial.clone());
+      mesh.add(edges);
+      group.add(mesh);
+      panes.push(mesh);
     }
-    pointsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
-    const stars = new THREE.Points(
-      pointsGeometry,
-      new THREE.PointsMaterial({ color: 0x5dd9ff, size: 0.018, transparent: true, opacity: 0.8 }),
-    );
 
-    group.add(orb);
-    group.add(ring);
-    scene.add(stars);
+    const grid = new THREE.GridHelper(28, 24, 0x76a9ff, 0xdbe7ff);
+    grid.position.y = -4.4;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.08;
+    scene.add(grid);
 
     let frameId = 0;
     const render = () => {
       frameId = requestAnimationFrame(render);
-      orb.rotation.x += 0.002;
-      orb.rotation.y += 0.0035;
-      ring.rotation.z += 0.0025;
-      stars.rotation.y += 0.0008;
+      group.rotation.y += 0.0008;
+      panes.forEach((pane, index) => {
+        pane.position.y += Math.sin((performance.now() * 0.00035) + index) * 0.0008;
+      });
       renderer.render(scene, camera);
     };
     render();
@@ -70,7 +79,6 @@ function ThreeBackdrop() {
       window.removeEventListener("resize", handleResize);
       renderer.dispose();
       mount.removeChild(renderer.domElement);
-      pointsGeometry.dispose();
     };
   }, []);
 

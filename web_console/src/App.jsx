@@ -8,7 +8,7 @@ const EMPTY_DASHBOARD = {
 };
 
 const HEALTH_LABELS = {
-  good: "稳定",
+  good: "正常",
   warn: "关注",
   bad: "异常",
 };
@@ -34,6 +34,7 @@ function useOpsDashboard() {
 
   useEffect(() => {
     let disposed = false;
+
     async function loadBootstrap() {
       try {
         const response = await fetch("/api/ops/bootstrap");
@@ -143,15 +144,25 @@ function App() {
       <Suspense fallback={null}>
         <ThreeBackdrop />
       </Suspense>
+
       <header className="topbar">
-        <div>
-          <div className="eyebrow">INKPI OPS CONSOLE</div>
-          <h1>树莓派书法评测运行后台</h1>
-          <p>实时监控评测链路、模型状态、硬件健康和结果同步。</p>
+        <div className="topbar-copy">
+          <span className="eyebrow">INKPI OPERATIONS CENTER</span>
+          <h1>InkPi 设备运行中心</h1>
+          <p>实时查看树莓派主机状态、评测链路、模型加载、硬件健康和结果输出。</p>
         </div>
         <div className={`connection-chip ${connection}`}>
           <span className="dot" />
-          {connection === "ready" ? "实时流已连接" : connection === "degraded" ? "实时流波动" : "正在连接"}
+          <div>
+            <strong>
+              {connection === "ready"
+                ? "实时连接正常"
+                : connection === "degraded"
+                  ? "实时流波动"
+                  : "正在连接"}
+            </strong>
+            <small>SSE / /api/ops/stream</small>
+          </div>
         </div>
       </header>
 
@@ -179,8 +190,8 @@ function App() {
 
         <div className="panel service-panel">
           <div className="panel-heading">
-            <span>前后端运行态</span>
-            <strong>STACK</strong>
+            <span>栈状态</span>
+            <strong>STACK STATUS</strong>
           </div>
           <StatusList items={stackItems(snapshot)} />
         </div>
@@ -189,7 +200,7 @@ function App() {
       <section className="dashboard-grid">
         <div className="panel">
           <div className="panel-heading">
-            <span>评测链路</span>
+            <span>评测流程</span>
             <strong>PIPELINE</strong>
           </div>
           <PipelineTimeline items={dashboard.pipeline} />
@@ -197,7 +208,7 @@ function App() {
 
         <div className="panel">
           <div className="panel-heading">
-            <span>模型加载</span>
+            <span>模型状态</span>
             <strong>MODELS</strong>
           </div>
           <StatusList items={modelItems(snapshot)} dense />
@@ -231,7 +242,7 @@ function App() {
 
         <div className="panel console-panel">
           <div className="panel-heading">
-            <span>实时输出</span>
+            <span>后台输出</span>
             <strong>RUNTIME LOGS</strong>
           </div>
           <div className="runtime-tabs">
@@ -261,7 +272,7 @@ function App() {
 
         <div className="panel diagnostics-panel">
           <div className="panel-heading">
-            <span>云同步与结果摘要</span>
+            <span>云同步与输出</span>
             <strong>SYNC STATUS</strong>
           </div>
           <CloudPanel snapshot={snapshot} />
@@ -280,7 +291,9 @@ function StatusList({ items, dense = false }) {
             <div className="status-title">{item.title}</div>
             <div className="status-meta">{item.message}</div>
           </div>
-          <div className={`health-tag ${HEALTH_CLASSES[item.health] || "warn"}`}>{HEALTH_LABELS[item.health] || "关注"}</div>
+          <div className={`health-tag ${HEALTH_CLASSES[item.health] || "warn"}`}>
+            {HEALTH_LABELS[item.health] || "关注"}
+          </div>
         </div>
       ))}
     </div>
@@ -291,6 +304,7 @@ function PipelineTimeline({ items }) {
   if (!items?.length) {
     return <div className="empty-state">等待新的评测链路事件进入监控视图。</div>;
   }
+
   const ordered = [...items].reverse();
   return (
     <div className="pipeline-list">
@@ -317,6 +331,7 @@ function ResultFeed({ results }) {
   if (!results?.length) {
     return <div className="empty-state">还没有新的评测结果进入后台。</div>;
   }
+
   return (
     <div className="result-feed">
       {results.map((item) => (
@@ -324,7 +339,7 @@ function ResultFeed({ results }) {
           <div className="result-score">{item.total_score}</div>
           <div className="result-body">
             <strong>{item.character_name || "未识别"}</strong>
-            <span>{item.quality_level}</span>
+            <span>{item.quality_level || "unknown"}</span>
             <small>{item.timestamp || "--"}</small>
             <div className="dimension-strip">
               {Object.entries(item.dimension_scores || {}).map(([key, value]) => (
@@ -415,7 +430,9 @@ function CloudPanel({ snapshot }) {
           <span>云端后端</span>
           <strong>{snapshot?.cloud?.backend_url || "未配置"}</strong>
         </div>
-        <div className={`health-tag ${remote?.ok ? "good" : snapshot?.cloud?.configured ? "warn" : "bad"}`}>
+        <div
+          className={`health-tag ${remote?.ok ? "good" : snapshot?.cloud?.configured ? "warn" : "bad"}`}
+        >
           {remote?.ok ? "已连通" : snapshot?.cloud?.configured ? "待检查" : "未配置"}
         </div>
       </div>
