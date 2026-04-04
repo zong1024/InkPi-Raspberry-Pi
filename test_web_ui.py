@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from models.evaluation_result import EvaluationResult
-from web_ui.app import app, state
+from web_ui.app import app, operations_monitor_service, state
 
 
 def build_result(record_id: int = 1) -> EvaluationResult:
@@ -41,6 +41,7 @@ class WebUiSmokeTest(unittest.TestCase):
         with state.lock:
             state.last_result = None
             state.last_result_id = None
+        operations_monitor_service.record_pipeline("test", "running", "Preparing smoke test context.")
 
     def test_health(self) -> None:
         response = self.client.get("/api/health")
@@ -57,8 +58,10 @@ class WebUiSmokeTest(unittest.TestCase):
 
     def test_bootstrap(self) -> None:
         result = build_result()
-        with patch("web_ui.app.database_service.get_statistics", return_value={"total_count": 1, "average_score": 86, "max_score": 86, "min_score": 86}), \
-             patch("web_ui.app.database_service.get_recent", return_value=[result]):
+        with patch(
+            "web_ui.app.database_service.get_statistics",
+            return_value={"total_count": 1, "average_score": 86, "max_score": 86, "min_score": 86},
+        ), patch("web_ui.app.database_service.get_recent", return_value=[result]):
             response = self.client.get("/api/bootstrap")
             self.assertEqual(response.status_code, 200)
             payload = response.get_json()
@@ -90,6 +93,28 @@ class WebUiSmokeTest(unittest.TestCase):
             self.assertIn("score_debug", payload)
             self.assertEqual(payload["score_debug"]["calibration"]["feature_quality"], 0.83)
             response.close()
+
+    def test_ops_bootstrap_contains_snapshot_and_runtime_sections(self) -> None:
+        response = self.client.get("/api/ops/bootstrap")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn("snapshot", payload)
+        self.assertIn("logs", payload)
+        self.assertIn("pipeline", payload)
+        self.assertIn("runtime_logs", payload)
+        self.assertIn("host", payload["snapshot"])
+        self.assertIn("models", payload["snapshot"])
+        self.assertIn("hardware", payload["snapshot"])
+        response.close()
+
+    def test_ops_pipeline_endpoint_returns_recent_events(self) -> None:
+        operations_monitor_service.record_pipeline("quality_model", "done", "Model test event.", {"score": 91})
+        response = self.client.get("/api/ops/pipeline")
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIsInstance(payload["items"], list)
+        self.assertTrue(any(item["stage"] == "quality_model" for item in payload["items"]))
+        response.close()
 
 
 if __name__ == "__main__":

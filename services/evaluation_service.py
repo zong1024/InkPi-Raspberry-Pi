@@ -1,4 +1,4 @@
-"""Single-chain evaluation service: preprocess -> local OCR -> ONNX quality scoring."""
+"""Single-chain evaluation service: OCR -> ONNX score -> explanatory dimensions."""
 
 from __future__ import annotations
 
@@ -14,12 +14,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from models.evaluation_result import EvaluationResult
 from services.dimension_scorer_service import dimension_scorer_service
 from services.local_ocr_service import local_ocr_service
+from services.operations_monitor_service import operations_monitor_service
 from services.preprocessing_service import PreprocessingError
 from services.quality_scorer_service import quality_scorer_service
 
 
 class EvaluationService:
-    """Single-chain scoring service with no templates or dual score modes."""
+    """Single-chain scoring service with stable user-facing feedback."""
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -52,31 +53,79 @@ class EvaluationService:
         """Run the OCR + ONNX scoring pipeline."""
 
         self.logger.info("Starting single-chain calligraphy evaluation...")
+        operations_monitor_service.record_pipeline("evaluation", "running", "Evaluation pipeline started.")
 
         if not local_ocr_service.available:
+            operations_monitor_service.record_pipeline(
+                "ocr",
+                "error",
+                "OCR service is unavailable.",
+                {
+                    "local_ready": bool(getattr(local_ocr_service, "_available", False)),
+                    "remote_ready": bool(local_ocr_service.remote_available),
+                },
+            )
             raise RuntimeError("Local OCR is unavailable. Install PaddleOCR or configure the remote OCR fallback.")
+
         if not quality_scorer_service.available:
+            operations_monitor_service.record_pipeline(
+                "quality_model",
+                "error",
+                "Quality scoring model is unavailable.",
+                {"model_path": str(quality_scorer_service.model_path)},
+            )
             raise RuntimeError(f"Quality scorer ONNX is unavailable: {quality_scorer_service.model_path}")
 
         recognition_source = ocr_image if ocr_image is not None else processed_image
+        operations_monitor_service.record_pipeline("ocr", "running", "Recognizing character from ROI.")
         recognition = local_ocr_service.recognize(recognition_source)
         if recognition is None:
+            operations_monitor_service.record_pipeline("ocr", "error", "OCR could not lock onto a single character.")
             raise PreprocessingError(
                 "未能稳定识别当前单字，请重新对准作品后再试。",
                 error_type="ocr_failed",
             )
+        operations_monitor_service.record_pipeline(
+            "ocr",
+            "done",
+            "OCR recognition completed.",
+            {
+                "character": recognition.character,
+                "confidence": round(float(recognition.confidence), 4),
+                "source": recognition.source,
+            },
+        )
 
+        operations_monitor_service.record_pipeline("quality_model", "running", "Running ONNX quality scorer.")
         scored = quality_scorer_service.score(
             processed_image,
             character=recognition.character,
             ocr_confidence=recognition.confidence,
         )
+        operations_monitor_service.record_pipeline(
+            "quality_model",
+            "done",
+            "Primary score generated.",
+            {
+                "total_score": scored.total_score,
+                "quality_level": scored.quality_level,
+                "quality_confidence": round(float(scored.quality_confidence), 4),
+            },
+        )
+
+        operations_monitor_service.record_pipeline("dimension_scoring", "running", "Computing explanatory dimensions.")
         dimension_result = dimension_scorer_service.score(
             processed_image,
             probabilities=scored.probabilities,
             quality_features=scored.quality_features or {},
             calibration=scored.calibration or {},
             ocr_confidence=recognition.confidence,
+        )
+        operations_monitor_service.record_pipeline(
+            "dimension_scoring",
+            "done",
+            "Four-dimension scoring completed.",
+            dimension_result.dimension_scores,
         )
 
         result = EvaluationResult(
@@ -103,6 +152,16 @@ class EvaluationService:
             result.total_score,
             result.quality_level,
             result.ocr_confidence or 0.0,
+        )
+        operations_monitor_service.record_pipeline(
+            "evaluation",
+            "done",
+            "Evaluation pipeline completed.",
+            {
+                "character": result.character_name,
+                "total_score": result.total_score,
+                "quality_level": result.quality_level,
+            },
         )
         return result
 

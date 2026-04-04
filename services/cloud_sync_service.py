@@ -13,6 +13,7 @@ import requests
 
 from config import CLOUD_CONFIG
 from models.evaluation_result import EvaluationResult
+from services.operations_monitor_service import operations_monitor_service
 
 
 class CloudSyncService:
@@ -119,10 +120,28 @@ class CloudSyncService:
 
     def _safe_upload(self, result: EvaluationResult, local_record_id: int) -> None:
         try:
+            operations_monitor_service.record_pipeline(
+                "cloud_sync",
+                "running",
+                "Uploading result to the cloud backend.",
+                {"local_record_id": local_record_id},
+            )
             self.upload_result(result, local_record_id)
             self.logger.info("Cloud sync succeeded: local_record_id=%s", local_record_id)
+            operations_monitor_service.record_pipeline(
+                "cloud_sync",
+                "done",
+                "Cloud sync completed.",
+                {"local_record_id": local_record_id, "backend_url": self.backend_url},
+            )
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("Cloud sync skipped for record %s: %s", local_record_id, exc)
+            operations_monitor_service.record_pipeline(
+                "cloud_sync",
+                "error",
+                "Cloud sync failed.",
+                {"local_record_id": local_record_id, "error": str(exc)},
+            )
 
 
 cloud_sync_service = CloudSyncService()
