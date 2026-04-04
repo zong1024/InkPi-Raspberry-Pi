@@ -1,11 +1,18 @@
 page {
+  --inkpi-font-display: "Smiley Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --inkpi-font-body: "PingFang SC", "Microsoft YaHei", sans-serif;
+  --inkpi-ink: #2b2218;
+  --inkpi-muted: #7b6752;
+  --inkpi-accent: #b11828;
+  --inkpi-paper: rgba(255, 251, 245, 0.96);
+  --inkpi-paper-line: rgba(188, 165, 139, 0.62);
   min-height: 100%;
   background:
     radial-gradient(circle at top right, rgba(181, 111, 63, 0.18), transparent 26%),
     radial-gradient(circle at bottom left, rgba(49, 39, 29, 0.08), transparent 24%),
     linear-gradient(180deg, #f7f1e8 0%, #efe6d8 100%);
-  color: #2b2218;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--inkpi-ink);
+  font-family: var(--inkpi-font-body);
 }
 
 button::after {
@@ -45,11 +52,20 @@ button::after {
 .paper-panel {
   position: relative;
   z-index: 1;
-  background: rgba(255, 251, 245, 0.96);
-  border: 1rpx solid rgba(188, 165, 139, 0.62);
+  background: var(--inkpi-paper);
+  border: 1rpx solid var(--inkpi-paper-line);
   border-radius: 32rpx;
   box-shadow: 0 18rpx 48rpx rgba(64, 45, 30, 0.08);
   box-sizing: border-box;
+}
+
+.panel-title,
+.section-title,
+.eyebrow,
+.primary-btn,
+.secondary-btn,
+.ghost-btn {
+  font-family: var(--inkpi-font-display);
 }
 
 .panel-title {
@@ -64,7 +80,7 @@ button::after {
   margin-top: 10rpx;
   font-size: 24rpx;
   line-height: 1.7;
-  color: #7b6752;
+  color: var(--inkpi-muted);
 }
 
 .eyebrow {
@@ -82,7 +98,7 @@ button::after {
 .primary-btn {
   height: 88rpx;
   border-radius: 999rpx;
-  background: linear-gradient(135deg, #b76d3d 0%, #8a4e2d 100%);
+  background: linear-gradient(135deg, #b11828 0%, #8b1020 100%);
   color: #fff9f2;
   font-size: 30rpx;
   font-weight: 700;
@@ -103,7 +119,7 @@ button::after {
 .ghost-btn {
   height: 76rpx;
   border-radius: 999rpx;
-  background: rgba(255, 251, 245, 0.65);
+  background: rgba(255, 251, 245, 0.72);
   color: #6b5846;
   border: 1rpx solid rgba(193, 173, 150, 0.64);
   font-size: 26rpx;

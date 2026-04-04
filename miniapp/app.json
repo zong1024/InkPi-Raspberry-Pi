@@ -5,7 +5,7 @@
     "pages/result/index"
   ],
   "window": {
-    "navigationBarTitleText": "InkPi 云端卷宗",
+    "navigationBarTitleText": "InkPi 云端记录",
     "navigationBarBackgroundColor": "#f5efe5",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f6f0e8",

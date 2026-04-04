@@ -4,19 +4,19 @@
 
   <view class="login-hero">
     <text class="eyebrow">InkPi Cloud</text>
-    <text class="hero-brand">云端卷宗</text>
+    <text class="hero-brand">云端记录</text>
     <text class="hero-copy">
-      树莓派端完成评测后，结果会自动上传到云端。登录后即可查看每次得分、书体与评语建议。
+      树莓派端完成评测后，结果会自动同步到这里。登录后即可查看每次得分、识别字和评价建议。
     </text>
 
     <view class="hero-points">
       <view class="hero-point">
         <text class="hero-point-title">实时同步</text>
-        <text class="hero-point-text">无需拷图，历史结果自动刷新。</text>
+        <text class="hero-point-text">无需手动导图，历史记录会自动刷新。</text>
       </view>
       <view class="hero-point">
         <text class="hero-point-title">移动查看</text>
-        <text class="hero-point-text">评委和演示人员都能直接查看成绩单。</text>
+        <text class="hero-point-text">在手机上快速回看评测结果，适合课堂与展示场景。</text>
       </view>
     </view>
   </view>
@@ -61,7 +61,7 @@
     <text wx:if="{{error}}" class="login-error">{{error}}</text>
 
     <button class="primary-btn login-btn" loading="{{loading}}" bindtap="onLogin">
-      进入评测卷宗
+      进入云端记录
     </button>
   </view>
 </view>
