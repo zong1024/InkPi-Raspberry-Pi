@@ -8,7 +8,7 @@
         <text class="eyebrow">InkPi Cloud</text>
         <text class="hero-title">历史卷宗</text>
         <text class="hero-subtitle">
-          这里会持续汇总树莓派上传的评测结果。现在可以按字、等级、时间和设备筛选，也支持直接删除无效记录。
+          这里会持续汇总树莓派上传的评测结果。现在可以按字、等级、时间和设备筛选，也支持直接整理无效记录。
         </text>
       </view>
       <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
@@ -52,15 +52,15 @@
 
     <view class="quality-strip">
       <view class="quality-pill quality-good">
-        <text class="quality-name">好</text>
+        <text class="quality-name">甲</text>
         <text class="quality-count">{{summary.qualityCounts.good}}</text>
       </view>
       <view class="quality-pill quality-medium">
-        <text class="quality-name">中</text>
+        <text class="quality-name">乙</text>
         <text class="quality-count">{{summary.qualityCounts.medium}}</text>
       </view>
       <view class="quality-pill quality-bad">
-        <text class="quality-name">坏</text>
+        <text class="quality-name">丙</text>
         <text class="quality-count">{{summary.qualityCounts.bad}}</text>
       </view>
     </view>
@@ -74,7 +74,7 @@
   <view class="paper-panel charstats-panel">
     <view class="section-head">
       <text class="section-title">按字统计</text>
-      <text class="section-note">看哪些字出现最多、均分最高</text>
+      <text class="section-note">看看哪些字出现最多、均分更高</text>
     </view>
     <view wx:if="{{summary.topCharacters && summary.topCharacters.length}}" class="charstats-list">
       <view wx:for="{{summary.topCharacters}}" wx:key="character_name" class="charstat-row">

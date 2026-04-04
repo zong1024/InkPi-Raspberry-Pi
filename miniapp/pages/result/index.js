@@ -28,9 +28,9 @@ function getScorePalette(score) {
 }
 
 function getQualityLabel(level) {
-  if (level === 'good') return '好';
-  if (level === 'bad') return '坏';
-  return '中';
+  if (level === 'good') return '甲';
+  if (level === 'bad') return '丙';
+  return '乙';
 }
 
 function formatConfidence(value) {
@@ -56,7 +56,7 @@ function buildDimensionCards(dimensionScores = null) {
 
 function buildDimensionSummary(cards = []) {
   if (!cards.length) {
-    return '老记录暂无四维评分';
+    return '老记录暂时没有四维评分。';
   }
   const strongest = [...cards].sort((left, right) => right.score - left.score)[0];
   const weakest = [...cards].sort((left, right) => left.score - right.score)[0];
@@ -100,7 +100,7 @@ Page({
         ...palette,
         qualityLabel: rawResult.quality_label || getQualityLabel(rawResult.quality_level),
         characterLabel: rawResult.character_name || '未识别',
-        deviceLabel: rawResult.device_name || 'InkPi 树莓派',
+        deviceLabel: rawResult.device_name || 'InkPi 设备',
         ocrText: formatConfidence(rawResult.ocr_confidence),
         qualityText: formatConfidence(rawResult.quality_confidence),
       };

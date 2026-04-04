@@ -2,7 +2,7 @@ const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 const { POLL_INTERVAL } = require('../../config');
 
-const QUALITY_OPTIONS = ['全部等级', '好', '中', '坏'];
+const QUALITY_OPTIONS = ['全部等级', '甲', '乙', '丙'];
 const QUALITY_VALUES = ['all', 'good', 'medium', 'bad'];
 const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天'];
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
@@ -29,9 +29,9 @@ function getScorePalette(score) {
 }
 
 function getQualityLabel(level) {
-  if (level === 'good') return '好';
-  if (level === 'bad') return '坏';
-  return '中';
+  if (level === 'good') return '甲';
+  if (level === 'bad') return '丙';
+  return '乙';
 }
 
 function buildFeedbackPreview(text) {
@@ -89,7 +89,7 @@ function normalizeResult(item) {
     ...palette,
     qualityLabel: item.quality_label || getQualityLabel(item.quality_level),
     characterLabel: item.character_name || '未识别',
-    deviceLabel: item.device_name || 'InkPi 树莓派',
+    deviceLabel: item.device_name || 'InkPi 设备',
     feedbackPreview: buildFeedbackPreview(item.feedback),
     ocrText: formatConfidence(item.ocr_confidence),
     qualityText: formatConfidence(item.quality_confidence),
@@ -367,7 +367,7 @@ Page({
   async batchDeleteSelected() {
     const ids = this.data.selectedIds || [];
     if (!ids.length) {
-      wx.showToast({ title: '先选择记录', icon: 'none' });
+      wx.showToast({ title: '请先选择记录', icon: 'none' });
       return;
     }
 
