@@ -36,3 +36,6 @@ Thumbs.db
 *.tmp
 *.temp
 *.bak
+
+# Frontend tooling
+web_console/node_modules/
