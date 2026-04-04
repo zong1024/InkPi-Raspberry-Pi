@@ -7,8 +7,6 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import cv2
 import numpy as np
 from PyQt6.QtCore import QThread, Qt, pyqtSignal
@@ -22,7 +20,9 @@ from services.database_service import database_service
 from services.evaluation_service import evaluation_service
 from services.preprocessing_service import PreprocessingError, preprocessing_service
 from services.speech_service import speech_service
-from views.ui_theme import app_font
+from views.ui_theme import app_font, display_font
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class PreviewThread(QThread):
@@ -70,12 +70,13 @@ class CameraView(QWidget):
         header.setObjectName("pageHeader")
         header.setFixedHeight(34)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 4, 10, 4)
+        header_layout.setContentsMargins(6, 4, 6, 4)
         header_layout.setSpacing(8)
 
         self.btn_back = QPushButton("← 返回")
-        self.btn_back.setObjectName("headerIconButton")
+        self.btn_back.setObjectName("ghostButton")
         self.btn_back.setFixedHeight(24)
+        self.btn_back.setFont(app_font(9, QFont.Weight.Bold))
         self.btn_back.clicked.connect(self.cancelled.emit)
         header_layout.addWidget(self.btn_back)
 
@@ -83,19 +84,21 @@ class CameraView(QWidget):
 
         title = QLabel("INKPI CAPTURE")
         title.setObjectName("pageTitle")
-        title.setFont(app_font(12, QFont.Weight.Bold))
+        title.setFont(display_font(11, QFont.Weight.Bold))
         header_layout.addWidget(title)
 
         header_layout.addStretch()
 
-        self.camera_state = QLabel("等待相机")
+        self.camera_state = QLabel("连接中")
         self.camera_state.setObjectName("statusPill")
+        self.camera_state.setFont(app_font(9, QFont.Weight.Bold))
         header_layout.addWidget(self.camera_state)
         root.addWidget(header)
 
-        self.preview_label = QLabel("正在准备画面…")
+        self.preview_label = QLabel("正在连接摄像头…")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_label.setWordWrap(True)
         self.preview_label.setFixedHeight(194)
         self.preview_label.setFont(app_font(11))
         root.addWidget(self.preview_label)
@@ -104,9 +107,9 @@ class CameraView(QWidget):
         bottom_row.setContentsMargins(0, 0, 0, 0)
         bottom_row.setSpacing(12)
 
-        self.btn_load = QPushButton("上传\n图片")
+        self.btn_load = QPushButton("上传图片")
         self.btn_load.setObjectName("buttonCard")
-        self.btn_load.setFixedSize(82, 56)
+        self.btn_load.setFixedSize(86, 56)
         self.btn_load.setFont(app_font(10, QFont.Weight.Bold))
         self.btn_load.clicked.connect(self._on_load_image)
         bottom_row.addWidget(self.btn_load)
@@ -114,14 +117,14 @@ class CameraView(QWidget):
         self.btn_capture = QPushButton("拍")
         self.btn_capture.setObjectName("floatingButton")
         self.btn_capture.setFixedSize(60, 60)
-        self.btn_capture.setFont(app_font(15, QFont.Weight.Bold))
+        self.btn_capture.setFont(display_font(15, QFont.Weight.Bold))
         self.btn_capture.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_capture, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        self.btn_eval = QPushButton("PROCEED\n开始评测")
+        self.btn_eval = QPushButton("开始评测")
         self.btn_eval.setObjectName("primaryButton")
-        self.btn_eval.setFixedSize(178, 56)
-        self.btn_eval.setFont(app_font(11, QFont.Weight.Bold))
+        self.btn_eval.setFixedSize(174, 56)
+        self.btn_eval.setFont(display_font(11, QFont.Weight.Bold))
         self.btn_eval.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_eval)
         root.addLayout(bottom_row)
@@ -143,7 +146,7 @@ class CameraView(QWidget):
     def _start_camera(self) -> None:
         self._set_camera_state("连接中", "working")
         if not camera_service.open():
-            self.preview_label.setText("摄像头暂不可用\n仍可直接上传图片进行评测")
+            self.preview_label.setText("摄像头暂不可用。\n你仍然可以直接上传图片完成评测。")
             self.btn_capture.setEnabled(False)
             self.btn_eval.setEnabled(False)
             self._set_camera_state("离线", "error")
@@ -200,7 +203,7 @@ class CameraView(QWidget):
 
         cv2.putText(
             overlay,
-            "请将单字放在框内",
+            "Place single character in frame",
             (max(18, x1 - 8), min(height - 14, y2 + 24)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
@@ -212,13 +215,13 @@ class CameraView(QWidget):
     def _build_retry_guidance(self, exc: PreprocessingError) -> str:
         error_guidance = {
             "too_dark": "请把作品移到更亮的位置后再试。",
-            "too_bright": "请避开反光，重新对准单字。",
+            "too_bright": "请避开反光后重新对准单字。",
             "low_contrast": "请换一张更清晰、笔画更明显的图片。",
-            "empty_shot": "请让单字尽量占据取景框中央区域。",
-            "obstruction": "请移开手和杂物，只保留目标单字。",
+            "empty_shot": "请让单字尽量位于取景框中央。",
+            "obstruction": "请移开手部或杂物，只保留目标单字。",
             "not_calligraphy": "当前画面不像单字书法，请重新对准作品。",
-            "too_fragmented": "画面内容太散，请只保留一个字。",
-            "scattered_content": "请靠近一点，让目标字更集中。",
+            "too_fragmented": "画面内容过于零散，请只保留一个字。",
+            "scattered_content": "请靠近一点，让目标单字更集中。",
             "ocr_failed": "这次未能稳定识别，请让主体更完整后重试。",
         }
         return error_guidance.get(exc.error_type, "请重新对准单字后再试一次。")
@@ -281,7 +284,7 @@ class CameraView(QWidget):
 
         image = self._read_image(file_path)
         if image is None:
-            QMessageBox.warning(self, "读取失败", "无法读取所选图片，请换一张再试。")
+            QMessageBox.warning(self, "读取失败", "无法读取所选图片，请更换一张后重试。")
             return
 
         self.current_frame = image.copy()
@@ -302,7 +305,7 @@ class CameraView(QWidget):
             QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)
-            self.btn_load.setText("上传\n图片")
+            self.btn_load.setText("上传图片")
 
     def _read_image(self, file_path: str) -> np.ndarray | None:
         try:
