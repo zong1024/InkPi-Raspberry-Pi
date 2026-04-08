@@ -64,6 +64,13 @@ Server setup:
 bash scripts/setup_server_runtime.sh
 ```
 
+Public backend only:
+
+```bash
+bash scripts/setup_backend_runtime.sh
+INKPI_WEB_PORT=5000 INKPI_CLOUD_PORT=23333 bash scripts/start_backend_stack.sh
+```
+
 Start the full stack:
 
 ```bash
@@ -82,11 +89,22 @@ Stop the full stack:
 bash scripts/stop_server_stack.sh
 ```
 
+Stop the public backend only:
+
+```bash
+bash scripts/stop_backend_stack.sh
+```
+
 What the stack script starts:
 
 - `Cloud API` on `INKPI_CLOUD_PORT` (default `5001`)
 - `WebUI` on `INKPI_WEB_PORT` (default `5000`)
 - `Qt UI` inside the current XFCE session
+
+What the backend-only script starts:
+
+- `Cloud API` on `INKPI_CLOUD_PORT` (recommended public port `23333`)
+- `WebUI` on `INKPI_WEB_PORT` (default `5000`)
 
 Useful environment overrides:
 
