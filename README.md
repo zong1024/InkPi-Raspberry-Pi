@@ -38,9 +38,31 @@ Implementation notes:
 - `services/quality_scorer_service.py` keeps the main ONNX scoring pipeline
 - `services/dimension_scorer_service.py` builds four explanation scores
 - `models/evaluation_result.py` stores `dimension_scores` and `score_debug`
+- `models/evaluation_framework.py` defines basis cards, practice guidance, and validation targets
 - Qt shows user-facing scores only
 - WebUI shows debug data for evaluation inspection
 - Cloud API returns `dimension_scores` in list/detail payloads
+- Cloud API now also exposes reviewer-facing methodology data at `/api/system/methodology`
+
+## Reviewer-Oriented Positioning
+
+To avoid overstating the system, the current project should be presented as:
+
+- a `single-character`, `regular-script`, `beginner-friendly` assistant
+- a system that keeps `total_score` as the primary score and uses four dimensions for explanation
+- a product that supports `teacher-assisted review`, not an automated replacement for expert grading
+
+The mobile miniapp now exposes:
+
+- quantitative statistics and progress trends
+- record deletion and batch management
+- explanation-basis cards for each dimension
+- practice guidance derived from the weakest dimension
+- validation snapshot fields such as sample count, character coverage, device count, and target progress
+
+For a detailed reviewer-facing write-up, see:
+
+- `docs/evaluation-basis-and-validation.md`
 
 ## Runtime Layout
 
@@ -182,4 +204,5 @@ Raspberry Pi specific hardware paths such as `GPIO`, camera hardware, `SPI`, and
 
 - Flow chart source: `docs/inkpi-project-flow.drawio`
 - Flow chart preview: `docs/inkpi-project-flow.png`
+- Reviewer notes: `docs/evaluation-basis-and-validation.md`
 - Training notes: `training/README.md`
