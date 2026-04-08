@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 import json
 import secrets
 import sqlite3
@@ -11,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
+
+
+DIMENSION_KEYS = ("structure", "stroke", "integrity", "stability")
 
 
 def utcnow_iso() -> str:
@@ -330,93 +334,28 @@ class CloudDatabase:
             device_name=device_name,
             date_range=date_range,
         )
-        recent_cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        now = datetime.now()
+        recent_cutoff = now - timedelta(days=7)
+        previous_cutoff = now - timedelta(days=14)
+        trend_window_days = 10
 
         with self._managed_connection() as conn:
-            stats = conn.execute(
+            rows = conn.execute(
                 f"""
                 SELECT
-                    COUNT(*) AS total,
-                    AVG(total_score) AS average_score,
-                    MAX(total_score) AS best_score,
-                    MIN(total_score) AS worst_score,
-                    COUNT(DISTINCT device_name) AS device_count,
-                    COUNT(DISTINCT COALESCE(character_name, '')) AS unique_characters
-                FROM results
-                {where_sql}
-                """,
-                params,
-            ).fetchone()
-
-            latest_row = conn.execute(
-                f"""
-                SELECT total_score, timestamp, character_name
+                    id,
+                    timestamp,
+                    total_score,
+                    quality_level,
+                    character_name,
+                    device_name,
+                    dimension_scores_json
                 FROM results
                 {where_sql}
                 ORDER BY timestamp DESC, id DESC
-                LIMIT 1
-                """,
-                params,
-            ).fetchone()
-
-            quality_rows = conn.execute(
-                f"""
-                SELECT quality_level, COUNT(*) AS count
-                FROM results
-                {where_sql}
-                GROUP BY quality_level
                 """,
                 params,
             ).fetchall()
-
-            recent_params = list(params)
-            recent_where = where_sql
-            recent_clause = "timestamp >= ?"
-            if recent_where:
-                recent_where = f"{recent_where} AND {recent_clause}"
-            else:
-                recent_where = f"WHERE {recent_clause}"
-            recent_params.append(recent_cutoff)
-
-            recent_row = conn.execute(
-                f"""
-                SELECT COUNT(*) AS total, AVG(total_score) AS average_score
-                FROM results
-                {recent_where}
-                """,
-                recent_params,
-            ).fetchone()
-
-            top_characters = conn.execute(
-                f"""
-                SELECT
-                    COALESCE(character_name, '未识别') AS character_name,
-                    COUNT(*) AS count,
-                    ROUND(AVG(total_score), 1) AS average_score
-                FROM results
-                {where_sql}
-                GROUP BY COALESCE(character_name, '未识别')
-                ORDER BY count DESC, average_score DESC, character_name ASC
-                LIMIT 8
-                """,
-                params,
-            ).fetchall()
-
-            top_devices = conn.execute(
-                f"""
-                SELECT
-                    device_name,
-                    COUNT(*) AS count,
-                    ROUND(AVG(total_score), 1) AS average_score
-                FROM results
-                {where_sql}
-                GROUP BY device_name
-                ORDER BY count DESC, average_score DESC, device_name ASC
-                LIMIT 3
-                """,
-                params,
-            ).fetchall()
-
             device_rows = conn.execute(
                 """
                 SELECT device_name
@@ -426,17 +365,159 @@ class CloudDatabase:
                 """
             ).fetchall()
 
+        available_devices = [row["device_name"] for row in device_rows]
+        empty_trend_points = self._build_empty_trend_points(now=now, days=trend_window_days)
         quality_counts = {"good": 0, "medium": 0, "bad": 0}
-        for row in quality_rows:
-            level = row["quality_level"] or "medium"
-            if level in quality_counts:
-                quality_counts[level] = int(row["count"])
 
-        total = int(stats["total"] or 0)
-        average_score = round(float(stats["average_score"] or 0), 1) if total else None
-        recent_average = (
-            round(float(recent_row["average_score"] or 0), 1) if int(recent_row["total"] or 0) else None
+        if not rows:
+            return {
+                "total": 0,
+                "average_score": None,
+                "best_score": None,
+                "worst_score": None,
+                "latest_score": None,
+                "latest_character": None,
+                "latest_timestamp": None,
+                "device_count": 0,
+                "unique_characters": 0,
+                "quality_counts": quality_counts,
+                "recent_average": None,
+                "recent_total": 0,
+                "previous_average": None,
+                "previous_total": 0,
+                "progress_delta": None,
+                "progress_trend": "flat",
+                "score_distribution": {"90_plus": 0, "80_89": 0, "70_79": 0, "below_70": 0},
+                "qualified_rate": None,
+                "excellent_rate": None,
+                "dimension_averages": {},
+                "top_characters": [],
+                "top_devices": [],
+                "available_devices": available_devices,
+                "trend_points": empty_trend_points,
+                "insight": self._build_summary_insight(
+                    total=0,
+                    average_score=None,
+                    recent_average=None,
+                    progress_delta=None,
+                    quality_counts=quality_counts,
+                    top_character=None,
+                    top_device=None,
+                ),
+            }
+
+        latest_row = rows[0]
+        score_distribution = {"90_plus": 0, "80_89": 0, "70_79": 0, "below_70": 0}
+        scores: list[int] = []
+        recent_scores: list[int] = []
+        previous_scores: list[int] = []
+        character_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
+        device_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
+        dimension_totals: dict[str, float] = defaultdict(float)
+        dimension_counts: dict[str, int] = defaultdict(int)
+        trend_buckets = {
+            point["date"]: {"count": 0, "score_total": 0.0}
+            for point in empty_trend_points
+        }
+
+        for row in rows:
+            score = int(row["total_score"] or 0)
+            scores.append(score)
+
+            quality = row["quality_level"] or "medium"
+            if quality in quality_counts:
+                quality_counts[quality] += 1
+
+            if score >= 90:
+                score_distribution["90_plus"] += 1
+            elif score >= 80:
+                score_distribution["80_89"] += 1
+            elif score >= 70:
+                score_distribution["70_79"] += 1
+            else:
+                score_distribution["below_70"] += 1
+
+            character_name = row["character_name"] or "未识别"
+            character_stats[character_name]["count"] += 1
+            character_stats[character_name]["score_total"] += score
+
+            current_device_name = row["device_name"] or "InkPi-Raspberry-Pi"
+            device_stats[current_device_name]["count"] += 1
+            device_stats[current_device_name]["score_total"] += score
+
+            timestamp = self._parse_timestamp(row["timestamp"])
+            if timestamp is not None:
+                if timestamp >= recent_cutoff:
+                    recent_scores.append(score)
+                elif timestamp >= previous_cutoff:
+                    previous_scores.append(score)
+
+                trend_key = timestamp.date().isoformat()
+                if trend_key in trend_buckets:
+                    trend_buckets[trend_key]["count"] += 1
+                    trend_buckets[trend_key]["score_total"] += score
+
+            for key, value in (self._load_json_blob(row["dimension_scores_json"]) or {}).items():
+                if key not in DIMENSION_KEYS or value is None:
+                    continue
+                dimension_totals[key] += float(value)
+                dimension_counts[key] += 1
+
+        total = len(rows)
+        average_score = round(sum(scores) / total, 1)
+        recent_average = round(sum(recent_scores) / len(recent_scores), 1) if recent_scores else None
+        previous_average = round(sum(previous_scores) / len(previous_scores), 1) if previous_scores else None
+        progress_delta = (
+            round(recent_average - previous_average, 1)
+            if recent_average is not None and previous_average is not None
+            else None
         )
+        progress_trend = "flat"
+        if progress_delta is not None:
+            if progress_delta >= 2:
+                progress_trend = "up"
+            elif progress_delta <= -2:
+                progress_trend = "down"
+
+        top_characters = [
+            {
+                "character_name": character_name,
+                "count": int(stats["count"]),
+                "average_score": round(stats["score_total"] / stats["count"], 1),
+            }
+            for character_name, stats in sorted(
+                character_stats.items(),
+                key=lambda item: (-int(item[1]["count"]), -(item[1]["score_total"] / item[1]["count"]), item[0]),
+            )[:8]
+        ]
+        top_devices = [
+            {
+                "device_name": current_device_name,
+                "count": int(stats["count"]),
+                "average_score": round(stats["score_total"] / stats["count"], 1),
+            }
+            for current_device_name, stats in sorted(
+                device_stats.items(),
+                key=lambda item: (-int(item[1]["count"]), -(item[1]["score_total"] / item[1]["count"]), item[0]),
+            )[:3]
+        ]
+        dimension_averages = {
+            key: round(dimension_totals[key] / dimension_counts[key], 1)
+            for key in DIMENSION_KEYS
+            if dimension_counts[key]
+        }
+        trend_points = []
+        for point in empty_trend_points:
+            bucket = trend_buckets[point["date"]]
+            count = int(bucket["count"])
+            trend_points.append(
+                {
+                    "date": point["date"],
+                    "label": point["label"],
+                    "count": count,
+                    "average_score": round(bucket["score_total"] / count, 1) if count else None,
+                }
+            )
 
         top_character = top_characters[0]["character_name"] if top_characters else None
         top_device = top_devices[0]["device_name"] if top_devices else None
@@ -444,37 +525,33 @@ class CloudDatabase:
         return {
             "total": total,
             "average_score": average_score,
-            "best_score": int(stats["best_score"] or 0) if total else None,
-            "worst_score": int(stats["worst_score"] or 0) if total else None,
-            "latest_score": int(latest_row["total_score"]) if latest_row else None,
-            "latest_character": latest_row["character_name"] if latest_row else None,
-            "latest_timestamp": latest_row["timestamp"] if latest_row else None,
-            "device_count": int(stats["device_count"] or 0),
-            "unique_characters": int(stats["unique_characters"] or 0),
+            "best_score": max(scores),
+            "worst_score": min(scores),
+            "latest_score": int(latest_row["total_score"]),
+            "latest_character": latest_row["character_name"],
+            "latest_timestamp": latest_row["timestamp"],
+            "device_count": len({(row["device_name"] or "InkPi-Raspberry-Pi") for row in rows}),
+            "unique_characters": len({(row["character_name"] or "未识别") for row in rows}),
             "quality_counts": quality_counts,
             "recent_average": recent_average,
-            "recent_total": int(recent_row["total"] or 0),
-            "top_characters": [
-                {
-                    "character_name": row["character_name"],
-                    "count": int(row["count"]),
-                    "average_score": float(row["average_score"] or 0),
-                }
-                for row in top_characters
-            ],
-            "top_devices": [
-                {
-                    "device_name": row["device_name"],
-                    "count": int(row["count"]),
-                    "average_score": float(row["average_score"] or 0),
-                }
-                for row in top_devices
-            ],
-            "available_devices": [row["device_name"] for row in device_rows],
+            "recent_total": len(recent_scores),
+            "previous_average": previous_average,
+            "previous_total": len(previous_scores),
+            "progress_delta": progress_delta,
+            "progress_trend": progress_trend,
+            "score_distribution": score_distribution,
+            "qualified_rate": round(((quality_counts["good"] + quality_counts["medium"]) / total) * 100, 1),
+            "excellent_rate": round((quality_counts["good"] / total) * 100, 1),
+            "dimension_averages": dimension_averages,
+            "top_characters": top_characters,
+            "top_devices": top_devices,
+            "available_devices": available_devices,
+            "trend_points": trend_points,
             "insight": self._build_summary_insight(
                 total=total,
                 average_score=average_score,
                 recent_average=recent_average,
+                progress_delta=progress_delta,
                 quality_counts=quality_counts,
                 top_character=top_character,
                 top_device=top_device,
@@ -557,6 +634,7 @@ class CloudDatabase:
         total: int,
         average_score: float | None,
         recent_average: float | None,
+        progress_delta: float | None,
         quality_counts: dict[str, int],
         top_character: str | None,
         top_device: str | None,
@@ -568,11 +646,16 @@ class CloudDatabase:
         if average_score is not None:
             insight_parts.append(f"当前平均分 {average_score:.1f}")
         if recent_average is not None:
-            insight_parts.append(f"近 7 天平均 {recent_average:.1f}")
+            insight_parts.append(f"近 7 天均分 {recent_average:.1f}")
+        if progress_delta is not None:
+            if progress_delta >= 2:
+                insight_parts.append(f"最近一周较前一周提升 {progress_delta:.1f} 分")
+            elif progress_delta <= -2:
+                insight_parts.append(f"最近一周较前一周回落 {abs(progress_delta):.1f} 分")
         if top_character:
-            insight_parts.append(f"最常出现的字是「{top_character}」")
+            insight_parts.append(f"出现最多的字是“{top_character}”")
         if top_device:
-            insight_parts.append(f"主要来自 {top_device}")
+            insight_parts.append(f"主要数据来自 {top_device}")
 
         dominant_level = max(quality_counts.items(), key=lambda item: item[1])[0] if any(quality_counts.values()) else None
         if dominant_level == "good":
@@ -580,9 +663,30 @@ class CloudDatabase:
         elif dominant_level == "medium":
             insight_parts.append("目前成绩集中在中段")
         elif dominant_level == "bad":
-            insight_parts.append("最近低分样本偏多，建议重点回看")
+            insight_parts.append("近期低分样本偏多，建议重点回看")
 
         return "，".join(insight_parts) + "。"
+
+    def _build_empty_trend_points(self, now: datetime, days: int) -> list[dict[str, str]]:
+        start_date = now.date() - timedelta(days=days - 1)
+        return [
+            {
+                "date": (start_date + timedelta(days=offset)).isoformat(),
+                "label": (start_date + timedelta(days=offset)).strftime("%m-%d"),
+            }
+            for offset in range(days)
+        ]
+
+    def _parse_timestamp(self, raw_value: str | None) -> datetime | None:
+        if not raw_value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw_value)
+        except ValueError:
+            return None
+        if parsed.tzinfo is not None:
+            return parsed.astimezone().replace(tzinfo=None)
+        return parsed
 
     def _result_row_to_dict(self, row: sqlite3.Row | None, include_debug: bool = False) -> dict[str, Any] | None:
         if row is None:
