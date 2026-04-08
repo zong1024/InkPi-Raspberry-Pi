@@ -13,8 +13,8 @@ This folder is a self-contained Overleaf-ready paper project for the current Ink
 
 1. Create a new Overleaf project.
 2. Upload the whole `paper/overleaf` folder or zip it first and upload the zip.
-3. Set the compiler to `XeLaTeX`.
-4. Compile `main.tex`.
+3. The project already includes `latexmkrc`, so Overleaf should use `XeLaTeX` automatically.
+4. If Overleaf still keeps an old setting, switch the compiler to `XeLaTeX` manually and recompile `main.tex`.
 
 ## Notes
 
