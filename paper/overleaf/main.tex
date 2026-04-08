@@ -16,14 +16,23 @@
 \usepackage{hyperref}
 \usepackage{enumitem}
 \usepackage{xcolor}
+\usepackage{ifplatform}
 \usepackage{fontspec}
 \usepackage{xeCJK}
 
-\setmainfont{TeX Gyre Termes}
-\setsansfont{TeX Gyre Heros}
-\setmonofont{TeX Gyre Cursor}
-\setCJKmainfont{Noto Serif CJK SC}
-\setCJKsansfont{Noto Sans CJK SC}
+\ifwindows
+  \setmainfont{Times New Roman}
+  \setsansfont{Arial}
+  \setmonofont{Consolas}
+  \setCJKmainfont{SimSun}
+  \setCJKsansfont{Microsoft YaHei}
+\else
+  \setmainfont{TeX Gyre Termes}
+  \setsansfont{TeX Gyre Heros}
+  \setmonofont{TeX Gyre Cursor}
+  \setCJKmainfont{Noto Serif CJK SC}
+  \setCJKsansfont{Noto Sans CJK SC}
+\fi
 
 \geometry{left=2.4cm,right=2.4cm,top=2.6cm,bottom=2.6cm}
 \setlength{\parskip}{0.45em}
