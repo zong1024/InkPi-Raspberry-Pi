@@ -9,13 +9,17 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, request
-import cv2
-import numpy as np
 
 try:
     from cloud_api.storage import CloudDatabase
 except ModuleNotFoundError:  # pragma: no cover - direct script execution fallback
     from storage import CloudDatabase
+
+from models.evaluation_framework import (
+    build_methodology_payload,
+    build_practice_profile,
+    get_dimension_basis,
+)
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -148,12 +152,30 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             }
         )
 
+    @app.get("/api/system/methodology")
+    @auth_required
+    def methodology():
+        summary = db.get_summary()
+        return jsonify(
+            {
+                "ok": True,
+                **build_methodology_payload(summary),
+            }
+        )
+
     @app.get("/api/results/<int:result_id>")
     @auth_required
     def result_detail(result_id: int):
         result = db.get_result(result_id)
         if not result:
             return json_error("result_not_found", 404)
+        result["dimension_basis"] = get_dimension_basis(result.get("dimension_scores"))
+        result["practice_profile"] = build_practice_profile(
+            result.get("dimension_scores"),
+            total_score=int(result.get("total_score") or 0),
+            quality_level=str(result.get("quality_level") or "medium"),
+            character_name=result.get("character_name"),
+        )
         return jsonify({"ok": True, "result": result})
 
     @app.delete("/api/results/<int:result_id>")
@@ -194,6 +216,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
 
     @app.post("/api/device/ocr")
     def device_ocr():
+        try:
+            import cv2
+            import numpy as np
+        except Exception as exc:  # noqa: BLE001
+            return json_error(f"ocr_runtime_unavailable:{exc}", 503)
+
         if not device_key_valid():
             return json_error("invalid_device_key", 401)
 

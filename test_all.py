@@ -88,6 +88,8 @@ class EvaluationResultTests(unittest.TestCase):
         self.assertEqual(payload["quality_level"], "good")
         self.assertEqual(payload["dimension_scores"]["structure"], 84)
         self.assertEqual(payload["dimension_summary"]["best"]["label"], "完整")
+        self.assertEqual(payload["dimension_basis"][0]["key"], "structure")
+        self.assertEqual(payload["practice_profile"]["focus_dimension"]["key"], "stroke")
         self.assertEqual(rebuilt.dimension_scores["stroke"], 80)
         self.assertEqual(rebuilt.score_debug["calibration"]["feature_quality"], 0.83)
         self.assertNotIn("detail_scores", payload)

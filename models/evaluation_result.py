@@ -7,6 +7,8 @@ from datetime import datetime
 import json
 from typing import Any
 
+from models.evaluation_framework import build_practice_profile, get_dimension_basis
+
 
 QUALITY_LABELS = {
     "good": "甲",
@@ -108,6 +110,8 @@ class EvaluationResult:
             "quality_confidence": self.quality_confidence,
             "dimension_scores": dimension_scores,
             "dimension_summary": summarize_dimension_scores(dimension_scores),
+            "dimension_basis": get_dimension_basis(dimension_scores),
+            "practice_profile": self.get_practice_profile(),
             "score_debug": self.score_debug,
         }
 
@@ -191,6 +195,15 @@ class EvaluationResult:
             for key in DIMENSION_ORDER
             if key in scores
         ]
+
+    def get_practice_profile(self) -> dict[str, Any]:
+        """Return coach-style practice guidance based on current result."""
+        return build_practice_profile(
+            self.get_dimension_scores(),
+            total_score=int(self.total_score),
+            quality_level=self.quality_level,
+            character_name=self.character_name,
+        )
 
 
 def _level_from_score(score: int) -> str:

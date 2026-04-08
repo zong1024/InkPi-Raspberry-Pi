@@ -108,6 +108,8 @@ class CloudApiTests(unittest.TestCase):
         self.assertEqual(detail_payload["result"]["ocr_confidence"], 0.97)
         self.assertEqual(detail_payload["result"]["quality_confidence"], 0.91)
         self.assertEqual(detail_payload["result"]["dimension_scores"]["structure"], 84)
+        self.assertEqual(detail_payload["result"]["dimension_basis"][0]["label"], "结构")
+        self.assertEqual(detail_payload["result"]["practice_profile"]["focus_dimension"]["key"], "stroke")
         self.assertEqual(detail_payload["result"]["score_debug"]["calibration"]["feature_quality"], 0.84)
 
     def test_history_summary_quantitative_fields_and_delete(self) -> None:
@@ -163,6 +165,14 @@ class CloudApiTests(unittest.TestCase):
         self.assertIn("progress_trend", summary_payload)
         self.assertIn("progress_delta", summary_payload)
         self.assertTrue(summary_payload["available_devices"])
+
+        methodology = self.client.get("/api/system/methodology", headers=headers)
+        self.assertEqual(methodology.status_code, 200)
+        methodology_payload = methodology.get_json()
+        self.assertEqual(methodology_payload["framework_overview"]["current_scope"], "当前阶段聚焦楷书单字、初学者练习、设备端即时反馈。")
+        self.assertEqual(methodology_payload["dimension_basis"][0]["label"], "结构")
+        self.assertEqual(methodology_payload["validation_snapshot"]["current_sample_count"], 3)
+        self.assertEqual(methodology_payload["validation_plan"]["label_target"], 500)
 
         filtered = self.client.get("/api/results?keyword=永&quality_level=good", headers=headers)
         self.assertEqual(filtered.status_code, 200)

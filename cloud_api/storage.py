@@ -15,10 +15,17 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 
 DIMENSION_KEYS = ("structure", "stroke", "integrity", "stability")
+PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 
 
 def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def build_password_hash(password: str) -> str:
+    """Use a lower-memory password hash that survives constrained hosts."""
+
+    return generate_password_hash(password, method=PASSWORD_HASH_METHOD)
 
 
 class CloudDatabase:
@@ -115,7 +122,7 @@ class CloudDatabase:
                 INSERT INTO users (username, password_hash, display_name, created_at)
                 VALUES (?, ?, ?, ?)
                 """,
-                (username, generate_password_hash(password), display_name, utcnow_iso()),
+                (username, build_password_hash(password), display_name, utcnow_iso()),
             )
             conn.commit()
 
@@ -129,7 +136,7 @@ class CloudDatabase:
                     INSERT INTO users (username, password_hash, display_name, created_at)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (username, generate_password_hash(password), display_name, created_at),
+                    (username, build_password_hash(password), display_name, created_at),
                 )
                 conn.commit()
             except sqlite3.IntegrityError as exc:
