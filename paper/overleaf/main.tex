@@ -1,0 +1,248 @@
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\geometry{left=2.4cm,right=2.4cm,top=2.6cm,bottom=2.6cm}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{2em}
+\setlist[itemize]{leftmargin=2.2em}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\title{InkPi：基于树莓派的单字书法智能评测系统设计与实现}
+\author{Zongrui}
+\date{2026年4月}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+针对书法练习过程中“反馈滞后、评价主观、设备形态分散”的问题，本文设计并实现了一套面向单字书法场景的智能评测系统 InkPi。系统以树莓派为设备端核心，采用 PyQt6 构建 3.5 寸小屏交互界面，使用图像预处理、OCR 识别、ONNX 质量评分与四维解释评分构成主评测链路，并通过 Cloud API、运维后台与微信小程序实现结果同步、运行监控与移动端查看。项目在工程上强调“产品化端侧界面 + 可解释评分 + 云端协同 + 实时运维”四个方向：主分保留为稳定的总分输出，同时引入“结构、笔画、完整、稳定”四维解释层用于教学反馈；Web 端不再承担重复评测操作，而转为设备运行中心，用于监控模型加载、评测流程、硬件健康与后台日志。本文重点介绍系统架构、评测方法、关键实现与部署验证过程。结果表明，该系统已经能够完成单字图像的本地评测、结果存储、云端同步以及多端展示，并具备进一步扩展为实际教学产品的基础。
+\end{abstract}
+
+\noindent\textbf{关键词：} 书法评测；树莓派；OCR；ONNX；可解释评分；多端协同
+
+\section*{Abstract}
+InkPi is a single-character calligraphy evaluation system that integrates Raspberry Pi edge hardware, a PyQt6 small-screen interface, OCR recognition, ONNX-based quality scoring, four-dimension explanation scoring, cloud synchronization, and an operations console. The project aims to bridge the gap between traditional calligraphy practice and modern intelligent evaluation by combining portable edge deployment, stable scoring, interpretable feedback, and multi-end result delivery. The paper presents the architecture, evaluation pipeline, explanation layer, UI implementation, and deployment workflow of the current system. The implemented stack supports local evaluation, cloud result synchronization, a mobile miniapp viewer, and a monitoring-oriented web console that tracks host status, model readiness, hardware availability, and runtime logs.
+
+\noindent\textbf{Keywords:} calligraphy evaluation; Raspberry Pi; OCR; ONNX; interpretable scoring; edge-cloud collaboration
+
+\section{引言}
+书法练习具有明显的视觉反馈依赖与教师经验依赖。传统教学通常依赖教师面对面点评，反馈周期长且难以量化；而通用 OCR 或图像分类系统又难以直接回答“这个字写得怎么样”和“问题主要出在哪里”这两个教学场景中的核心问题。因此，单字书法智能评测系统需要同时满足以下要求：一是能在边缘设备上完成拍摄、评测与结果展示；二是输出稳定的主分与可理解的解释分；三是支持云端同步与移动端查看；四是具备运维与状态可视化能力，方便在真实设备环境中调试和维护。
+
+基于上述需求，本文围绕当前项目 InkPi 的工程实现展开。该项目不是单纯的算法验证脚本，而是一套由设备端、后端与移动端共同组成的完整系统。设备端使用树莓派与小尺寸触摸屏作为正式交互入口，运维后台则承担运行状态监控与后台输出观察，云端接口负责结果汇聚与远程 OCR 回退，小程序用于移动端查看历史与详情。项目的目标是将书法图像评测从“单模块演示”推进为“能够部署、能够维护、能够解释”的完整产品链路。
+
+\section{系统总体架构}
+InkPi 当前系统由四个主要层次构成：设备评测层、解释评分层、云端协同层与运维监控层。设备评测层负责采集或上传书法单字图像，并在本地完成预处理、OCR 与 ONNX 评分；解释评分层负责从主评分链路中提取可解释特征，生成四维解释分；云端协同层负责结果同步、历史查询与移动端展示；运维监控层则通过 Web 运维后台实时观察设备、模型与服务状态。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/system-flow.png}
+  \caption{InkPi 当前项目全流程与多端协同结构}
+  \label{fig:system-flow}
+\end{figure}
+
+从模块职责看，系统核心由以下部分组成：
+
+\begin{table}[H]
+  \centering
+  \caption{系统模块与职责划分}
+  \label{tab:modules}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm}X}
+    \toprule
+    模块 & 主要职责 \\
+    \midrule
+    PyQt6 小屏端 & 设备侧正式界面，完成拍摄、上传、评测结果展示与历史浏览 \\
+    预处理服务 & 图像缩放、HSV 红色网格去除、二值化、主体提取、OCR 裁剪 \\
+    OCR 服务 & 本地 PaddleOCR 识别，必要时回退到云端 OCR 接口 \\
+    ONNX 评分服务 & 输出主分 \texttt{total\_score}、等级与主置信度 \\
+    四维解释服务 & 输出结构、笔画、完整、稳定四个解释分与调试特征 \\
+    本地数据库 & 保存评测记录、图像路径、四维分与调试 JSON \\
+    Cloud API & 接收设备上传结果，提供登录、列表、详情与设备 OCR 接口 \\
+    运维后台 WebUI & 监控主机状态、模型加载、硬件健康、评测流程与后台日志 \\
+    微信小程序 & 面向移动端展示历史记录与评测详情 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+在当前实现中，树莓派端侧偏重“产品体验”，Web 端偏重“状态感知”，二者不再重复承担同一类交互功能。这种分工使得正式界面保持简洁，而运维后台则可承载更多实时监控与调试信息。
+
+\section{单字评测方法设计}
+\subsection{图像预处理与前置质量校验}
+为了提高 OCR 与评分模型的稳定性，InkPi 在图像进入识别链路前执行统一的预处理与前置校验。该阶段主要包括五类操作：
+
+\begin{itemize}
+  \item 亮度、对比度与内容有效性预检，用于快速拦截过暗、过亮、对比度不足或明显无主体的输入；
+  \item 可选透视矫正，用于处理拍摄角度偏斜导致的纸面变形；
+  \item 缩放与灰度化，将不同来源图像转换到统一分析尺度；
+  \item HSV 红色网格去除，用于滤除米字格等红色辅助背景；
+  \item 自适应二值化、去噪与主体提取，为 OCR 与质量评分生成更稳定的前景区域。
+\end{itemize}
+
+其中，前置质量校验并不仅仅判断“能不能识别”，还会检测墨迹比例、连通域分布、边缘复杂度和主体集中度，以避免杂乱背景、遮挡或非单字内容误入主链路。该策略的意义在于：如果在预处理前就发现画面不具备基本可评测性，就应尽早给出用户提示，而不是让后续 OCR 和评分模型输出低质量或不可解释的结果。
+
+\subsection{OCR 识别与云端回退}
+InkPi 使用 PaddleOCR 作为本地 OCR 主体\cite{paddleocr}。系统优先尝试在设备或公网后端本地运行 OCR；若设备端无法加载本地 OCR，或运行环境为资源较弱的平台，则可以通过 \texttt{INKPI\_CLOUD\_BACKEND\_URL} 与设备密钥将 OCR 请求回退到 Cloud API。这样设计有两个优势：
+
+\begin{itemize}
+  \item 在 x86\_64 环境下可直接利用本地 PaddleOCR，提高独立运行能力；
+  \item 在 ARM 或依赖不齐全的场景中仍能通过远端 OCR 保持链路完整。
+\end{itemize}
+
+OCR 输出不仅包括识别字符本身，还包括识别置信度与候选框信息。其中置信度被后续评分与解释层重复利用，用于衡量当前样本的“可识别性”和“完成稳定度”。
+
+\subsection{主评分模型}
+主评分链路使用 ONNX Runtime 加载质量评分模型\cite{onnxruntime}。模型输入包括预处理后的 ROI、字符编码与 OCR 置信度，输出三档质量概率 \texttt{bad / medium / good}，并进一步融合为 \texttt{total\_score}、\texttt{quality\_level} 和 \texttt{quality\_confidence}。项目中保留主分作为唯一的官方评分出口，其作用是保证不同端侧界面、历史记录与云端同步都围绕同一套主分口径展开。
+
+在实现上，主评分服务并不只依赖模型原始 logits，还结合了一组质量特征进行分段校准。这些特征包括前景比例、包围盒比例、中心质量、连通域归一化、边缘接触率和纹理标准差。通过引入校准层，系统可以在模型输出和工程稳定性之间取得平衡，避免主分被单一概率值直接决定。
+
+\subsection{四维解释评分}
+为了回答“为什么是这个分数”这一问题，InkPi 在主分之外新增了四维解释层。四维分并不反推主分，而是服务于教学反馈、界面展示与调试分析。四个维度定义如下：
+
+\begin{itemize}
+  \item \textbf{结构}：反映重心、布局和主体在画面中的组织稳定性；
+  \item \textbf{笔画}：反映笔画粗细、方向与局部纹理是否平稳；
+  \item \textbf{完整}：反映主体是否清晰、完整、易于识别；
+  \item \textbf{稳定}：反映主模型置信度、概率间隔与特征信号的一致性。
+\end{itemize}
+
+四维解释分采用归一化特征的线性组合。若将所有参与项归一化到 $[0,1]$，则当前实现可概括为：
+
+\begin{align}
+S_{\text{structure}} &= 100 \times (0.35 c_{\text{center}} + 0.25 b_{\text{ratio}} + 0.20 p_{\text{balance}} + 0.20 b_{\text{fill}}), \\
+S_{\text{stroke}} &= 100 \times (0.30 t_{\text{texture}} + 0.25 o_{\text{orientation}} + 0.25 i_{\text{ink}} + 0.20 c_{\text{component}}), \\
+S_{\text{integrity}} &= 100 \times (0.35 o_{\text{ocr}} + 0.25 d_{\text{dominant}} + 0.20 (1-e_{\text{edge}}) + 0.20 s_{\text{subject}}), \\
+S_{\text{stability}} &= 100 \times (0.40 q_{\text{conf}} + 0.25 p_{\text{margin}} + 0.20 f_{\text{quality}} + 0.15 r_{\text{fit}}).
+\end{align}
+
+式中，$c_{\text{center}}$ 表示中心质量，$b_{\text{ratio}}$ 表示包围盒带状得分，$p_{\text{balance}}$ 表示投影平衡度，$b_{\text{fill}}$ 表示主体填充度；$t_{\text{texture}}$、$o_{\text{orientation}}$、$i_{\text{ink}}$ 和 $c_{\text{component}}$ 分别描述纹理、方向、墨迹比例与连通域质量；$o_{\text{ocr}}$ 与 $q_{\text{conf}}$ 分别来自 OCR 置信度和主模型概率；$p_{\text{margin}}$、$f_{\text{quality}}$ 和 $r_{\text{fit}}$ 则来自主评分校准过程中的中间量。
+
+这种设计的关键在于：主分维持统一口径，解释层提供教学说明。实际界面中，Qt 和小程序只展示四维分及其“最强项 / 待提升项”，而 Web 运维后台和本地详情接口则保留 \texttt{score\_debug}，用于查看概率、几何特征与校准中间值。
+
+\section{系统实现}
+\subsection{设备端正式界面}
+设备端使用 PyQt6 构建正式交互界面，重点适配树莓派 3.5 寸 $480 \times 320$ 横屏。界面采用深色背景与 Windows 10 深蓝风格的产品化设计，强调大字号、清晰层级与触控友好布局。首页突出“开始评测”，拍摄页聚焦取景与上传，结果页则采用“主分大卡片 + 四维评分卡 + 历史入口”的结构，以保证在小尺寸屏幕上仍具备良好的可读性和操作性。
+
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.46\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/qt-home.png}
+    \caption{设备端首页}
+  \end{subfigure}
+  \hfill
+  \begin{subfigure}[b]{0.46\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{figures/qt-result.png}
+    \caption{设备端结果页}
+  \end{subfigure}
+  \caption{InkPi 设备端正式界面示例}
+  \label{fig:qt-ui}
+\end{figure}
+
+\subsection{运维后台与实时监控}
+随着系统从“单端评测”扩展为“设备 + 云端 + 小程序”的完整工程，仅靠结果页已经无法满足维护需求。因此，项目将 WebUI 改造为运维后台：前端采用 React 编写，并引入 Three.js 背景氛围层；后端则通过 Flask 对外暴露主机状态、模型加载、硬件健康、服务栈状态、评测流水与日志缓冲接口。运维后台通过 SSE 持续拉取快照更新，其主要监控内容包括：
+
+\begin{itemize}
+  \item 主机层：温度、内存、磁盘、负载、IP 地址；
+  \item 服务层：Cloud API、Web 运维后台、Qt 正式端的运行与健康状态；
+  \item 模型层：本地 OCR、远端 OCR、ONNX 评分模型与四维解释层的就绪情况；
+  \item 硬件层：摄像头、音频、LED、GPIO、SPI 与 I2C 的可用性；
+  \item 流程层：图像进入、预处理、OCR、主评分、解释评分与存储阶段的事件记录；
+  \item 输出层：应用日志缓冲与运行日志尾部内容。
+\end{itemize}
+
+这种设计使 Web 端从“重复操作页面”转变为“真实运维中心”，更适合面向多设备部署和后期维护。
+
+\subsection{云端接口与移动端展示}
+Cloud API 采用 Flask 构建，提供登录、结果上传、结果列表、结果详情、设备 OCR 与批量删除等接口。设备端完成本地评测后，会将结果写入本地 SQLite，并通过设备密钥上传到云端。云端数据库统一存储主分、等级、四维解释分与详情字段，从而使小程序可以只承担结果查看，不必重复执行评测。
+
+在当前项目中，小程序承担两类任务：一是按时间查看历史评测结果，二是在详情页展示总分、等级、四维分与反馈信息。相比设备端，小程序更强调轻量浏览与异步访问；相比运维后台，小程序不展示调试字段与底层日志。
+
+\section{部署与验证}
+InkPi 当前已经具备跨设备部署能力。设备侧采用树莓派 + 小屏完成正式评测与展示；公网后端部署在 Debian 12 服务器，用于承载 Cloud API 与运维后台；移动端通过小程序连接云端接口完成结果读取。部署后，项目的验证工作主要围绕三个方面展开。
+
+\subsection{功能回归验证}
+项目当前保留了多组回归测试脚本，包括 Web 接口、Cloud API、云同步和综合链路验证。典型检查项包括：
+
+\begin{itemize}
+  \item \texttt{test\_web\_ui.py}：验证 Web 后端接口与结果读取；
+  \item \texttt{test\_all.py}：验证评测核心服务与数据结构；
+  \item \texttt{test\_cloud\_api.py}：验证云端接口认证、列表与详情；
+  \item \texttt{test\_cloud\_ocr\_api.py}：验证设备 OCR 接口；
+  \item \texttt{test\_cloud\_sync\_integration.py}：验证本地结果同步到云端的完整流程。
+\end{itemize}
+
+\subsection{部署状态验证}
+截至当前版本，公网后端已完成部署并通过健康检查。Cloud API 对外开放统一接口，运维后台能够从外网访问设备状态快照；本地与远端 OCR 的就绪状态均可在运维后台中直接观察。需要说明的是，公网后端所在服务器不具备摄像头、GPIO、I2C 或 LED 等实体外设，因此这些硬件项在运维页面中会正确显示为不可用，这一结果符合系统预期。
+
+\begin{table}[H]
+  \centering
+  \caption{当前工程验证矩阵}
+  \label{tab:verification}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{2cm} X}
+    \toprule
+    验证项 & 状态 & 说明 \\
+    \midrule
+    本地评测主链 & 已验证 & 预处理、OCR、ONNX 主评分与四维解释层已打通 \\
+    本地结果存储 & 已验证 & 结果可写入 SQLite，并保留维度分与调试字段 \\
+    云端同步 & 已验证 & 设备端结果可上传到 Cloud API，云端可查询详情 \\
+    运维后台 & 已验证 & 可实时查看主机状态、模型状态、流程事件与日志输出 \\
+    小程序读取 & 已验证 & 可通过云端接口查看历史记录与详情 \\
+    公网后端部署 & 已验证 & Debian 12 服务器已持续运行 Cloud API 与运维后台 \\
+    树莓派硬件采集 & 条件相关 & 依赖摄像头、GPIO、LED 等外设是否接入 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{结论与展望}
+本文围绕 InkPi 当前项目给出了一套完整的系统设计与实现方案。与只验证模型效果的原型不同，InkPi 已经形成由设备端、解释评分层、云端接口、运维后台与移动端组成的完整工程链路。系统在方法上保留了稳定的主分，同时通过四维解释层增强可读性；在实现上完成了小屏设备端产品化、Web 运维后台转型、云端同步与公网部署；在工程上具备继续扩展为真实教学产品的基础。
+
+后续工作可以从三个方向展开：第一，继续补充真实书法样本，完善主评分模型与四维解释分的标注体系；第二，引入 HTTPS、域名与更完善的账号体系，进一步提升公网服务的可用性；第三，在树莓派端增加更稳定的硬件检测、自启动与离线容错能力，使系统更适合长期部署在课堂或展示场景中。
+
+\begin{thebibliography}{99}
+
+\bibitem{bradski2000opencv}
+Gary Bradski.
+\newblock The OpenCV Library.
+\newblock \emph{Dr. Dobb's Journal of Software Tools}, 2000.
+
+\bibitem{paddleocr}
+PaddlePaddle Authors.
+\newblock PaddleOCR.
+\newblock Available: \url{https://github.com/PaddlePaddle/PaddleOCR}. Accessed: 2026-04-08.
+
+\bibitem{onnxruntime}
+Microsoft.
+\newblock ONNX Runtime.
+\newblock Available: \url{https://onnxruntime.ai/}. Accessed: 2026-04-08.
+
+\bibitem{sqlite}
+SQLite Consortium.
+\newblock SQLite Documentation.
+\newblock Available: \url{https://www.sqlite.org/docs.html}. Accessed: 2026-04-08.
+
+\bibitem{qtforpython}
+Qt Company.
+\newblock Qt for Python Documentation.
+\newblock Available: \url{https://doc.qt.io/qtforpython/}. Accessed: 2026-04-08.
+
+\end{thebibliography}
+
+\end{document}
