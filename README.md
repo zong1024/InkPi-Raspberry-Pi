@@ -107,7 +107,7 @@ Optional runtime env files:
 Example cloud sync configuration:
 
 ```env
-INKPI_CLOUD_BACKEND_URL=http://127.0.0.1:5001
+INKPI_CLOUD_BACKEND_URL=http://202.60.232.93:23333
 INKPI_CLOUD_DEVICE_KEY=your-device-key
 INKPI_CLOUD_DEVICE_NAME=InkPi-XFCE
 ```
