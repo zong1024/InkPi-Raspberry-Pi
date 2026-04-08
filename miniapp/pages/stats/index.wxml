@@ -11,18 +11,19 @@
       <button class="ghost-btn back-btn" bindtap="goHistory">返回记录</button>
     </view>
     <text class="stats-subtitle">
-      用量化指标观察书写表现，包括趋势、分数分布、四维均值和设备来源。
+      这里同时展示学习统计、样本量化、评价依据和验证计划，方便把“能跑”升级为“能解释、能量化、能持续优化”。
     </text>
     <view class="chip-row">
       <text class="meta-chip">最近刷新 {{lastUpdated || '尚未同步'}}</text>
-      <text class="meta-chip">样本 {{summary.total}}</text>
+      <text class="meta-chip">统计样本 {{summary.total}}</text>
+      <text class="meta-chip">{{methodology.validation.statusLabel}}</text>
     </view>
   </view>
 
   <view class="paper-panel filter-panel">
     <view class="section-head">
       <text class="section-title">统计范围</text>
-      <text class="section-note">按设备和时间切换口径</text>
+      <text class="section-note">按设备和时间切换分析口径</text>
     </view>
     <view class="picker-grid">
       <picker mode="selector" range="{{dateOptions}}" value="{{filters.dateIndex}}" bindchange="onDateChange">
@@ -41,7 +42,7 @@
     <view class="paper-panel metric-card">
       <text class="metric-label">平均分</text>
       <text class="metric-value">{{summary.averageText}}</text>
-      <text class="metric-note">近 7 天 {{summary.recentAverageText}}</text>
+      <text class="metric-note">最近 7 天 {{summary.recentAverageText}}</text>
     </view>
     <view class="paper-panel metric-card">
       <text class="metric-label">优秀率</text>
@@ -57,6 +58,68 @@
       <text class="metric-label">最高分</text>
       <text class="metric-value">{{summary.bestScoreText}}</text>
       <text class="metric-note">累计样本 {{summary.total}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel evidence-panel">
+    <view class="section-head">
+      <text class="section-title">量化证据</text>
+      <text class="section-note">直接回应样本量、覆盖面和验证进度</text>
+    </view>
+
+    <view class="evidence-grid">
+      <view class="evidence-card">
+        <text class="evidence-label">当前样本</text>
+        <text class="evidence-value">{{methodology.validation.currentSampleCount}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">覆盖汉字</text>
+        <text class="evidence-value">{{methodology.validation.uniqueCharacters}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">设备来源</text>
+        <text class="evidence-value">{{methodology.validation.deviceCount}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">目标进度</text>
+        <text class="evidence-value">{{methodology.validation.coverageRatioText}}</text>
+      </view>
+    </view>
+
+    <view class="target-row">
+      <text class="meta-chip">标注目标 {{methodology.validation.labelTarget}}</text>
+      <text class="meta-chip">教师校核 {{methodology.validation.expertReviewTarget}}</text>
+      <text class="meta-chip">试用用户 {{methodology.validation.trialUserTarget}}</text>
+    </view>
+  </view>
+
+  <view class="panel-duo">
+    <view class="paper-panel roadmap-panel">
+      <view class="section-head">
+        <text class="section-title">验证计划</text>
+        <text class="section-note">{{methodology.validation.currentStage}}</text>
+      </view>
+      <text class="roadmap-copy">{{methodology.validation.nextMilestone}}</text>
+      <view class="policy-list">
+        <view wx:for="{{methodology.validation.reviewPolicy}}" wx:key="*this" class="policy-item">
+          <text class="policy-dot"></text>
+          <text class="policy-text">{{item}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="paper-panel roadmap-panel">
+      <view class="section-head">
+        <text class="section-title">项目边界</text>
+        <text class="section-note">先把定位说清楚</text>
+      </view>
+      <text class="roadmap-copy">{{methodology.framework.projectPosition}}</text>
+      <text class="roadmap-note">{{methodology.framework.currentScope}}</text>
+      <text class="roadmap-note">{{methodology.framework.boundaryNote}}</text>
+      <view class="target-row">
+        <text wx:for="{{methodology.framework.currentScripts}}" wx:key="*this" class="meta-chip">当前 {{item}}</text>
+        <text wx:for="{{methodology.framework.roadmapScripts}}" wx:key="*this" class="meta-chip">规划 {{item}}</text>
+      </view>
     </view>
   </view>
 
@@ -96,7 +159,7 @@
   <view class="paper-panel chart-panel">
     <view class="section-head">
       <text class="section-title">四维均值</text>
-      <text class="section-note">按结构、笔画、完整、稳定量化整体表现</text>
+      <text class="section-note">用于观察整体训练趋势，而不是替代老师定级</text>
     </view>
     <view wx:for="{{summary.dimensions}}" wx:key="key" class="distribution-row">
       <view class="distribution-top">
@@ -112,7 +175,7 @@
   <view class="leaderboard-grid">
     <view class="paper-panel leaderboard-panel">
       <view class="section-head">
-        <text class="section-title">高频字</text>
+        <text class="section-title">高频练习字</text>
         <text class="section-note">按出现次数排序</text>
       </view>
       <view wx:if="{{summary.topCharacters.length}}">
@@ -142,6 +205,20 @@
         </view>
       </view>
       <text wx:else class="panel-subtitle">当前还没有设备侧上传数据。</text>
+    </view>
+  </view>
+
+  <view class="paper-panel reference-panel">
+    <view class="section-head">
+      <text class="section-title">评价依据来源</text>
+      <text class="section-note">把“为什么这样评”讲清楚</text>
+    </view>
+    <view wx:for="{{methodology.references}}" wx:key="title" class="reference-card">
+      <view class="reference-top">
+        <text class="reference-title">{{item.title}}</text>
+        <text class="reference-tag">{{item.tag}}</text>
+      </view>
+      <text class="reference-role">{{item.role}}</text>
     </view>
   </view>
 

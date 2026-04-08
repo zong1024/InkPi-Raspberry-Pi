@@ -5,13 +5,6 @@ const { POLL_INTERVAL } = require('../../config');
 const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天'];
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
 
-const DIMENSION_LABELS = {
-  structure: '结构',
-  stroke: '笔画',
-  integrity: '完整',
-  stability: '稳定',
-};
-
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
     return '--';
@@ -45,13 +38,17 @@ function normalizeSummary(summary = {}) {
     width: total ? Math.max(8, Math.round((item.count / total) * 100)) : 8,
   }));
 
-  const dimensions = Object.entries(DIMENSION_LABELS).map(([key, label]) => ({
-    key,
-    label,
-    score: formatNumber(summary.dimension_averages && summary.dimension_averages[key]),
+  const dimensions = [
+    { key: 'structure', label: '结构' },
+    { key: 'stroke', label: '笔画' },
+    { key: 'integrity', label: '完整' },
+    { key: 'stability', label: '稳定' },
+  ].map((item) => ({
+    ...item,
+    score: formatNumber(summary.dimension_averages && summary.dimension_averages[item.key]),
     width: Math.max(
       8,
-      Math.round(Number((summary.dimension_averages && summary.dimension_averages[key]) || 0))
+      Math.round(Number((summary.dimension_averages && summary.dimension_averages[item.key]) || 0))
     ),
   }));
 
@@ -72,12 +69,12 @@ function normalizeSummary(summary = {}) {
       progressDelta === null ? '--' : `${progressDelta > 0 ? '+' : ''}${progressDelta.toFixed(1)} 分`,
     progressLabel:
       progressDelta === null
-        ? '等待近两周样本'
+        ? '等待最近两周的样本对比'
         : progressDelta > 0
-          ? '较前一周提升'
+          ? '较前一周继续提升'
           : progressDelta < 0
-            ? '较前一周回落'
-            : '近两周持平',
+            ? '较前一周有所回落'
+            : '最近两周保持稳定',
     progressTrend: summary.progress_trend || 'flat',
     scoreBands,
     dimensions,
@@ -88,12 +85,50 @@ function normalizeSummary(summary = {}) {
   };
 }
 
+function normalizeMethodology(payload = {}) {
+  const framework = payload.framework_overview || {};
+  const snapshot = payload.validation_snapshot || {};
+  const plan = payload.validation_plan || {};
+  const references = (payload.authority_references || []).map((item) => ({
+    ...item,
+    tag: item.organization || '项目依据',
+  }));
+
+  return {
+    framework: {
+      projectPosition: framework.project_position || '面向单字书法练习的辅助评测系统',
+      currentScope: framework.current_scope || '当前阶段聚焦楷书单字与初学者练习。',
+      boundaryNote: framework.boundary_note || '四维分用于解释，不替代教师终评。',
+      targetUsers: framework.target_users || [],
+      currentScripts: framework.current_scripts || [],
+      roadmapScripts: framework.roadmap_scripts || [],
+    },
+    validation: {
+      statusLabel: snapshot.status_label || '仍处于样本积累阶段',
+      currentSampleCount: snapshot.current_sample_count || 0,
+      uniqueCharacters: snapshot.unique_characters || 0,
+      deviceCount: snapshot.device_count || 0,
+      recentSampleCount: snapshot.recent_sample_count || 0,
+      coverageRatioText: formatPercent(snapshot.coverage_ratio),
+      labelTarget: snapshot.label_target || plan.label_target || 0,
+      expertReviewTarget: snapshot.expert_review_target || plan.expert_review_target || 0,
+      trialUserTarget: snapshot.trial_user_target || plan.trial_user_target || 0,
+      nextMilestone: snapshot.next_milestone || plan.next_milestone || '',
+      currentStage: plan.current_stage || 'Stage 1 / 楷书单字辅助评测',
+      reviewPolicy: plan.manual_review_policy || [],
+    },
+    references,
+    dimensionBasis: payload.dimension_basis || [],
+  };
+}
+
 Page({
   data: {
     loading: true,
     error: '',
     lastUpdated: '',
     summary: normalizeSummary(),
+    methodology: normalizeMethodology(),
     dateOptions: DATE_OPTIONS,
     deviceOptions: ['全部设备'],
     deviceValues: ['all'],
@@ -153,9 +188,14 @@ Page({
 
     try {
       const params = this.buildParams();
-      const payload = await api.getHistorySummary(params);
-      const summary = normalizeSummary(payload.summary || {});
-      const availableDevices = (payload.summary && payload.summary.available_devices) || [];
+      const [summaryPayload, methodologyPayload] = await Promise.all([
+        api.getHistorySummary(params),
+        api.getMethodology(),
+      ]);
+
+      const summary = normalizeSummary(summaryPayload.summary || {});
+      const methodology = normalizeMethodology(methodologyPayload);
+      const availableDevices = (summaryPayload.summary && summaryPayload.summary.available_devices) || [];
       const deviceOptions = ['全部设备', ...availableDevices];
       const deviceValues = ['all', ...availableDevices];
       const currentDevice = this.data.deviceValues[this.data.filters.deviceIndex] || 'all';
@@ -163,6 +203,7 @@ Page({
 
       this.setData({
         summary,
+        methodology,
         lastUpdated: this.formatTime(new Date()),
         deviceOptions,
         deviceValues,

@@ -55,6 +55,10 @@ function getHistorySummary(options = {}) {
   return request(`/api/results/summary${toQuery(options)}`);
 }
 
+function getMethodology() {
+  return request('/api/system/methodology');
+}
+
 function getResultDetail(id) {
   return request(`/api/results/${id}`);
 }
@@ -77,6 +81,7 @@ module.exports = {
   login,
   getHistory,
   getHistorySummary,
+  getMethodology,
   getResultDetail,
   deleteHistory,
   batchDeleteHistory,

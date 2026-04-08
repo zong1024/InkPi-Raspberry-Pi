@@ -56,11 +56,41 @@ function buildDimensionCards(dimensionScores = null) {
 
 function buildDimensionSummary(cards = []) {
   if (!cards.length) {
-    return '老记录暂时没有四维评分。';
+    return '老记录暂时没有四维解释分。';
   }
   const strongest = [...cards].sort((left, right) => right.score - left.score)[0];
   const weakest = [...cards].sort((left, right) => left.score - right.score)[0];
-  return `最强项：${strongest.label} ${strongest.score} 分 / 待提升：${weakest.label} ${weakest.score} 分`;
+  return `当前强项：${strongest.label} ${strongest.score} 分；优先提升：${weakest.label} ${weakest.score} 分。`;
+}
+
+function normalizeBasisCards(cards = []) {
+  return cards.map((item) => ({
+    ...item,
+    scoreText: item.score === null || item.score === undefined ? '--' : `${Math.round(Number(item.score))}`,
+    featureText: Array.isArray(item.feature_mapping) ? item.feature_mapping.join(' / ') : '',
+  }));
+}
+
+function buildMetrics(result) {
+  return [
+    {
+      title: '识别结果',
+      value: result.characterLabel,
+      note: `OCR 置信度 ${result.ocrText}`,
+    },
+    {
+      title: '主分等级',
+      value: result.qualityLabel,
+      note: `质量置信度 ${result.qualityText}`,
+    },
+    {
+      title: '当前定位',
+      value: result.practiceProfile ? result.practiceProfile.stage_label : '辅助评测',
+      note: result.practiceProfile
+        ? result.practiceProfile.scope_note
+        : '当前系统面向楷书单字辅助评测，不替代教师终评。',
+    },
+  ];
 }
 
 Page({
@@ -70,6 +100,8 @@ Page({
     metrics: [],
     dimensionCards: [],
     dimensionSummary: '',
+    basisCards: [],
+    practiceProfile: null,
     error: '',
     deleting: false,
   },
@@ -94,6 +126,7 @@ Page({
       const rawResult = data.result || {};
       const palette = getScorePalette(rawResult.total_score || 0);
       const dimensionCards = buildDimensionCards(rawResult.dimension_scores);
+      const practiceProfile = rawResult.practice_profile || null;
 
       const result = {
         ...rawResult,
@@ -103,31 +136,16 @@ Page({
         deviceLabel: rawResult.device_name || 'InkPi 设备',
         ocrText: formatConfidence(rawResult.ocr_confidence),
         qualityText: formatConfidence(rawResult.quality_confidence),
+        practiceProfile,
       };
-
-      const metrics = [
-        {
-          title: '识别结果',
-          value: result.characterLabel,
-          note: `OCR 置信度 ${result.ocrText}`,
-        },
-        {
-          title: '质量等级',
-          value: result.qualityLabel,
-          note: `质量置信度 ${result.qualityText}`,
-        },
-        {
-          title: '评测链路',
-          value: 'OCR + ONNX',
-          note: '当前采用预处理、OCR、主分模型和四维解释分组成的单链路评测。',
-        },
-      ];
 
       this.setData({
         result,
-        metrics,
+        metrics: buildMetrics(result),
         dimensionCards,
         dimensionSummary: buildDimensionSummary(dimensionCards),
+        basisCards: normalizeBasisCards(rawResult.dimension_basis || []),
+        practiceProfile,
       });
     } catch (error) {
       this.setData({ error: '加载详情失败，请返回历史页后重试。' });
