@@ -107,19 +107,19 @@ Page({
 
       const metrics = [
         {
-          title: '自动识别',
+          title: '识别结果',
           value: result.characterLabel,
           note: `OCR 置信度 ${result.ocrText}`,
         },
         {
-          title: '质量评级',
+          title: '质量等级',
           value: result.qualityLabel,
-          note: `模型置信度 ${result.qualityText}`,
+          note: `质量置信度 ${result.qualityText}`,
         },
         {
           title: '评测链路',
           value: 'OCR + ONNX',
-          note: '当前版本固定使用单链路评测，四维解释分用于帮助理解主分。',
+          note: '当前采用预处理、OCR、主分模型和四维解释分组成的单链路评测。',
         },
       ];
 
@@ -145,7 +145,7 @@ Page({
     const modal = await new Promise((resolve) => {
       wx.showModal({
         title: '删除记录',
-        content: `确认删除「${result.characterLabel || '未识别'}」这条记录吗？`,
+        content: `确认删除“${result.characterLabel || '未识别'}”这条记录吗？`,
         confirmColor: '#b34b3e',
         success: resolve,
         fail: () => resolve({ confirm: false }),
@@ -161,7 +161,11 @@ Page({
       await api.deleteHistory(this.resultId);
       wx.showToast({ title: '已删除', icon: 'success' });
       setTimeout(() => {
-        wx.navigateBack();
+        if (getCurrentPages().length > 1) {
+          wx.navigateBack();
+        } else {
+          wx.reLaunch({ url: '/pages/history/index' });
+        }
       }, 300);
     } catch (error) {
       wx.showToast({ title: '删除失败', icon: 'none' });
@@ -170,6 +174,14 @@ Page({
   },
 
   goBack() {
-    wx.navigateBack();
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.reLaunch({ url: '/pages/history/index' });
+  },
+
+  goStats() {
+    wx.navigateTo({ url: '/pages/stats/index' });
   },
 });

@@ -3,7 +3,7 @@
   <view class="page-orb page-orb-b"></view>
 
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
-  <view wx:if="{{loading}}" class="notice">正在加载成绩卡...</view>
+  <view wx:if="{{loading}}" class="notice">正在加载成绩详情...</view>
 
   <view wx:if="{{result}}" class="paper-panel detail-hero">
     <view class="detail-top">
@@ -30,7 +30,7 @@
 
   <view wx:if="{{result}}" class="paper-panel metrics-panel">
     <text class="panel-title">本次评测依据</text>
-    <text class="panel-subtitle">当前版本固定使用预处理、OCR 与 ONNX 评分模型组成的一条主链。</text>
+    <text class="panel-subtitle">结果由预处理、OCR 识别、主分模型和四维解释分共同组成。</text>
 
     <view wx:for="{{metrics}}" wx:key="title" class="metric-card">
       <view class="metric-top">
@@ -67,6 +67,10 @@
 
   <view wx:if="{{result}}" class="detail-actions">
     <button class="ghost-btn detail-back" bindtap="goBack">返回历史</button>
+    <button class="ghost-btn detail-stats" bindtap="goStats">查看统计</button>
+  </view>
+
+  <view wx:if="{{result}}" class="detail-actions">
     <button class="detail-delete" bindtap="deleteCurrent" loading="{{deleting}}">删除这条记录</button>
   </view>
 </view>

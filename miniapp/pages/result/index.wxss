@@ -169,6 +169,7 @@
 }
 
 .detail-back,
+.detail-stats,
 .detail-delete {
   flex: 1;
   margin: 0;

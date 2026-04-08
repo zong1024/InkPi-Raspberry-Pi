@@ -6,18 +6,22 @@
     <view class="hero-head">
       <view class="hero-copy">
         <text class="eyebrow">InkPi Cloud</text>
-        <text class="hero-title">历史卷宗</text>
+        <text class="hero-title">云端记录</text>
         <text class="hero-subtitle">
-          这里会持续汇总树莓派上传的评测结果。现在可以按字、等级、时间和设备筛选，也支持直接整理无效记录。
+          查看树莓派上传的评测结果，按设备、等级和时间筛选，并在手机端直接完成记录管理。
         </text>
       </view>
-      <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
+
+      <view class="hero-actions">
+        <button class="ghost-btn stats-btn" bindtap="goStats">统计中心</button>
+        <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
+      </view>
     </view>
 
     <view class="hero-meta">
       <text class="user-seal">{{userLabel}}</text>
       <view class="chip-row">
-        <text class="meta-chip">最近刷新 {{lastUpdated || '暂未同步'}}</text>
+        <text class="meta-chip">最近同步 {{lastUpdated || '尚未同步'}}</text>
         <text class="meta-chip">设备 {{summary.deviceCount}}</text>
         <text class="meta-chip">字种 {{summary.uniqueCharacters}}</text>
       </view>
@@ -30,25 +34,24 @@
       <text class="summary-value">{{summary.total}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">平均得分</text>
-      <text class="summary-value">{{summary.average}}</text>
+      <text class="summary-label">平均分</text>
+      <text class="summary-value">{{summary.averageText}}</text>
     </view>
     <view class="summary-item">
       <text class="summary-label">近 7 天均分</text>
-      <text class="summary-value">{{summary.recentAverage}}</text>
+      <text class="summary-value">{{summary.recentAverageText}}</text>
     </view>
     <view class="summary-item">
       <text class="summary-label">最高分</text>
-      <text class="summary-value">{{summary.bestScore}}</text>
+      <text class="summary-value">{{summary.bestScoreText}}</text>
     </view>
   </view>
 
   <view class="paper-panel digest-panel">
-    <view class="section-head digest-head">
-      <text class="section-title">自动总结</text>
-      <text class="section-note">{{summary.topDevice}}</text>
+    <view class="section-head">
+      <text class="section-title">量化概览</text>
+      <text class="section-note">{{summary.topDeviceText}}</text>
     </view>
-    <text class="digest-copy">{{summary.insight}}</text>
 
     <view class="quality-strip">
       <view class="quality-pill quality-good">
@@ -65,27 +68,26 @@
       </view>
     </view>
 
-    <view class="digest-tags">
-      <text class="meta-chip">最新得分 {{summary.latestScore}}</text>
-      <text class="meta-chip">高频字 {{summary.topCharacter}}</text>
-    </view>
-  </view>
-
-  <view class="paper-panel charstats-panel">
-    <view class="section-head">
-      <text class="section-title">按字统计</text>
-      <text class="section-note">看看哪些字出现最多、均分更高</text>
-    </view>
-    <view wx:if="{{summary.topCharacters && summary.topCharacters.length}}" class="charstats-list">
-      <view wx:for="{{summary.topCharacters}}" wx:key="character_name" class="charstat-row">
-        <view class="charstat-main">
-          <text class="charstat-char">{{item.character_name}}</text>
-          <text class="charstat-meta">出现 {{item.count}} 次</text>
-        </view>
-        <text class="charstat-score">{{item.average_score}} 分</text>
+    <view class="metrics-duo">
+      <view class="metric-chip">
+        <text class="metric-chip-label">达标率</text>
+        <text class="metric-chip-value">{{summary.qualifiedRateText}}</text>
+      </view>
+      <view class="metric-chip">
+        <text class="metric-chip-label">优秀率</text>
+        <text class="metric-chip-value">{{summary.excellentRateText}}</text>
       </view>
     </view>
-    <text wx:else class="panel-subtitle">还没有足够的历史数据来生成按字统计。</text>
+
+    <text class="digest-copy">{{summary.progressLabel}}</text>
+
+    <view class="digest-tags">
+      <text class="meta-chip">最新得分 {{summary.latestScoreText}}</text>
+      <text class="meta-chip">高频字 {{summary.topCharacterText}}</text>
+      <text class="meta-chip">近 7 天样本 {{summary.recentTotal}}</text>
+    </view>
+
+    <text class="digest-note">{{summary.insight}}</text>
   </view>
 
   <view class="paper-panel filter-panel">
@@ -134,12 +136,14 @@
       <view class="batch-actions">
         <button class="ghost-btn batch-chip" bindtap="selectAllRecords">全选</button>
         <button class="ghost-btn batch-chip" bindtap="clearSelection">清空</button>
-        <button class="batch-delete" bindtap="batchDeleteSelected">批量删除</button>
+        <button class="batch-delete" bindtap="batchDeleteSelected" loading="{{batchDeleting}}">
+          批量删除
+        </button>
       </view>
     </view>
   </view>
 
-  <view class="section-head">
+  <view class="section-head section-head-standalone">
     <text class="section-title">历史记录</text>
     <text class="section-note">点开看详情，或直接删除无效结果</text>
   </view>
@@ -189,6 +193,7 @@
 
       <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}}</text>
       <text class="record-feedback">{{item.feedbackPreview}}</text>
+      <text class="record-dimension">{{item.dimensionSummary}}</text>
 
       <view class="record-meta">
         <text class="meta-pill">OCR {{item.ocrText}}</text>

@@ -2,6 +2,7 @@
   "pages": [
     "pages/login/index",
     "pages/history/index",
+    "pages/stats/index",
     "pages/result/index"
   ],
   "window": {

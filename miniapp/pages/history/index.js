@@ -34,6 +34,20 @@ function getQualityLabel(level) {
   return '乙';
 }
 
+function formatNumber(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--';
+  }
+  return `${Math.round(Number(value) * 10) / 10}`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '--';
+  }
+  return `${Math.round(Number(value) * 10) / 10}%`;
+}
+
 function buildFeedbackPreview(text) {
   if (!text) return '暂无评语';
   return text.length > 42 ? `${text.slice(0, 42)}...` : text;
@@ -46,39 +60,68 @@ function formatConfidence(value) {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
-function formatNumber(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) {
-    return '--';
+function buildDimensionSummary(dimensionScores = null) {
+  if (!dimensionScores) return '暂无四维解释';
+  const entries = Object.entries(dimensionScores)
+    .filter(([, score]) => score !== null && score !== undefined)
+    .map(([key, score]) => ({ key, score: Number(score) }));
+
+  if (!entries.length) {
+    return '暂无四维解释';
   }
-  return `${Math.round(Number(value) * 10) / 10}`;
+
+  const labels = {
+    structure: '结构',
+    stroke: '笔画',
+    integrity: '完整',
+    stability: '稳定',
+  };
+  const strongest = [...entries].sort((left, right) => right.score - left.score)[0];
+  const weakest = [...entries].sort((left, right) => left.score - right.score)[0];
+  return `强项 ${labels[strongest.key]} ${strongest.score} / 待提升 ${labels[weakest.key]} ${weakest.score}`;
 }
 
-function buildSummary(summary = {}) {
+function normalizeSummary(summary = {}) {
   const qualityCounts = summary.quality_counts || {};
   const topCharacter = (summary.top_characters && summary.top_characters[0]) || null;
   const topDevice = (summary.top_devices && summary.top_devices[0]) || null;
+  const progressDelta =
+    summary.progress_delta === null || summary.progress_delta === undefined
+      ? null
+      : Number(summary.progress_delta);
+
+  let progressLabel = '等待最近两周的数据对比';
+  if (progressDelta !== null) {
+    if (progressDelta > 0) {
+      progressLabel = `近 7 天较前一周提升 ${progressDelta.toFixed(1)} 分`;
+    } else if (progressDelta < 0) {
+      progressLabel = `近 7 天较前一周回落 ${Math.abs(progressDelta).toFixed(1)} 分`;
+    } else {
+      progressLabel = '近两周平均分基本持平';
+    }
+  }
 
   return {
     total: summary.total || 0,
-    latestScore: summary.latest_score === null || summary.latest_score === undefined ? '--' : summary.latest_score,
-    average: formatNumber(summary.average_score),
-    recentAverage: formatNumber(summary.recent_average),
-    bestScore: summary.best_score === null || summary.best_score === undefined ? '--' : summary.best_score,
+    averageText: formatNumber(summary.average_score),
+    recentAverageText: formatNumber(summary.recent_average),
+    bestScoreText: formatNumber(summary.best_score),
+    latestScoreText: formatNumber(summary.latest_score),
+    qualifiedRateText: formatPercent(summary.qualified_rate),
+    excellentRateText: formatPercent(summary.excellent_rate),
     deviceCount: summary.device_count || 0,
     uniqueCharacters: summary.unique_characters || 0,
+    recentTotal: summary.recent_total || 0,
+    progressLabel,
+    progressTrend: summary.progress_trend || 'flat',
     qualityCounts: {
       good: qualityCounts.good || 0,
       medium: qualityCounts.medium || 0,
       bad: qualityCounts.bad || 0,
     },
-    topCharacter: topCharacter ? `${topCharacter.character_name} · ${topCharacter.count} 次` : '暂无',
-    topDevice: topDevice ? `${topDevice.device_name} · ${topDevice.count} 条` : '暂无',
-    topCharacters: (summary.top_characters || []).map((item) => ({
-      character_name: item.character_name || '未识别',
-      count: item.count || 0,
-      average_score: formatNumber(item.average_score),
-    })),
-    insight: summary.insight || '历史摘要会在这里自动生成。',
+    topCharacterText: topCharacter ? `${topCharacter.character_name} · ${topCharacter.count} 次` : '暂无',
+    topDeviceText: topDevice ? `${topDevice.device_name} · ${topDevice.count} 条` : '暂无',
+    insight: summary.insight || '完成评测后，这里会自动生成统计总结。',
   };
 }
 
@@ -93,19 +136,21 @@ function normalizeResult(item) {
     feedbackPreview: buildFeedbackPreview(item.feedback),
     ocrText: formatConfidence(item.ocr_confidence),
     qualityText: formatConfidence(item.quality_confidence),
+    dimensionSummary: buildDimensionSummary(item.dimension_scores),
   };
 }
 
 Page({
   data: {
     loading: true,
+    batchDeleting: false,
     results: [],
     user: null,
     userLabel: 'InkPi 演示账号',
     error: '',
     lastUpdated: '',
     deletingId: null,
-    summary: buildSummary(),
+    summary: normalizeSummary(),
     managing: false,
     selectedIds: [],
     qualityOptions: QUALITY_OPTIONS,
@@ -206,7 +251,7 @@ Page({
         api.getHistory({ ...params, limit: 80 }),
       ]);
 
-      const summary = buildSummary(summaryPayload.summary || {});
+      const normalizedSummary = normalizeSummary(summaryPayload.summary || {});
       const availableDevices = (summaryPayload.summary && summaryPayload.summary.available_devices) || [];
       const deviceOptions = ['全部设备', ...availableDevices];
       const deviceValues = ['all', ...availableDevices];
@@ -235,7 +280,7 @@ Page({
 
       this.setData({
         results,
-        summary,
+        summary: normalizedSummary,
         error: '',
         lastUpdated: this.formatTime(new Date()),
         deviceOptions,
@@ -245,9 +290,9 @@ Page({
         selectedIds: [],
       });
     } catch (error) {
-      this.setData({ error: '拉取历史结果失败，请检查云端服务是否已经启动。' });
+      this.setData({ error: '拉取云端记录失败，请检查后端服务是否已经启动。' });
     } finally {
-      this.setData({ loading: false, deletingId: null });
+      this.setData({ loading: false, deletingId: null, batchDeleting: false });
     }
   },
 
@@ -310,6 +355,10 @@ Page({
     wx.navigateTo({ url: `/pages/result/index?id=${id}` });
   },
 
+  goStats() {
+    wx.navigateTo({ url: '/pages/stats/index' });
+  },
+
   toggleManageMode() {
     this.setData({
       managing: !this.data.managing,
@@ -342,7 +391,7 @@ Page({
     const modal = await new Promise((resolve) => {
       wx.showModal({
         title: '删除记录',
-        content: `确认删除「${character || '未识别'}」这条历史记录吗？`,
+        content: `确认删除“${character || '未识别'}”这条历史记录吗？`,
         confirmColor: '#b34b3e',
         success: resolve,
         fail: () => resolve({ confirm: false }),
@@ -385,14 +434,17 @@ Page({
       return;
     }
 
-    this.setData({ loading: true });
+    this.setData({ batchDeleting: true });
     try {
       const response = await api.batchDeleteHistory(ids);
-      wx.showToast({ title: `已清理 ${response.deleted_count || ids.length} 条`, icon: 'success' });
+      wx.showToast({
+        title: `已清理 ${response.deleted_count || ids.length} 条`,
+        icon: 'success',
+      });
       this.setData({ managing: false, selectedIds: [] });
       await this.loadDashboard(true);
     } catch (error) {
-      this.setData({ loading: false });
+      this.setData({ batchDeleting: false });
       wx.showToast({ title: '批量删除失败', icon: 'none' });
     }
   },

@@ -1,0 +1,152 @@
+<view class="page-shell stats-page">
+  <view class="page-orb page-orb-a"></view>
+  <view class="page-orb page-orb-b"></view>
+
+  <view class="paper-panel stats-hero">
+    <view class="section-head">
+      <view>
+        <text class="eyebrow">InkPi Analytics</text>
+        <text class="stats-title">统计中心</text>
+      </view>
+      <button class="ghost-btn back-btn" bindtap="goHistory">返回记录</button>
+    </view>
+    <text class="stats-subtitle">
+      用量化指标观察书写表现，包括趋势、分数分布、四维均值和设备来源。
+    </text>
+    <view class="chip-row">
+      <text class="meta-chip">最近刷新 {{lastUpdated || '尚未同步'}}</text>
+      <text class="meta-chip">样本 {{summary.total}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel filter-panel">
+    <view class="section-head">
+      <text class="section-title">统计范围</text>
+      <text class="section-note">按设备和时间切换口径</text>
+    </view>
+    <view class="picker-grid">
+      <picker mode="selector" range="{{dateOptions}}" value="{{filters.dateIndex}}" bindchange="onDateChange">
+        <view class="picker-chip">时间：{{dateOptions[filters.dateIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{deviceOptions}}" value="{{filters.deviceIndex}}" bindchange="onDeviceChange">
+        <view class="picker-chip">设备：{{deviceOptions[filters.deviceIndex]}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="notice">正在生成统计结果...</view>
+
+  <view class="stats-grid">
+    <view class="paper-panel metric-card">
+      <text class="metric-label">平均分</text>
+      <text class="metric-value">{{summary.averageText}}</text>
+      <text class="metric-note">近 7 天 {{summary.recentAverageText}}</text>
+    </view>
+    <view class="paper-panel metric-card">
+      <text class="metric-label">优秀率</text>
+      <text class="metric-value">{{summary.excellentRateText}}</text>
+      <text class="metric-note">达标率 {{summary.qualifiedRateText}}</text>
+    </view>
+    <view class="paper-panel metric-card">
+      <text class="metric-label">最近变化</text>
+      <text class="metric-value">{{summary.progressText}}</text>
+      <text class="metric-note">{{summary.progressLabel}}</text>
+    </view>
+    <view class="paper-panel metric-card">
+      <text class="metric-label">最高分</text>
+      <text class="metric-value">{{summary.bestScoreText}}</text>
+      <text class="metric-note">累计样本 {{summary.total}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel chart-panel">
+    <view class="section-head">
+      <text class="section-title">最近 10 天趋势</text>
+      <text class="section-note">柱高表示平均分，顶部数字表示样本数</text>
+    </view>
+    <view class="trend-chart">
+      <view wx:for="{{summary.trendPoints}}" wx:key="date" class="trend-item">
+        <text class="trend-count">{{item.count}}</text>
+        <view class="trend-bar-shell">
+          <view class="trend-bar" style="height: {{item.barHeight}}%;"></view>
+        </view>
+        <text class="trend-avg">{{item.averageText}}</text>
+        <text class="trend-label">{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="paper-panel chart-panel">
+    <view class="section-head">
+      <text class="section-title">分数分布</text>
+      <text class="section-note">快速看当前成绩集中在哪个区间</text>
+    </view>
+    <view wx:for="{{summary.scoreBands}}" wx:key="key" class="distribution-row">
+      <view class="distribution-top">
+        <text class="distribution-label">{{item.label}}</text>
+        <text class="distribution-value">{{item.count}} / {{item.ratioText}}</text>
+      </view>
+      <view class="distribution-track">
+        <view class="distribution-fill" style="width: {{item.width}}%;"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="paper-panel chart-panel">
+    <view class="section-head">
+      <text class="section-title">四维均值</text>
+      <text class="section-note">按结构、笔画、完整、稳定量化整体表现</text>
+    </view>
+    <view wx:for="{{summary.dimensions}}" wx:key="key" class="distribution-row">
+      <view class="distribution-top">
+        <text class="distribution-label">{{item.label}}</text>
+        <text class="distribution-value">{{item.score}}</text>
+      </view>
+      <view class="distribution-track">
+        <view class="distribution-fill dimension-fill" style="width: {{item.width}}%;"></view>
+      </view>
+    </view>
+  </view>
+
+  <view class="leaderboard-grid">
+    <view class="paper-panel leaderboard-panel">
+      <view class="section-head">
+        <text class="section-title">高频字</text>
+        <text class="section-note">按出现次数排序</text>
+      </view>
+      <view wx:if="{{summary.topCharacters.length}}">
+        <view wx:for="{{summary.topCharacters}}" wx:key="character_name" class="leaderboard-row">
+          <view>
+            <text class="leaderboard-main">{{item.character_name}}</text>
+            <text class="leaderboard-sub">{{item.count}} 次</text>
+          </view>
+          <text class="leaderboard-score">{{item.average_score}}</text>
+        </view>
+      </view>
+      <text wx:else class="panel-subtitle">当前还没有足够的数据生成排行。</text>
+    </view>
+
+    <view class="paper-panel leaderboard-panel">
+      <view class="section-head">
+        <text class="section-title">设备来源</text>
+        <text class="section-note">按样本量排序</text>
+      </view>
+      <view wx:if="{{summary.topDevices.length}}">
+        <view wx:for="{{summary.topDevices}}" wx:key="device_name" class="leaderboard-row">
+          <view>
+            <text class="leaderboard-main">{{item.device_name}}</text>
+            <text class="leaderboard-sub">{{item.count}} 条</text>
+          </view>
+          <text class="leaderboard-score">{{item.average_score}}</text>
+        </view>
+      </view>
+      <text wx:else class="panel-subtitle">当前还没有设备侧上传数据。</text>
+    </view>
+  </view>
+
+  <view class="paper-panel insight-panel">
+    <text class="panel-title">自动总结</text>
+    <text class="insight-copy">{{summary.insight}}</text>
+  </view>
+</view>

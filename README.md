@@ -5,7 +5,7 @@ InkPi is a single-character calligraphy evaluation project that combines:
 - `PyQt6` desktop UI
 - local `WebUI` for debugging and result inspection
 - `Cloud API` for shared history and remote OCR fallback
-- `MiniApp` result browsing
+- `MiniApp` result browsing, statistics, and cloud record management
 - ONNX-based scoring and four-dimension explanation scores
 
 Current main pipeline:
@@ -49,7 +49,7 @@ Implementation notes:
 - `models/`: runtime models and ONNX assets
 - `web_ui/`: local browser UI and Flask routes
 - `cloud_api/`: shared cloud-facing Flask API
-- `miniapp/`: mobile result viewer
+- `miniapp/`: mobile viewer with history, quantitative statistics, and delete management
 - `training/`: scoring model training pipeline
 - `docs/`: flow chart, project documentation, PPT assets
 

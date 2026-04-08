@@ -36,10 +36,17 @@
   color: #75624e;
 }
 
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.stats-btn,
 .logout-btn {
   margin: 0;
+  min-width: 156rpx;
   padding: 0 24rpx;
-  min-width: 140rpx;
 }
 
 .hero-meta {
@@ -94,7 +101,6 @@
 }
 
 .digest-panel,
-.charstats-panel,
 .filter-panel {
   padding: 28rpx 26rpx;
 }
@@ -108,8 +114,8 @@
   gap: 16rpx;
 }
 
-.digest-head {
-  margin-bottom: 18rpx;
+.section-head-standalone {
+  padding: 0 6rpx;
 }
 
 .section-title {
@@ -121,13 +127,6 @@
 .section-note {
   font-size: 22rpx;
   color: #8a7560;
-}
-
-.digest-copy {
-  display: block;
-  font-size: 26rpx;
-  line-height: 1.75;
-  color: #4f4031;
 }
 
 .quality-strip {
@@ -171,6 +170,44 @@
   font-weight: 800;
 }
 
+.metrics-duo {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.metric-chip {
+  padding: 18rpx 18rpx;
+  border-radius: 22rpx;
+  background: rgba(252, 247, 239, 0.92);
+  border: 1rpx solid rgba(214, 193, 167, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.metric-chip-label {
+  font-size: 22rpx;
+  color: #8a7560;
+}
+
+.metric-chip-value {
+  font-size: 34rpx;
+  line-height: 1;
+  font-weight: 800;
+  color: #31261c;
+}
+
+.digest-copy {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: #4f4031;
+  font-weight: 700;
+}
+
 .digest-tags {
   margin-top: 18rpx;
   display: flex;
@@ -178,45 +215,12 @@
   gap: 12rpx;
 }
 
-.charstats-list {
-  margin-top: 18rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.charstat-row {
-  padding: 18rpx 18rpx;
-  border-radius: 24rpx;
-  background: rgba(252, 247, 239, 0.92);
-  border: 1rpx solid rgba(214, 193, 167, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
-.charstat-main {
-  display: flex;
-  align-items: baseline;
-  gap: 14rpx;
-}
-
-.charstat-char {
-  font-size: 34rpx;
-  font-weight: 800;
-  color: #2f241a;
-}
-
-.charstat-meta {
-  font-size: 22rpx;
-  color: #8a7560;
-}
-
-.charstat-score {
+.digest-note {
+  display: block;
+  margin-top: 14rpx;
   font-size: 24rpx;
-  font-weight: 700;
-  color: #7a5a41;
+  line-height: 1.7;
+  color: #7d6651;
 }
 
 .search-row {
@@ -277,11 +281,7 @@
   gap: 12rpx;
 }
 
-.clear-btn {
-  margin: 0;
-  min-width: 180rpx;
-}
-
+.clear-btn,
 .manage-btn {
   margin: 0;
   min-width: 180rpx;
@@ -439,7 +439,8 @@
   line-height: 68rpx;
 }
 
-.record-time {
+.record-time,
+.record-dimension {
   font-size: 23rpx;
   line-height: 1.6;
   color: #8a745f;
@@ -455,4 +456,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10rpx;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgba(239, 227, 212, 0.9);
+  color: #7a5a41;
+  font-size: 22rpx;
 }
