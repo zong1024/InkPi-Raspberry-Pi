@@ -117,6 +117,18 @@ Stop the public backend only:
 bash scripts/stop_backend_stack.sh
 ```
 
+Restart the public backend only:
+
+```bash
+bash scripts/restart_backend_stack.sh
+```
+
+Run backend health checks:
+
+```bash
+bash scripts/health_check_stack.sh backend
+```
+
 What the stack script starts:
 
 - `Cloud API` on `INKPI_CLOUD_PORT` (default `5001`)
@@ -200,9 +212,102 @@ python -m unittest test_cloud_sync_integration.py
 GitHub Actions should focus on cross-platform Python logic.  
 Raspberry Pi specific hardware paths such as `GPIO`, camera hardware, `SPI`, and `libcamera` are better covered on the real device or a self-hosted runner.
 
+## CI/CD
+
+The repository now defines a complete CI/CD chain for the three main delivery targets:
+
+- `PR / Push CI`: Python checks, ops console build, miniapp validation, and release artifact packaging
+- `Deploy Public Backend`: remote deployment for `Cloud API + WebUI`
+- `Deploy Raspberry Pi Stack`: remote deployment for `Qt + WebUI + Cloud API`
+- `Miniapp Release Candidate`: miniapp validation plus zip packaging for release handoff
+
+Main repo entrypoints:
+
+- `scripts/rpi_lint_test.sh`
+- `scripts/ci_python_checks.sh`
+- `scripts/ci_ops_console.sh`
+- `scripts/ci_miniapp_checks.sh`
+- `scripts/package_backend_release.sh`
+- `scripts/package_rpi_release.sh`
+- `scripts/package_miniapp_release.sh`
+- `scripts/install_rpi_release.sh`
+- `scripts/deploy_backend_release.sh`
+- `scripts/deploy_rpi_release.sh`
+- `scripts/restart_backend_stack.sh`
+- `scripts/health_check_stack.sh`
+
+GitHub workflow files:
+
+- `.github/workflows/python-app.yml`
+- `.github/workflows/deploy-backend.yml`
+- `.github/workflows/deploy-rpi.yml`
+- `.github/workflows/miniapp-ci.yml`
+- `.github/workflows/miniapp-release.yml`
+- `.github/workflow-snippets/rpi-device-cd.yml`
+
+Raspberry Pi device-side release path:
+
+1. Run `bash scripts/rpi_lint_test.sh`
+2. Build the device artifact with `bash scripts/package_rpi_release.sh`
+3. Copy `dist/releases/inkpi-rpi-release-*.tar.gz` to the Raspberry Pi
+4. Run `INKPI_DEPLOY_MODE=server bash scripts/install_rpi_release.sh /path/to/inkpi-rpi-release-*.tar.gz`
+5. Let `scripts/health_check_stack.sh` confirm `cloud_api`, `web_ui`, OCR readiness, the ONNX scorer state, and the Qt process
+
+The device installer reuses the current `setup_*`, `start_*`, and `stop_*` scripts, keeps mutable state under `INKPI_DEPLOY_ROOT/shared`, switches `current` to a freshly unpacked release, and rolls back automatically if the post-start health check fails.
+
+The public backend deploy script now follows the same pattern: it stops the previous stack, keeps runtime state under `INKPI_DEPLOY_TARGET_DIR/shared`, switches `current` to the new release, and finishes with `scripts/health_check_stack.sh backend`.
+
+Default Raspberry Pi release layout:
+
+- `${HOME}/inkpi-device/releases/<release-id>`
+- `${HOME}/inkpi-device/current`
+- `${HOME}/inkpi-device/shared/data`
+- `${HOME}/inkpi-device/shared/.inkpi`
+- `${HOME}/inkpi-device/shared/logs`
+- `${HOME}/inkpi-device/shared/runtime_logs`
+- `${HOME}/inkpi-device/shared/runtime_pids`
+
+Default public backend release layout:
+
+- `/opt/inkpi/releases/<release-id>`
+- `/opt/inkpi/current`
+- `/opt/inkpi/shared/data`
+- `/opt/inkpi/shared/.inkpi`
+- `/opt/inkpi/shared/venv`
+- `/opt/inkpi/shared/runtime_logs`
+- `/opt/inkpi/shared/runtime_pids`
+
+Miniapp CI/CD entrypoints:
+
+- `npm --prefix miniapp run ci`
+- `npm --prefix miniapp run ci:release`
+- `.github/workflows/miniapp-ci.yml`
+
+The miniapp branch pipeline prepares `miniapp/dist/ci-package` on every relevant PR or push. The dedicated release workflow re-runs the pipeline in strict mode, optionally rewrites `config.js` with `MINIAPP_API_BASE_URL`, and uploads both the importable package directory and the release zip.
+
+Recommended deployment order:
+
+1. Open a PR and wait for `InkPi CI`
+2. Review the generated artifacts in `dist/releases`
+3. Trigger `Deploy Public Backend` for the cloud host
+4. Trigger `Deploy Raspberry Pi Stack` for the device
+5. Trigger `Miniapp Release Candidate` to get the WeChat import package
+
+Required GitHub secrets:
+
+- Backend: `INKPI_BACKEND_HOST`, `INKPI_BACKEND_USER`, `INKPI_BACKEND_PORT`, `INKPI_BACKEND_TARGET_DIR`, `INKPI_BACKEND_SSH_KEY`
+- Raspberry Pi: `INKPI_RPI_HOST`, `INKPI_RPI_USER`, `INKPI_RPI_PORT`, `INKPI_RPI_TARGET_DIR`, `INKPI_RPI_SSH_KEY`
+
+`Deploy Public Backend` now reruns `scripts/ci_python_checks.sh` before packaging, rebuilds `web_console` through `scripts/package_backend_release.sh`, and lets the remote deploy step execute `setup_backend_runtime.sh -> start_backend_stack.sh -> health_check_stack.sh backend`.
+
+For the full CI/CD process, artifact strategy, and workflow responsibilities, see:
+
+- `docs/ci-cd.md`
+
 ## Docs
 
 - Flow chart source: `docs/inkpi-project-flow.drawio`
 - Flow chart preview: `docs/inkpi-project-flow.png`
+- CI/CD notes: `docs/ci-cd.md`
 - Reviewer notes: `docs/evaluation-basis-and-validation.md`
 - Training notes: `training/README.md`

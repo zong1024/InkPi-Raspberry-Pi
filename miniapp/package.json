@@ -1,0 +1,17 @@
+{
+  "name": "inkpi-miniapp-ci",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local CI/CD guardrails for the InkPi miniapp",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "lint": "node ./scripts/ci/lint-miniapp.js",
+    "check:config": "node ./scripts/ci/validate-miniapp-config.js",
+    "prepare:artifact": "node ./scripts/ci/prepare-miniapp-artifact.js",
+    "check:preflight": "node ./scripts/ci/preflight-miniapp-release.js",
+    "ci": "node ./scripts/ci/run-miniapp-pipeline.js",
+    "ci:release": "node ./scripts/ci/run-miniapp-pipeline.js --release"
+  }
+}

@@ -1,17 +1,19 @@
-name: Python CI
+name: InkPi CI
 
 on:
-  push:
-    branches: ["master"]
   pull_request:
-    branches: ["master"]
+  push:
+    branches:
+      - master
+      - "codex/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  python-core:
+    name: Python checks and integration tests
     runs-on: ubuntu-latest
     env:
       QT_QPA_PLATFORM: offscreen
@@ -28,19 +30,95 @@ jobs:
           python-version: "3.10"
           cache: "pip"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements.txt
 
-      - name: Lint core project files
-        run: |
-          flake8 main.py cloud_api config services views web_ui test_*.py --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 main.py cloud_api config services views web_ui test_*.py --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Run Python CI entrypoint
+        run: bash scripts/ci_python_checks.sh
 
-      - name: Run cross-platform tests
-        run: |
-          # GitHub hosted runners do not provide Raspberry Pi camera / GPIO / SPI hardware.
-          # CI only verifies the stable cross-platform logic here.
-          python -m unittest test_web_ui.py test_all.py test_cloud_api.py test_cloud_ocr_api.py
+  ops-console:
+    name: Ops console build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web_console/package-lock.json
+
+      - name: Build operations console
+        run: bash scripts/ci_ops_console.sh
+
+      - name: Upload built WebUI static bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkpi-webui-static
+          path: web_ui/static
+
+  miniapp:
+    name: Miniapp validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Run miniapp checks
+        run: bash scripts/ci_miniapp_checks.sh
+
+  release-bundles:
+    name: Package release bundles
+    runs-on: ubuntu-latest
+    needs:
+      - python-core
+      - ops-console
+      - miniapp
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: web_console/package-lock.json
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build backend release bundle
+        run: bash scripts/package_backend_release.sh
+
+      - name: Build Raspberry Pi release bundle
+        run: bash scripts/package_rpi_release.sh
+
+      - name: Build miniapp release bundle
+        run: bash scripts/package_miniapp_release.sh
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkpi-release-bundles
+          path: dist/releases
