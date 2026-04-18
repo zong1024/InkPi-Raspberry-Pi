@@ -36,6 +36,14 @@
   color: #75624e;
 }
 
+.support-copy {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 23rpx;
+  line-height: 1.7;
+  color: #8a6450;
+}
+
 .hero-actions {
   display: flex;
   flex-direction: column;
@@ -567,6 +575,11 @@
   background: rgba(239, 227, 212, 0.9);
   color: #7a5a41;
   font-size: 22rpx;
+}
+
+.script-warning {
+  background: rgba(252, 227, 221, 0.96);
+  color: #b34b3e;
 }
 
 @media (max-width: 520px) {

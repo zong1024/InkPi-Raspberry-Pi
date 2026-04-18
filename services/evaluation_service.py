@@ -1,4 +1,4 @@
-"""Single-chain evaluation service: OCR -> ONNX score -> explanatory dimensions."""
+"""Single-chain evaluation service: OCR -> script-routed ONNX -> explanatory dimensions."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from models.evaluation_framework import get_script_label, normalize_script
 from models.evaluation_result import EvaluationResult
 from services.dimension_scorer_service import dimension_scorer_service
 from services.local_ocr_service import local_ocr_service
@@ -20,7 +21,7 @@ from services.quality_scorer_service import quality_scorer_service
 
 
 class EvaluationService:
-    """Single-chain scoring service with stable user-facing feedback."""
+    """Dual-script scoring service with stable user-facing feedback."""
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -46,14 +47,28 @@ class EvaluationService:
     def evaluate(
         self,
         processed_image: np.ndarray,
+        *,
+        script: str | None,
         original_image_path: str | None = None,
         processed_image_path: str | None = None,
         ocr_image: np.ndarray | None = None,
     ) -> EvaluationResult:
-        """Run the OCR + ONNX scoring pipeline."""
+        """Run the OCR + script-specific ONNX scoring pipeline."""
 
-        self.logger.info("Starting single-chain calligraphy evaluation...")
-        operations_monitor_service.record_pipeline("evaluation", "running", "Evaluation pipeline started.")
+        if not script:
+            raise ValueError("script_required")
+        normalized_script = normalize_script(script)
+        if normalized_script not in {"regular", "running"}:
+            raise ValueError("unsupported_script")
+
+        script_label = get_script_label(normalized_script)
+        self.logger.info("Starting dual-script calligraphy evaluation for %s.", normalized_script)
+        operations_monitor_service.record_pipeline(
+            "evaluation",
+            "running",
+            "Evaluation pipeline started.",
+            {"script": normalized_script, "script_label": script_label},
+        )
 
         if not local_ocr_service.available:
             operations_monitor_service.record_pipeline(
@@ -67,14 +82,19 @@ class EvaluationService:
             )
             raise RuntimeError("Local OCR is unavailable. Install PaddleOCR or configure the remote OCR fallback.")
 
-        if not quality_scorer_service.available:
+        if not quality_scorer_service.is_script_available(normalized_script):
+            model_path = quality_scorer_service.get_model_path(normalized_script)
             operations_monitor_service.record_pipeline(
                 "quality_model",
                 "error",
                 "Quality scoring model is unavailable.",
-                {"model_path": str(quality_scorer_service.model_path)},
+                {
+                    "script": normalized_script,
+                    "script_label": script_label,
+                    "model_path": str(model_path),
+                },
             )
-            raise RuntimeError(f"Quality scorer ONNX is unavailable: {quality_scorer_service.model_path}")
+            raise RuntimeError(f"script_model_unavailable:{normalized_script}:{model_path}")
 
         recognition_source = ocr_image if ocr_image is not None else processed_image
         operations_monitor_service.record_pipeline("ocr", "running", "Recognizing character from ROI.")
@@ -96,10 +116,16 @@ class EvaluationService:
             },
         )
 
-        operations_monitor_service.record_pipeline("quality_model", "running", "Running ONNX quality scorer.")
+        operations_monitor_service.record_pipeline(
+            "quality_model",
+            "running",
+            "Running script-specific ONNX quality scorer.",
+            {"script": normalized_script, "script_label": script_label},
+        )
         scored = quality_scorer_service.score(
             processed_image,
             character=recognition.character,
+            script=normalized_script,
             ocr_confidence=recognition.confidence,
         )
         operations_monitor_service.record_pipeline(
@@ -107,31 +133,48 @@ class EvaluationService:
             "done",
             "Primary score generated.",
             {
+                "script": normalized_script,
+                "script_label": script_label,
                 "total_score": scored.total_score,
                 "quality_level": scored.quality_level,
                 "quality_confidence": round(float(scored.quality_confidence), 4),
             },
         )
 
-        operations_monitor_service.record_pipeline("dimension_scoring", "running", "Computing explanatory dimensions.")
+        operations_monitor_service.record_pipeline(
+            "dimension_scoring",
+            "running",
+            "Computing explanatory dimensions.",
+            {"script": normalized_script},
+        )
         dimension_result = dimension_scorer_service.score(
             processed_image,
             probabilities=scored.probabilities,
             quality_features=scored.quality_features or {},
             calibration=scored.calibration or {},
             ocr_confidence=recognition.confidence,
+            script=normalized_script,
         )
         operations_monitor_service.record_pipeline(
             "dimension_scoring",
             "done",
             "Four-dimension scoring completed.",
-            dimension_result.dimension_scores,
+            {
+                "script": normalized_script,
+                "dimension_scores": dimension_result.dimension_scores,
+            },
         )
 
         result = EvaluationResult(
             total_score=scored.total_score,
-            feedback=self._build_feedback(scored.quality_level, scored.total_score, recognition.character),
+            feedback=self._build_feedback(
+                scored.quality_level,
+                scored.total_score,
+                recognition.character,
+                normalized_script,
+            ),
             timestamp=datetime.now(),
+            script=normalized_script,
             image_path=original_image_path,
             processed_image_path=processed_image_path,
             character_name=recognition.character,
@@ -144,11 +187,14 @@ class EvaluationService:
                 "quality_features": scored.quality_features or {},
                 "geometry_features": dimension_result.geometry_features,
                 "calibration": scored.calibration or {},
+                "script": normalized_script,
+                "script_label": script_label,
             },
         )
         self.logger.info(
-            "Single-chain evaluation finished: char=%s score=%s level=%s ocr=%.3f",
+            "Dual-script evaluation finished: char=%s script=%s score=%s level=%s ocr=%.3f",
             result.character_name,
+            normalized_script,
             result.total_score,
             result.quality_level,
             result.ocr_confidence or 0.0,
@@ -158,6 +204,8 @@ class EvaluationService:
             "done",
             "Evaluation pipeline completed.",
             {
+                "script": normalized_script,
+                "script_label": script_label,
                 "character": result.character_name,
                 "total_score": result.total_score,
                 "quality_level": result.quality_level,
@@ -165,12 +213,19 @@ class EvaluationService:
         )
         return result
 
-    def _build_feedback(self, quality_level: str, total_score: int, character_name: str | None) -> str:
+    def _build_feedback(
+        self,
+        quality_level: str,
+        total_score: int,
+        character_name: str | None,
+        script: str,
+    ) -> str:
         feedback_pool = self.feedback_templates.get(quality_level) or self.feedback_templates["medium"]
         base_feedback = feedback_pool[total_score % len(feedback_pool)]
         label = self.quality_labels.get(quality_level, "乙")
+        script_label = get_script_label(script)
         if character_name:
-            return f"识别字为“{character_name}”，当前评测等级为“{label}”。{base_feedback}"
+            return f"识别字为“{character_name}”，当前按{script_label}模型评测，等级为“{label}”。{base_feedback}"
         return base_feedback
 
 

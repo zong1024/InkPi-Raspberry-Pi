@@ -6,52 +6,53 @@
     <view class="hero-head">
       <view class="hero-copy">
         <text class="eyebrow">InkPi Cloud</text>
-        <text class="hero-title">云端记录</text>
+        <text class="hero-title">濞存粍鍨归顒傛媼閺夎法绉</text>
         <text class="hero-subtitle">
-          查看树莓派上传的评测结果，按设备、等级和时间筛选，并在手机端直接完成记录管理。
-        </text>
+          闁哄被鍎冲﹢鍛村冀閹达絽绗氭繛鎻掑綖缁楀倹瀵奸悩鍨暠閻犲洤瀚粊瀵哥磼閹惧浜柨娑樻湰閺侇噣骞愭担鐟扮樆濞戞棑缂氱紞瀣Υ娴ｈ櫣鎼肩紒鐙欎讲鍋撴担绛嬪晭濠㈣泛娲ら幏浼村籍閸洘锛熺紒娑欑洴閳ь剙顧€缁辨繈鐛捄鍝勮闁革负鍔嶆晶婊堝嫉閾忚浼傞柣鈺佺摠鐢鈧懓鏈崹姘辨媼閺夎法绉跨紒鐙呯磿閹﹪濡?        </text>
+        <text class="support-copy">{{supportScopeText}}</text>
       </view>
 
       <view class="hero-actions">
-        <button class="ghost-btn practice-cta-btn" bindtap="goPractice">练习中心</button>
-        <button class="ghost-btn stats-btn" bindtap="goStats">统计中心</button>
-        <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
+        <button class="ghost-btn practice-cta-btn" bindtap="goPractice">缂備礁鍟╃弧鍕▔椤撶偟濡</button>
+        <button class="ghost-btn stats-btn" bindtap="goStats">缂備胶鍠曢鍛婄▔椤撶偟濡</button>
+        <button class="ghost-btn logout-btn" bindtap="logout">闂侇偀鍋撻柛</button>
       </view>
     </view>
 
     <view class="hero-meta">
       <text class="user-seal">{{userLabel}}</text>
       <view class="chip-row">
-        <text class="meta-chip">最近同步 {{lastUpdated || '尚未同步'}}</text>
-        <text class="meta-chip">设备 {{summary.deviceCount}}</text>
-        <text class="meta-chip">字种 {{summary.uniqueCharacters}}</text>
+        <text class="meta-chip">闁哄牃鍋撻弶鈺傚灥閹挸顫?{{lastUpdated || '閻忓繑纰嶅﹢顓㈠触鐏炵虎鍔?}}</text>
+        <text class="meta-chip">閻犱焦鍎抽ˇ?{{summary.deviceCount}}</text>
+        <text class="meta-chip">閻庢稒顨堥～?{{summary.uniqueCharacters}}</text>
+        <text class="meta-chip">濞戞棑缂氱紞?{{activeScriptLabel}}</text>
       </view>
     </view>
   </view>
 
   <view class="summary-grid">
     <view class="summary-item">
-      <text class="summary-label">连续练习</text>
+      <text class="summary-label">閺夆晝鍋熼悽鑽ょ磼閸愌呯槑</text>
       <text class="summary-value">{{growthSummary.streakText}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">本周目标</text>
+      <text class="summary-label">闁哄牜鍓欓幊鍡涙儎椤旂晫鍨</text>
       <text class="summary-value">{{growthSummary.weekGoalText}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">近 7 天均分</text>
+      <text class="summary-label">閺?7 濠㈠灈鏅涘搴ㄥ礆</text>
       <text class="summary-value">{{summary.recentAverageText}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">累计记录</text>
+      <text class="summary-label">缂侀硸鍨甸鍝ユ媼閺夎法绉</text>
       <text class="summary-value">{{summary.total}}</text>
     </view>
   </view>
 
   <view class="paper-panel growth-panel">
     <view class="section-head">
-      <text class="section-title">成长计划</text>
-      <button class="ghost-btn practice-btn" bindtap="goPractice">去安排下一轮</button>
+      <text class="section-title">闁瑰瓨鍔欓弳杈╂媼閳ュ啿鐏</text>
+      <button class="ghost-btn practice-btn" bindtap="goPractice">闁告顕ч悾銊╁箳閹哄秶鐟撳☉鎾亾閺</button>
     </view>
     <text class="growth-copy">{{growthSummary.message}}</text>
 
@@ -61,12 +62,12 @@
 
     <view class="growth-chips">
       <text class="meta-chip">{{growthSummary.lastPracticeText}}</text>
-      <text class="meta-chip">本周上传 {{growthSummary.weekRecords}} 条</text>
-      <text class="meta-chip">稳定 80+ {{growthSummary.stableProgressText}}</text>
+      <text class="meta-chip">闁哄牜鍓欓幊鍡樼▔婵犱胶鐐?{{growthSummary.weekRecords}} 闁</text>
+      <text class="meta-chip">缂佸鍟块悾?80+ {{growthSummary.stableProgressText}}</text>
     </view>
 
     <view wx:if="{{focusDimension}}" class="growth-focus-card">
-      <text class="growth-focus-title">当前优先补强：{{focusDimension.label}}</text>
+      <text class="growth-focus-title">鐟滅増鎸告晶鐘冲濡搫甯ラ悶娑栧劚瀹搁亶鏁嶅绺秄ocusDimension.label}}</text>
       <text class="growth-focus-copy">{{focusDimension.note}}</text>
     </view>
 
@@ -83,39 +84,39 @@
           <text class="practice-preview-char">{{item.character}}</text>
           <text class="practice-preview-badge">{{item.badgeText}}</text>
         </view>
-        <text class="practice-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+        <text class="practice-preview-meta">闁秆冩搐閸?{{item.averageText}} / 闁哄牃鍋撻弶?{{item.latestScoreText}}</text>
       </view>
     </view>
   </view>
 
   <view class="paper-panel digest-panel">
     <view class="section-head">
-      <text class="section-title">量化概览</text>
+      <text class="section-title">闂佹彃绻愮€垫彃顫楅崒婵愭綌</text>
       <text class="section-note">{{summary.topDeviceText}}</text>
     </view>
 
     <view class="quality-strip">
       <view class="quality-pill quality-good">
-        <text class="quality-name">甲</text>
+        <text class="quality-name">濞</text>
         <text class="quality-count">{{summary.qualityCounts.good}}</text>
       </view>
       <view class="quality-pill quality-medium">
-        <text class="quality-name">乙</text>
+        <text class="quality-name">闁</text>
         <text class="quality-count">{{summary.qualityCounts.medium}}</text>
       </view>
       <view class="quality-pill quality-bad">
-        <text class="quality-name">丙</text>
+        <text class="quality-name">鐎垫澘鎳忚ぐ渚€宕</text>
         <text class="quality-count">{{summary.qualityCounts.bad}}</text>
       </view>
     </view>
 
     <view class="metrics-duo">
       <view class="metric-chip">
-        <text class="metric-chip-label">达标率</text>
+        <text class="metric-chip-label">閺夊牏鍋撻悥锝夋偝</text>
         <text class="metric-chip-value">{{summary.qualifiedRateText}}</text>
       </view>
       <view class="metric-chip">
-        <text class="metric-chip-label">优秀率</text>
+        <text class="metric-chip-label">濞村吋顭囬～鍛存偝</text>
         <text class="metric-chip-value">{{summary.excellentRateText}}</text>
       </view>
     </view>
@@ -123,9 +124,10 @@
     <text class="digest-copy">{{summary.progressLabel}}</text>
 
     <view class="digest-tags">
-      <text class="meta-chip">最新得分 {{summary.latestScoreText}}</text>
-      <text class="meta-chip">高频字 {{summary.topCharacterText}}</text>
-      <text class="meta-chip">近 7 天样本 {{summary.recentTotal}}</text>
+      <text class="meta-chip">闁哄牃鍋撻柡鍌涙緲缁堕亶宕?{{summary.latestScoreText}}</text>
+      <text class="meta-chip">濡ゅ倹锕㈤。鍓佲偓?{{summary.topCharacterText}}</text>
+      <text class="meta-chip">閺?7 濠㈠灈鏅滈悧閬嶅嫉?{{summary.recentTotal}}</text>
+      <text class="meta-chip">{{supportScopeShort}}</text>
     </view>
 
     <text class="digest-note">{{summary.insight}}</text>
@@ -133,68 +135,70 @@
 
   <view class="paper-panel filter-panel">
     <view class="section-head">
-      <text class="section-title">筛选与整理</text>
-      <text class="section-note">{{hasActiveFilters ? '当前已启用筛选' : '默认显示最新记录'}}</text>
+      <text class="section-title">缂佹稒鐩埀顒€顦粭宀勫极鐎靛憡鍊</text>
+      <text class="section-note">{{hasActiveFilters ? '鐟滅増鎸告晶鐘差啅閹绘帗鍎欓柣顫妿閻☆偊鏌? : supportScopeShort}}</text>
     </view>
 
     <view class="search-row">
       <input
         class="search-input"
-        placeholder="搜索汉字、评语或设备"
+        placeholder="闁瑰吋绮庨崒銊バф径濠勬憻闁靛棔娴囬惁搴ｆ嫚椤撶喎鐏楅悹浣瑰劤椤?
         value="{{filters.keyword}}"
         bindinput="onKeywordInput"
         bindconfirm="applyKeywordFilter"
         confirm-type="search"
       />
-      <button class="secondary-btn search-btn" bindtap="applyKeywordFilter">搜索</button>
+      <button class="secondary-btn search-btn" bindtap="applyKeywordFilter">闁瑰吋绮庨崒</button>
     </view>
 
     <view class="picker-grid">
       <picker mode="selector" range="{{qualityOptions}}" value="{{filters.qualityIndex}}" bindchange="onQualityChange">
-        <view class="picker-chip">等级：{{qualityOptions[filters.qualityIndex]}}</view>
+        <view class="picker-chip">缂佹稑顦辨鍥晬濮濈付qualityOptions[filters.qualityIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{scriptOptions}}" value="{{filters.scriptIndex}}" bindchange="onScriptChange">
+        <view class="picker-chip">濞戞棑缂氱紞瀣晬濮濈付scriptOptions[filters.scriptIndex]}}</view>
       </picker>
       <picker mode="selector" range="{{dateOptions}}" value="{{filters.dateIndex}}" bindchange="onDateChange">
-        <view class="picker-chip">时间：{{dateOptions[filters.dateIndex]}}</view>
+        <view class="picker-chip">闁哄啫鐖煎Λ鍧楁晬濮濈付dateOptions[filters.dateIndex]}}</view>
       </picker>
       <picker mode="selector" range="{{sortOptions}}" value="{{filters.sortIndex}}" bindchange="onSortChange">
-        <view class="picker-chip">排序：{{sortOptions[filters.sortIndex]}}</view>
+        <view class="picker-chip">闁圭儤甯掔花顓㈡晬濮濈付sortOptions[filters.sortIndex]}}</view>
       </picker>
       <picker mode="selector" range="{{deviceOptions}}" value="{{filters.deviceIndex}}" bindchange="onDeviceChange">
-        <view class="picker-chip">设备：{{deviceOptions[filters.deviceIndex]}}</view>
+        <view class="picker-chip">閻犱焦鍎抽ˇ顒勬晬濮濈付deviceOptions[filters.deviceIndex]}}</view>
       </picker>
     </view>
 
     <view class="filter-actions">
       <view class="filter-action-group">
-        <button wx:if="{{hasActiveFilters}}" class="ghost-btn clear-btn" bindtap="clearFilters">清空筛选</button>
-        <button class="ghost-btn manage-btn" bindtap="toggleManageMode">{{managing ? '退出管理' : '批量管理'}}</button>
+        <button wx:if="{{hasActiveFilters}}" class="ghost-btn clear-btn" bindtap="clearFilters">婵炴挸鎳愰埞鏍驳濞戔懇鍋</button>
+        <button class="ghost-btn manage-btn" bindtap="toggleManageMode">{{managing ? '闂侇偀鍋撻柛鎴ｆ椤撴悂鎮? : '闁归潧缍婇崳铏圭不閿涘嫭鍊?}}</button>
       </view>
-      <text class="filter-hint">删除会同步从云端历史中移除当前记录。</text>
+      <text class="filter-hint">婵繐绲界槐锟犲绩椤栨稑鐦俊銈堟腹閸旂喐绋夋惔銈庢斀濞戞棑璁ｇ槐閬嶅礂閺堢數閾傚☉鏃撶細缂嶅宕￠崗鍛枏闁哄牆顦伴弳鐔煎箲椤旇崵鐦嶅ù鐘叉噸缂嶆梻浠﹂弴鐘粵闁挎稑濂旂粭澶岀棯閸愭彃寮虫慨婵撶到缁憋繝寮ㄩ娑樼槷闁肩厧鍟ú鍧楀Υ</text>
     </view>
 
     <view wx:if="{{managing}}" class="batch-toolbar">
-      <text class="batch-label">已选择 {{selectedIds.length}} 条</text>
+      <text class="batch-label">鐎瑰憡鐓￠埀顒€顦扮€?{{selectedIds.length}} 闁</text>
       <view class="batch-actions">
-        <button class="ghost-btn batch-chip" bindtap="selectAllRecords">全选</button>
-        <button class="ghost-btn batch-chip" bindtap="clearSelection">清空</button>
+        <button class="ghost-btn batch-chip" bindtap="selectAllRecords">闁稿繈鍔戦埀</button>
+        <button class="ghost-btn batch-chip" bindtap="clearSelection">婵炴挸鎳愰埞</button>
         <button class="batch-delete" bindtap="batchDeleteSelected" loading="{{batchDeleting}}">
-          批量删除
-        </button>
+          闁归潧缍婇崳娲礆閻樼粯鐝?        </button>
       </view>
     </view>
   </view>
 
   <view class="section-head section-head-standalone">
-    <text class="section-title">历史记录</text>
-    <text class="section-note">点开看详情，或直接删除无效结果</text>
+    <text class="section-title">闁告ê妫楄ぐ鍓佹媼閺夎法绉</text>
+    <text class="section-note">闁绘劗鎳撶槐鎴︽儑鐎ｎ収鍤婇柟顖氭嫅缁辨繈骞嬮弽顐ｇ函闁规亽鍎遍崹褰掓⒔閵堝棙锟ラ柡浣哥墢缁劑寮</text>
   </view>
 
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
-  <view wx:if="{{loading}}" class="notice">正在同步最新评测记录...</view>
+  <view wx:if="{{loading}}" class="notice">婵繐绲藉﹢顏堝触鐏炵虎鍔勯柡鍫氬亾闁哄倹濯介惁搴∶圭€ｎ収鍞剁憸?..</view>
 
   <view wx:if="{{!results.length && !loading}}" class="paper-panel empty-panel">
-    <text class="panel-title">当前条件下没有记录</text>
-    <text class="panel-subtitle">可以清空筛选，或等待树莓派上传新的评测结果。</text>
+    <text class="panel-title">鐟滅増鎸告晶鐘诲级閳ュ弶顐藉☉鎾愁儐閻ュ懘寮垫径搴敹鐟</text>
+    <text class="panel-subtitle">闁告瑯鍨禍鎺戙€掗崨顖楁晞缂佹稒鐩埀顒€顧€缁辨繈骞嬮弽顐ゆ惣鐎垫澘鎳忛悥鏌ユ嚔閹惧瓨鐑﹀☉鎾筹梗缁卞爼寮幍顔界暠閻犲洤瀚粊瀵哥磼閹惧浜柕</text>
   </view>
 
   <view
@@ -206,7 +210,7 @@
   >
     <view wx:if="{{managing}}" class="record-select-wrap" catchtap="onSelectRecord" data-id="{{item.id}}">
       <view class="record-select {{selectedIds.indexOf(item.id) !== -1 ? 'record-select-on' : ''}}">
-        <text wx:if="{{selectedIds.indexOf(item.id) !== -1}}" class="record-select-mark">✓</text>
+        <text wx:if="{{selectedIds.indexOf(item.id) !== -1}}" class="record-select-mark">闁</text>
       </view>
     </view>
 
@@ -228,17 +232,18 @@
           data-character="{{item.characterLabel}}"
           loading="{{deletingId === item.id}}"
         >
-          删除
-        </button>
+          闁告帞濞€濞?        </button>
       </view>
 
-      <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}}</text>
+      <text class="record-time">{{item.timestamp}} / {{item.deviceLabel}} / {{item.scriptLabel}}</text>
       <text class="record-feedback">{{item.feedbackPreview}}</text>
       <text class="record-dimension">{{item.dimensionSummary}}</text>
 
       <view class="record-meta">
         <text class="meta-pill">OCR {{item.ocrText}}</text>
-        <text class="meta-pill">评级 {{item.qualityText}}</text>
+        <text class="meta-pill">閻犲洤瀚?{{item.qualityText}}</text>
+        <text class="meta-pill">{{item.scriptBadgeText}}</text>
+        <text wx:if="{{!item.scriptSupported}}" class="meta-pill script-warning">{{item.scriptStatusText}}</text>
       </view>
     </view>
   </view>

@@ -15,18 +15,23 @@ from views.ui_theme import app_font, clear_layout, display_font, icon_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+SCRIPT_LABELS = {
+    "regular": "楷书",
+    "running": "行书",
+}
+
 
 class HistoryItem(QFrame):
     """Compact history card that highlights what to fix next."""
 
     clicked = pyqtSignal(EvaluationResult)
 
-    def __init__(self, result: EvaluationResult, parent=None):
+    def __init__(self, result: EvaluationResult, script_label: str, parent=None):
         super().__init__(parent)
         self.result = result
         self.setObjectName("historyItemCard")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(88)
+        self.setFixedHeight(92)
 
         profile = result.get_practice_profile()
         focus = profile.get("focus_dimension") if profile else None
@@ -52,10 +57,21 @@ class HistoryItem(QFrame):
         info.setContentsMargins(0, 0, 0, 0)
         info.setSpacing(2)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
+
         title = QLabel(result.character_name or "未识别")
         title.setObjectName("sectionTitle")
         title.setFont(display_font(15, QFont.Weight.Bold))
-        info.addWidget(title)
+        title_row.addWidget(title)
+
+        script_badge = QLabel(script_label)
+        script_badge.setObjectName("coachBadge")
+        script_badge.setFont(app_font(7, QFont.Weight.Bold))
+        title_row.addWidget(script_badge)
+        title_row.addStretch()
+        info.addLayout(title_row)
 
         focus_text = "下一练：查看完整建议"
         if focus:
@@ -103,6 +119,9 @@ class HistoryView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.current_script_key = "regular"
+        self.current_script_label = SCRIPT_LABELS[self.current_script_key]
+        self.result_script_labels_by_id: dict[int, str] = {}
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -128,6 +147,11 @@ class HistoryView(QWidget):
         title.setObjectName("headlineTitle")
         title.setFont(display_font(17, QFont.Weight.Bold))
         header_layout.addWidget(title)
+
+        self.script_badge = QLabel(self.current_script_label)
+        self.script_badge.setObjectName("coachBadge")
+        self.script_badge.setFont(app_font(7, QFont.Weight.Bold))
+        header_layout.addWidget(self.script_badge)
         header_layout.addStretch()
 
         self.btn_refresh = QPushButton("↻")
@@ -241,7 +265,7 @@ class HistoryView(QWidget):
             return
 
         for record in records:
-            item = HistoryItem(record)
+            item = HistoryItem(record, self._script_label_for_result(record))
             item.clicked.connect(self.result_selected.emit)
             self.list_layout.addWidget(item)
 
@@ -249,20 +273,41 @@ class HistoryView(QWidget):
 
     def _build_progress_hint(self, records: list[EvaluationResult], best_score: int, focus_text: str) -> str:
         if not records:
-            return "完成多次评测后，这里会告诉你当前的练习趋势。"
+            return f"当前书体：{self.current_script_label}。完成多次评测后，这里会告诉你当前的练习趋势。"
 
         if len(records) == 1:
-            return f"当前最好分 {best_score}，建议继续围绕 {focus_text} 连续练 3 次。"
+            return f"当前书体：{self.current_script_label}。当前最好分 {best_score}，建议继续围绕 {focus_text} 连续练 3 次。"
 
         latest_score = records[0].total_score
         previous_score = records[1].total_score
         delta = latest_score - previous_score
 
         if delta > 0:
-            return f"最近一次比上一张提升 {delta} 分，当前最好分 {best_score}。"
+            return f"当前书体：{self.current_script_label}。最近一次比上一张提升 {delta} 分，当前最好分 {best_score}。"
         if delta < 0:
-            return f"最近一次比上一张回落 {abs(delta)} 分，可回看 {focus_text}。"
-        return f"最近两张基本持平，当前最好分 {best_score}，继续稳定输出。"
+            return f"当前书体：{self.current_script_label}。最近一次比上一张回落 {abs(delta)} 分，可回看 {focus_text}。"
+        return f"当前书体：{self.current_script_label}。最近两张基本持平，当前最好分 {best_score}，继续稳定输出。"
+
+    def set_current_script(self, script_key: str) -> None:
+        if script_key not in SCRIPT_LABELS:
+            return
+        self.current_script_key = script_key
+        self.current_script_label = SCRIPT_LABELS[script_key]
+        self.script_badge.setText(self.current_script_label)
+
+    def set_result_script_labels(self, result_script_labels_by_id: dict[int, str]) -> None:
+        self.result_script_labels_by_id = dict(result_script_labels_by_id)
+
+    def _script_label_for_result(self, result: EvaluationResult) -> str:
+        if hasattr(result, "get_script_label"):
+            return result.get_script_label()
+        for attr_name in ("qt_script_label", "script_label", "script_name"):
+            value = getattr(result, attr_name, None)
+            if isinstance(value, str) and value:
+                return value
+        if result.id is not None and result.id in self.result_script_labels_by_id:
+            return self.result_script_labels_by_id[result.id]
+        return SCRIPT_LABELS["regular"]
 
     def set_compact_mode(self, compact: bool) -> None:
         del compact

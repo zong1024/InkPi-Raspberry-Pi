@@ -1,4 +1,4 @@
-"""Train and export a single-image quality scorer for InkPi."""
+"""Train and export a script-aware single-image quality scorer for InkPi."""
 
 from __future__ import annotations
 
@@ -6,14 +6,30 @@ import argparse
 from collections import Counter
 import json
 from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
-from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
-from sklearn.neural_network import MLPClassifier
-from skl2onnx import to_onnx
-from skl2onnx.common.data_types import FloatTensorType
+
+try:
+    from training.quality_model_layout import (
+        DEFAULT_MANIFEST_ROOT,
+        DEFAULT_MODEL_ROOT,
+        DEFAULT_SCRIPT,
+        build_manifest_path,
+        build_model_paths,
+        normalize_script,
+    )
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from training.quality_model_layout import (
+        DEFAULT_MANIFEST_ROOT,
+        DEFAULT_MODEL_ROOT,
+        DEFAULT_SCRIPT,
+        build_manifest_path,
+        build_model_paths,
+        normalize_script,
+    )
 
 
 LABEL_TO_INDEX = {"bad": 0, "medium": 1, "good": 2}
@@ -98,12 +114,15 @@ def extract_quality_features(image: np.ndarray) -> np.ndarray:
     return features
 
 
-def load_dataset(manifest_path: Path, input_size: int) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+def load_dataset(manifest_path: Path, input_size: int, script: str) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     samples = load_manifest(manifest_path)
     features = []
     labels = []
     kept = []
     for sample in samples:
+        sample_script = sample.get("script")
+        if sample_script and sample_script != script:
+            continue
         path = Path(sample["path"])
         feature = build_features(path, sample.get("character", ""), input_size=input_size)
         if feature is None:
@@ -134,8 +153,16 @@ def train_model(
     hidden2: int,
     max_iter: int,
     test_size: float,
+    script: str,
 ) -> dict:
-    X, y, kept_samples = load_dataset(manifest_path, input_size=input_size)
+    from sklearn.metrics import classification_report
+    from sklearn.model_selection import train_test_split
+    from sklearn.neural_network import MLPClassifier
+    from skl2onnx import to_onnx
+    from skl2onnx.common.data_types import FloatTensorType
+
+    script = normalize_script(script)
+    X, y, kept_samples = load_dataset(manifest_path, input_size=input_size, script=script)
 
     X_train, X_val, y_train, y_val = train_test_split(
         X,
@@ -168,9 +195,10 @@ def train_model(
     train_scores = probability_score(train_probs)
     val_scores = probability_score(val_probs)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    onnx_path = output_dir / "quality_scorer.onnx"
-    sample_input = np.zeros((1, X.shape[1]), dtype=np.float32)
+    paths = build_model_paths(output_dir, script)
+    artifact_dir = paths["artifact_dir"]
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    onnx_path = paths["onnx_path"]
     onnx_model = to_onnx(
         model,
         initial_types=[("input", FloatTensorType([None, X.shape[1]]))],
@@ -180,8 +208,9 @@ def train_model(
     onnx_path.write_bytes(onnx_model.SerializeToString())
 
     metrics = {
+        "script": script,
         "manifest": str(manifest_path),
-        "output_dir": str(output_dir),
+        "output_dir": str(artifact_dir),
         "input_size": input_size,
         "feature_dim": int(X.shape[1]),
         "sample_count": int(len(kept_samples)),
@@ -202,29 +231,48 @@ def train_model(
         ),
         "onnx_path": str(onnx_path),
     }
-    (output_dir / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
+    paths["metrics_path"].write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
     return metrics
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train the InkPi quality scorer and export ONNX.")
-    parser.add_argument("--manifest", type=Path, required=True)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser = argparse.ArgumentParser(description="Train a script-specific InkPi quality scorer and export ONNX.")
+    parser.add_argument(
+        "--script",
+        type=str,
+        default=DEFAULT_SCRIPT,
+        help="Script bucket to train: regular or running.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help="Input manifest path. Defaults to data/quality_manifests/<script>/quality_manifest.jsonl",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_MODEL_ROOT,
+        help="Artifact root. Model files will be written to <output-dir>/<script>/",
+    )
     parser.add_argument("--input-size", type=int, default=32)
     parser.add_argument("--hidden1", type=int, default=256)
     parser.add_argument("--hidden2", type=int, default=128)
     parser.add_argument("--max-iter", type=int, default=24)
     parser.add_argument("--test-size", type=float, default=0.18)
     args = parser.parse_args()
+    script = normalize_script(args.script)
+    manifest_path = args.manifest or build_manifest_path(DEFAULT_MANIFEST_ROOT, script)
 
     metrics = train_model(
-        manifest_path=args.manifest,
+        manifest_path=manifest_path,
         output_dir=args.output_dir,
         input_size=args.input_size,
         hidden1=args.hidden1,
         hidden2=args.hidden2,
         max_iter=args.max_iter,
         test_size=args.test_size,
+        script=script,
     )
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
 

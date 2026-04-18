@@ -2,8 +2,16 @@ const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 const { POLL_INTERVAL, RECENT_PRACTICE_LIMIT } = require('../../config');
 const { buildGrowthInsights } = require('../../utils/practice');
+const {
+  FORMAL_SUPPORT_TEXT,
+  FORMAL_SUPPORT_SHORT,
+  SCRIPT_OPTIONS,
+  SCRIPT_VALUES,
+  filterResultsByScript,
+  getScriptMeta,
+} = require('../../utils/script');
 
-const QUALITY_OPTIONS = ['全部等级', '甲', '乙', '丙'];
+const QUALITY_OPTIONS = ['全部等级', '优', '良', '待提升'];
 const QUALITY_VALUES = ['all', 'good', 'medium', 'bad'];
 const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天'];
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
@@ -31,9 +39,9 @@ function getScorePalette(score) {
 }
 
 function getQualityLabel(level) {
-  if (level === 'good') return '甲';
-  if (level === 'bad') return '丙';
-  return '乙';
+  if (level === 'good') return '优';
+  if (level === 'bad') return '待提升';
+  return '良';
 }
 
 function formatNumber(value) {
@@ -64,6 +72,7 @@ function formatConfidence(value) {
 
 function buildDimensionSummary(dimensionScores = null) {
   if (!dimensionScores) return '暂无四维解释';
+
   const entries = Object.entries(dimensionScores)
     .filter(([, score]) => score !== null && score !== undefined)
     .map(([key, score]) => ({ key, score: Number(score) }));
@@ -121,17 +130,19 @@ function normalizeSummary(summary = {}) {
       medium: qualityCounts.medium || 0,
       bad: qualityCounts.bad || 0,
     },
-    topCharacterText: topCharacter ? `${topCharacter.character_name} · ${topCharacter.count} 次` : '暂无',
-    topDeviceText: topDevice ? `${topDevice.device_name} · ${topDevice.count} 条` : '暂无',
+    topCharacterText: topCharacter ? `${topCharacter.character_name} / ${topCharacter.count} 次` : '暂无',
+    topDeviceText: topDevice ? `${topDevice.device_name} / ${topDevice.count} 条` : '暂无',
     insight: summary.insight || '完成评测后，这里会自动生成统计总结。',
   };
 }
 
 function normalizeResult(item) {
   const palette = getScorePalette(item.total_score || 0);
+  const scriptMeta = getScriptMeta(item);
   return {
     ...item,
     ...palette,
+    ...scriptMeta,
     qualityLabel: item.quality_label || getQualityLabel(item.quality_level),
     characterLabel: item.character_name || '未识别',
     deviceLabel: item.device_name || 'InkPi 设备',
@@ -161,13 +172,18 @@ Page({
     managing: false,
     selectedIds: [],
     qualityOptions: QUALITY_OPTIONS,
+    scriptOptions: SCRIPT_OPTIONS,
     dateOptions: DATE_OPTIONS,
     sortOptions: SORT_OPTIONS,
     deviceOptions: ['全部设备'],
     deviceValues: ['all'],
+    supportScopeText: FORMAL_SUPPORT_TEXT,
+    supportScopeShort: FORMAL_SUPPORT_SHORT,
+    activeScriptLabel: SCRIPT_OPTIONS[0],
     filters: {
       keyword: '',
       qualityIndex: 0,
+      scriptIndex: 0,
       dateIndex: 0,
       sortIndex: 0,
       deviceIndex: 0,
@@ -220,6 +236,7 @@ Page({
     return {
       keyword: (filters.keyword || '').trim(),
       quality_level: QUALITY_VALUES[filters.qualityIndex] || 'all',
+      script: SCRIPT_VALUES[filters.scriptIndex] || 'all',
       date_range: DATE_VALUES[filters.dateIndex] || 'all',
       sort: SORT_VALUES[filters.sortIndex] || 'latest',
       device_name: deviceValues[filters.deviceIndex] || 'all',
@@ -231,6 +248,7 @@ Page({
     const params = {
       keyword: (filters.keyword || '').trim(),
       qualityLevel: QUALITY_VALUES[filters.qualityIndex] || 'all',
+      script: SCRIPT_VALUES[filters.scriptIndex] || 'all',
       dateRange: DATE_VALUES[filters.dateIndex] || 'all',
       sort: SORT_VALUES[filters.sortIndex] || 'latest',
       deviceName: this.data.deviceValues[filters.deviceIndex] || 'all',
@@ -239,11 +257,16 @@ Page({
     const hasActiveFilters =
       !!params.keyword ||
       params.qualityLevel !== 'all' ||
+      params.script !== 'all' ||
       params.dateRange !== 'all' ||
       params.sort !== 'latest' ||
       params.deviceName !== 'all';
 
-    this.setData({ filters, hasActiveFilters });
+    this.setData({
+      filters,
+      hasActiveFilters,
+      activeScriptLabel: SCRIPT_OPTIONS[filters.scriptIndex] || SCRIPT_OPTIONS[0],
+    });
   },
 
   async loadDashboard(silent = false) {
@@ -256,7 +279,7 @@ Page({
       const [summaryPayload, historyPayload, growthPayload] = await Promise.all([
         api.getHistorySummary(params),
         api.getHistory({ ...params, limit: 80 }),
-        api.getHistory({ sort: 'latest', limit: RECENT_PRACTICE_LIMIT }),
+        api.getHistory({ ...params, sort: 'latest', limit: RECENT_PRACTICE_LIMIT }),
       ]);
 
       const normalizedSummary = normalizeSummary(summaryPayload.summary || {});
@@ -277,15 +300,18 @@ Page({
         ...this.data.filters,
         deviceIndex,
       };
+      const scriptValue = SCRIPT_VALUES[nextFilters.scriptIndex] || 'all';
       const hasActiveFilters =
         !!(nextFilters.keyword || '').trim() ||
         (QUALITY_VALUES[nextFilters.qualityIndex] || 'all') !== 'all' ||
+        scriptValue !== 'all' ||
         (DATE_VALUES[nextFilters.dateIndex] || 'all') !== 'all' ||
         (SORT_VALUES[nextFilters.sortIndex] || 'latest') !== 'latest' ||
         (deviceValues[nextFilters.deviceIndex] || 'all') !== 'all';
 
-      const results = (historyPayload.items || []).map(normalizeResult);
-      const growthInsights = buildGrowthInsights((growthPayload && growthPayload.items) || []);
+      const results = filterResultsByScript((historyPayload.items || []).map(normalizeResult), scriptValue);
+      const growthItems = filterResultsByScript((growthPayload && growthPayload.items) || [], scriptValue);
+      const growthInsights = buildGrowthInsights(growthItems);
 
       this.setData({
         results,
@@ -301,6 +327,7 @@ Page({
         deviceValues,
         filters: nextFilters,
         hasActiveFilters,
+        activeScriptLabel: SCRIPT_OPTIONS[nextFilters.scriptIndex] || SCRIPT_OPTIONS[0],
         selectedIds: [],
       });
     } catch (error) {
@@ -332,6 +359,11 @@ Page({
     this.loadDashboard();
   },
 
+  onScriptChange(event) {
+    this.updateFilterState({ scriptIndex: Number(event.detail.value) });
+    this.loadDashboard();
+  },
+
   onDateChange(event) {
     this.updateFilterState({ dateIndex: Number(event.detail.value) });
     this.loadDashboard();
@@ -352,11 +384,13 @@ Page({
       filters: {
         keyword: '',
         qualityIndex: 0,
+        scriptIndex: 0,
         dateIndex: 0,
         sortIndex: 0,
         deviceIndex: 0,
       },
       hasActiveFilters: false,
+      activeScriptLabel: SCRIPT_OPTIONS[0],
     });
     this.loadDashboard();
   },

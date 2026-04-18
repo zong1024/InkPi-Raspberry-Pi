@@ -13,6 +13,8 @@ from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from models.evaluation_framework import get_script_label, normalize_script
+
 
 DIMENSION_KEYS = ("structure", "stroke", "integrity", "stability")
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
@@ -83,6 +85,7 @@ class CloudDatabase:
                     total_score INTEGER NOT NULL,
                     feedback TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
+                    script TEXT NOT NULL DEFAULT 'regular',
                     character_name TEXT,
                     ocr_confidence REAL,
                     quality_level TEXT,
@@ -120,6 +123,7 @@ class CloudDatabase:
             cursor.execute("PRAGMA table_info(results)")
             existing_columns = {row[1] for row in cursor.fetchall()}
             for column_name, column_type in (
+                ("script", "TEXT NOT NULL DEFAULT 'regular'"),
                 ("ocr_confidence", "REAL"),
                 ("quality_level", "TEXT"),
                 ("quality_confidence", "REAL"),
@@ -130,6 +134,13 @@ class CloudDatabase:
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
+            cursor.execute(
+                """
+                UPDATE results
+                SET script = 'regular'
+                WHERE script IS NULL OR TRIM(script) = ''
+                """
+            )
             cursor.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_expert_reviews_result_created
@@ -215,6 +226,7 @@ class CloudDatabase:
         local_record_id = int(payload["local_record_id"])
         timestamp = payload.get("timestamp") or utcnow_iso()
         changed_at = utcnow_iso()
+        script = normalize_script(payload.get("script"))
         dimension_scores_json = self._coerce_json_text(
             payload.get("dimension_scores_json"),
             payload.get("dimension_scores"),
@@ -237,6 +249,7 @@ class CloudDatabase:
                     SET total_score = ?,
                         feedback = ?,
                         timestamp = ?,
+                        script = ?,
                         character_name = ?,
                         ocr_confidence = ?,
                         quality_level = ?,
@@ -252,6 +265,7 @@ class CloudDatabase:
                         int(payload["total_score"]),
                         payload.get("feedback", ""),
                         timestamp,
+                        script,
                         payload.get("character_name"),
                         payload.get("ocr_confidence"),
                         payload.get("quality_level"),
@@ -274,6 +288,7 @@ class CloudDatabase:
                         total_score,
                         feedback,
                         timestamp,
+                        script,
                         character_name,
                         ocr_confidence,
                         quality_level,
@@ -285,7 +300,7 @@ class CloudDatabase:
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
@@ -293,6 +308,7 @@ class CloudDatabase:
                         int(payload["total_score"]),
                         payload.get("feedback", ""),
                         timestamp,
+                        script,
                         payload.get("character_name"),
                         payload.get("ocr_confidence"),
                         payload.get("quality_level"),
@@ -317,6 +333,7 @@ class CloudDatabase:
         offset: int = 0,
         keyword: str = "",
         quality_level: str = "all",
+        script: str = "all",
         device_name: str = "all",
         date_range: str = "all",
         sort: str = "latest",
@@ -326,6 +343,7 @@ class CloudDatabase:
         where_sql, params = self._build_filter_clause(
             keyword=keyword,
             quality_level=quality_level,
+            script=script,
             device_name=device_name,
             date_range=date_range,
         )
@@ -358,12 +376,14 @@ class CloudDatabase:
         self,
         keyword: str = "",
         quality_level: str = "all",
+        script: str = "all",
         device_name: str = "all",
         date_range: str = "all",
     ) -> dict[str, Any]:
         where_sql, params = self._build_filter_clause(
             keyword=keyword,
             quality_level=quality_level,
+            script=script,
             device_name=device_name,
             date_range=date_range,
         )
@@ -380,6 +400,7 @@ class CloudDatabase:
                     timestamp,
                     total_score,
                     quality_level,
+                    script,
                     character_name,
                     device_name,
                     dimension_scores_json
@@ -397,6 +418,14 @@ class CloudDatabase:
                 ORDER BY MAX(timestamp) DESC, device_name ASC
                 """
             ).fetchall()
+            script_rows = conn.execute(
+                """
+                SELECT script, COUNT(*) AS count
+                FROM results
+                GROUP BY script
+                ORDER BY script ASC
+                """
+            ).fetchall()
             result_ids = [int(row["id"]) for row in rows]
             review_rows = []
             if result_ids:
@@ -412,6 +441,10 @@ class CloudDatabase:
                 ).fetchall()
 
         available_devices = [row["device_name"] for row in device_rows]
+        available_scripts = [
+            {"key": normalize_script(row["script"]), "label": get_script_label(row["script"])}
+            for row in script_rows
+        ]
         empty_trend_points = self._build_empty_trend_points(now=now, days=trend_window_days)
         quality_counts = {"good": 0, "medium": 0, "bad": 0}
         review_groups = self._group_reviews_by_result(review_rows)
@@ -440,6 +473,8 @@ class CloudDatabase:
                 "dimension_averages": {},
                 "top_characters": [],
                 "top_devices": [],
+                "script_counts": {},
+                "available_scripts": available_scripts,
                 "available_devices": available_devices,
                 "trend_points": empty_trend_points,
                 "reviewed_result_count": 0,
@@ -468,6 +503,7 @@ class CloudDatabase:
         previous_scores: list[int] = []
         character_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
         device_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
+        script_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
         dimension_totals: dict[str, float] = defaultdict(float)
         dimension_counts: dict[str, int] = defaultdict(int)
         trend_buckets = {
@@ -499,6 +535,10 @@ class CloudDatabase:
             current_device_name = row["device_name"] or "InkPi-Raspberry-Pi"
             device_stats[current_device_name]["count"] += 1
             device_stats[current_device_name]["score_total"] += score
+
+            current_script = normalize_script(row["script"])
+            script_stats[current_script]["count"] += 1
+            script_stats[current_script]["score_total"] += score
 
             timestamp = self._parse_timestamp(row["timestamp"])
             if timestamp is not None:
@@ -556,6 +596,16 @@ class CloudDatabase:
                 key=lambda item: (-int(item[1]["count"]), -(item[1]["score_total"] / item[1]["count"]), item[0]),
             )[:3]
         ]
+        script_counts = {
+            script: {
+                "script": script,
+                "script_label": get_script_label(script),
+                "count": int(stats["count"]),
+                "average_score": round(stats["score_total"] / stats["count"], 1),
+            }
+            for script, stats in script_stats.items()
+            if stats["count"]
+        }
         dimension_averages = {
             key: round(dimension_totals[key] / dimension_counts[key], 1)
             for key in DIMENSION_KEYS
@@ -601,6 +651,8 @@ class CloudDatabase:
             "dimension_averages": dimension_averages,
             "top_characters": top_characters,
             "top_devices": top_devices,
+            "script_counts": script_counts,
+            "available_scripts": available_scripts,
             "available_devices": available_devices,
             "trend_points": trend_points,
             "reviewed_result_count": review_summary["reviewed_result_count"],
@@ -851,6 +903,7 @@ class CloudDatabase:
         self,
         keyword: str = "",
         quality_level: str = "all",
+        script: str = "all",
         device_name: str = "all",
         date_range: str = "all",
     ) -> tuple[str, list[Any]]:
@@ -872,6 +925,10 @@ class CloudDatabase:
         if quality_level and quality_level != "all":
             clauses.append("quality_level = ?")
             params.append(quality_level)
+
+        if script and script != "all":
+            clauses.append("script = ?")
+            params.append(normalize_script(script))
 
         if device_name and device_name != "all":
             clauses.append("device_name = ?")
@@ -962,6 +1019,8 @@ class CloudDatabase:
             "total_score": row["total_score"],
             "feedback": row["feedback"],
             "timestamp": row["timestamp"],
+            "script": normalize_script(row["script"]),
+            "script_label": get_script_label(row["script"]),
             "character_name": row["character_name"],
             "ocr_confidence": row["ocr_confidence"],
             "quality_level": row["quality_level"],

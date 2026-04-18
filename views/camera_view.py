@@ -24,6 +24,11 @@ from views.ui_theme import app_font, display_font, icon_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+SCRIPT_LABELS = {
+    "regular": "楷书",
+    "running": "行书",
+}
+
 
 class PreviewThread(QThread):
     """Lightweight preview loop."""
@@ -53,12 +58,15 @@ class CameraView(QWidget):
 
     capture_completed = pyqtSignal(EvaluationResult)
     cancelled = pyqtSignal()
+    script_selected = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
+        self.current_script_key = "regular"
+        self.current_script_label = SCRIPT_LABELS[self.current_script_key]
         self._idle_hint = "拍前确认：单字完整入框，纸面摆正，光线尽量均匀。"
         self._init_ui()
 
@@ -114,11 +122,40 @@ class CameraView(QWidget):
         guide_layout.addWidget(self.capture_hint, stretch=1)
         root.addWidget(guide_card)
 
+        script_card = QFrame()
+        script_card.setObjectName("actionCard")
+        script_card.setFixedHeight(34)
+        script_layout = QHBoxLayout(script_card)
+        script_layout.setContentsMargins(10, 4, 10, 4)
+        script_layout.setSpacing(6)
+
+        self.script_meta = QLabel("当前书体")
+        self.script_meta.setObjectName("miniLabel")
+        self.script_meta.setFont(app_font(7, QFont.Weight.Bold))
+        script_layout.addWidget(self.script_meta)
+
+        self.btn_kaishu = QPushButton("楷书")
+        self.btn_kaishu.setObjectName("buttonCard")
+        self.btn_kaishu.setFixedSize(84, 28)
+        self.btn_kaishu.setFont(app_font(8, QFont.Weight.Bold))
+        self.btn_kaishu.clicked.connect(lambda: self._select_script("regular"))
+        script_layout.addWidget(self.btn_kaishu)
+
+        self.btn_xingshu = QPushButton("行书")
+        self.btn_xingshu.setObjectName("buttonCard")
+        self.btn_xingshu.setFixedSize(84, 28)
+        self.btn_xingshu.setFont(app_font(8, QFont.Weight.Bold))
+        self.btn_xingshu.clicked.connect(lambda: self._select_script("running"))
+        script_layout.addWidget(self.btn_xingshu)
+
+        script_layout.addStretch()
+        root.addWidget(script_card)
+
         self.preview_label = QLabel("正在连接摄像头…")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setFixedHeight(164)
+        self.preview_label.setFixedHeight(132)
         self.preview_label.setFont(app_font(10))
         root.addWidget(self.preview_label)
 
@@ -147,6 +184,7 @@ class CameraView(QWidget):
         self.btn_eval.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_eval)
         root.addLayout(bottom_row)
+        self._update_script_buttons()
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -262,6 +300,7 @@ class CameraView(QWidget):
         ocr_image = preprocessing_service.prepare_ocr_image(image)
         result = evaluation_service.evaluate(
             processed,
+            script=self.current_script_key,
             original_image_path=str(original_path),
             processed_image_path=processed_path,
             ocr_image=ocr_image,
@@ -349,6 +388,31 @@ class CameraView(QWidget):
 
     def cleanup(self) -> None:
         self._stop_camera()
+
+    def set_current_script(self, script_key: str) -> None:
+        if script_key not in SCRIPT_LABELS:
+            return
+        self.current_script_key = script_key
+        self.current_script_label = SCRIPT_LABELS[script_key]
+        self.script_meta.setText(f"当前书体：{self.current_script_label}")
+        self._update_script_buttons()
+
+    def _select_script(self, script_key: str) -> None:
+        if script_key == self.current_script_key:
+            return
+        self.script_selected.emit(script_key)
+
+    def _update_script_buttons(self) -> None:
+        for key, button in (
+            ("regular", self.btn_kaishu),
+            ("running", self.btn_xingshu),
+        ):
+            if key == self.current_script_key:
+                button.setStyleSheet(
+                    "background-color: #BA0F22; color: #ffffff; border: 1px solid #BA0F22; border-radius: 13px;"
+                )
+            else:
+                button.setStyleSheet("")
 
     def set_compact_mode(self, compact: bool) -> None:
         del compact

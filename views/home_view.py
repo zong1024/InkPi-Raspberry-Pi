@@ -15,16 +15,25 @@ from views.ui_theme import app_font, display_font, icon_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+SCRIPT_LABELS = {
+    "regular": "楷书",
+    "running": "行书",
+}
+
 
 class HomeView(QWidget):
     """Landing page that makes the device learning loop explicit."""
 
     start_evaluation = pyqtSignal()
+    script_selected = pyqtSignal(str)
     view_history = pyqtSignal()
     recent_selected = pyqtSignal(EvaluationResult)
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.current_script_key = "regular"
+        self.current_script_label = SCRIPT_LABELS[self.current_script_key]
+        self.result_script_labels_by_id: dict[int, str] = {}
         self.latest_result: EvaluationResult | None = None
         self._init_ui()
         self.refresh()
@@ -84,6 +93,35 @@ class HomeView(QWidget):
         self.btn_start.clicked.connect(self.start_evaluation.emit)
         hero_layout.addWidget(self.btn_start, alignment=Qt.AlignmentFlag.AlignCenter)
         root.addWidget(hero_card)
+
+        script_card = QFrame()
+        script_card.setObjectName("actionCard")
+        script_card.setFixedHeight(40)
+        script_layout = QHBoxLayout(script_card)
+        script_layout.setContentsMargins(12, 6, 12, 6)
+        script_layout.setSpacing(8)
+
+        script_title = QLabel("书体")
+        script_title.setObjectName("miniLabel")
+        script_title.setFont(app_font(8, QFont.Weight.Bold))
+        script_layout.addWidget(script_title)
+
+        self.btn_kaishu = QPushButton("楷书")
+        self.btn_kaishu.setObjectName("buttonCard")
+        self.btn_kaishu.setFixedSize(92, 30)
+        self.btn_kaishu.setFont(app_font(9, QFont.Weight.Bold))
+        self.btn_kaishu.clicked.connect(lambda: self._select_script("regular"))
+        script_layout.addWidget(self.btn_kaishu)
+
+        self.btn_xingshu = QPushButton("行书")
+        self.btn_xingshu.setObjectName("buttonCard")
+        self.btn_xingshu.setFixedSize(92, 30)
+        self.btn_xingshu.setFont(app_font(9, QFont.Weight.Bold))
+        self.btn_xingshu.clicked.connect(lambda: self._select_script("running"))
+        script_layout.addWidget(self.btn_xingshu)
+
+        script_layout.addStretch()
+        root.addWidget(script_card)
 
         loop_card = QFrame()
         loop_card.setObjectName("actionCard")
@@ -160,6 +198,7 @@ class HomeView(QWidget):
         root.addWidget(self.latest_card)
 
         root.addStretch()
+        self._update_script_buttons()
 
     def _build_icon_button(self, symbol: str) -> QPushButton:
         button = QPushButton(symbol)
@@ -176,7 +215,7 @@ class HomeView(QWidget):
             self.latest_title.setText("第一次上手")
             self.latest_badge.setText("等待首张作品")
             self.latest_badge.setStyleSheet("")
-            self.latest_meta.setText("先拍一张单字作品，结果页会告诉你下一轮怎么练。")
+            self.latest_meta.setText(f"当前书体：{self.current_script_label} · 先拍一张单字作品。")
             self.practice_hint.setText("你会看到强项、待提升项和下一轮建议。")
             self.btn_review_latest.setText("立即开始")
             return
@@ -187,9 +226,10 @@ class HomeView(QWidget):
         keep = profile.get("best_dimension") if profile else None
         recent_average = sum(item.total_score for item in recent_records[:3]) / max(1, len(recent_records[:3]))
         char_text = result.character_name or "未识别"
+        script_label = self._script_label_for_result(result)
 
         self.latest_title.setText("继续上次练习")
-        self.latest_badge.setText(f"{result.total_score} 分")
+        self.latest_badge.setText(f"{script_label} · {result.total_score} 分")
         self.latest_badge.setStyleSheet(
             f"color: {result.get_color()}; background-color: #F4ECE1; border-radius: 11px; padding: 3px 10px;"
         )
@@ -216,6 +256,44 @@ class HomeView(QWidget):
             self.recent_selected.emit(self.latest_result)
             return
         self.start_evaluation.emit()
+
+    def set_current_script(self, script_key: str) -> None:
+        if script_key not in SCRIPT_LABELS:
+            return
+        self.current_script_key = script_key
+        self.current_script_label = SCRIPT_LABELS[script_key]
+        self._update_script_buttons()
+
+    def set_result_script_labels(self, result_script_labels_by_id: dict[int, str]) -> None:
+        self.result_script_labels_by_id = dict(result_script_labels_by_id)
+
+    def _select_script(self, script_key: str) -> None:
+        if script_key == self.current_script_key:
+            return
+        self.script_selected.emit(script_key)
+
+    def _update_script_buttons(self) -> None:
+        for key, button in (
+            ("regular", self.btn_kaishu),
+            ("running", self.btn_xingshu),
+        ):
+            if key == self.current_script_key:
+                button.setStyleSheet(
+                    "background-color: #BA0F22; color: #ffffff; border: 1px solid #BA0F22; border-radius: 14px;"
+                )
+            else:
+                button.setStyleSheet("")
+
+    def _script_label_for_result(self, result: EvaluationResult) -> str:
+        if hasattr(result, "get_script_label"):
+            return result.get_script_label()
+        for attr_name in ("qt_script_label", "script_label", "script_name"):
+            value = getattr(result, attr_name, None)
+            if isinstance(value, str) and value:
+                return value
+        if result.id is not None and result.id in self.result_script_labels_by_id:
+            return self.result_script_labels_by_id[result.id]
+        return SCRIPT_LABELS["regular"]
 
     def set_compact_mode(self, compact: bool) -> None:
         del compact

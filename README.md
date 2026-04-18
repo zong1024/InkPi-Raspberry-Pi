@@ -1,16 +1,32 @@
 # InkPi
 
-InkPi is a single-character calligraphy evaluation project that combines:
+InkPi is a dual-script single-character calligraphy evaluation project that combines:
 
 - `PyQt6` desktop UI
 - local `WebUI` for debugging and result inspection
 - `Cloud API` for shared history and remote OCR fallback
 - `MiniApp` result browsing, statistics, and cloud record management
-- ONNX-based scoring and four-dimension explanation scores
+- script-specific ONNX scoring and four-dimension explanation scores
 
 Current main pipeline:
 
-`capture/upload -> preprocessing -> OCR -> ONNX quality scoring -> four-dimension explanation -> local SQLite -> cloud sync`
+`capture/upload -> preprocessing -> OCR -> user-selected script -> script-specific ONNX quality scoring -> four-dimension explanation -> local SQLite -> cloud sync`
+
+## Formal Support Scope
+
+The current release formally supports:
+
+- `regular` / `楷书`
+- `running` / `行书`
+
+The project does **not** currently support:
+
+- 隶书
+- 草书
+- 篆书
+- 多字作品
+
+OCR and preprocessing remain shared across the whole pipeline. The runtime only switches model routing and explanation methodology after OCR, based on the user-selected `script`.
 
 ## Main Entry Points
 
@@ -44,11 +60,28 @@ Implementation notes:
 - Cloud API returns `dimension_scores` in list/detail payloads
 - Cloud API now also exposes reviewer-facing methodology data at `/api/system/methodology`
 
+## Dual-Script Runtime
+
+The runtime now treats `script` as a first-class field across the full stack:
+
+- `regular` routes to `models/quality_scorer_regular.onnx`
+- `running` routes to `models/quality_scorer_running.onnx`
+- new evaluations must pass an explicit `script`
+- legacy history records are migrated as `regular`
+- list/detail/sync payloads all return `script` and `script_label`
+
+The training chain on the local V100 host exports:
+
+- `models/quality_scorer_regular.onnx`
+- `models/quality_scorer_regular.metrics.json`
+- `models/quality_scorer_running.onnx`
+- `models/quality_scorer_running.metrics.json`
+
 ## Reviewer-Oriented Positioning
 
 To avoid overstating the system, the current project should be presented as:
 
-- a `single-character`, `regular-script`, `beginner-friendly` assistant
+- a `single-character`, `regular + running script`, `beginner-friendly` assistant
 - a system that keeps `total_score` as the primary score and uses four dimensions for explanation
 - a product that supports `teacher-assisted review`, not an automated replacement for expert grading
 
@@ -59,6 +92,13 @@ The mobile miniapp now exposes:
 - explanation-basis cards for each dimension
 - practice guidance derived from the weakest dimension
 - validation snapshot fields such as sample count, character coverage, device count, and target progress
+
+The operations console now exposes:
+
+- dual-model readiness for `regular` and `running`
+- recent results with script labels
+- host / stack / hardware / runtime logs
+- current cloud sync and output status
 
 For a detailed reviewer-facing write-up, see:
 

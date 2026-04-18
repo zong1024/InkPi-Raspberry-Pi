@@ -1,4 +1,4 @@
-"""Build a real-image quality manifest for the single-chain scorer."""
+"""Build a script-aware real-image quality manifest for the quality scorer."""
 
 from __future__ import annotations
 
@@ -6,14 +6,36 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import sys
 
 import cv2
 import numpy as np
+
+try:
+    from training.quality_model_layout import (
+        DEFAULT_MANIFEST_ROOT,
+        DEFAULT_PUBLIC_CHARACTER_ROOT,
+        DEFAULT_SCRIPT,
+        build_manifest_path,
+        normalize_script,
+        resolve_script_source_dir,
+    )
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from training.quality_model_layout import (
+        DEFAULT_MANIFEST_ROOT,
+        DEFAULT_PUBLIC_CHARACTER_ROOT,
+        DEFAULT_SCRIPT,
+        build_manifest_path,
+        normalize_script,
+        resolve_script_source_dir,
+    )
 
 
 @dataclass
 class QualitySample:
     path: str
+    script: str
     character: str
     label: str
     provenance: str
@@ -87,7 +109,12 @@ def compute_proxy_score(image: np.ndarray) -> float:
     )
 
 
-def select_ranked(paths: list[Path], medium_limit: int, bad_limit: int) -> tuple[list[QualitySample], list[QualitySample]]:
+def select_ranked(
+    paths: list[Path],
+    medium_limit: int,
+    bad_limit: int,
+    script: str,
+) -> tuple[list[QualitySample], list[QualitySample]]:
     scored: list[tuple[Path, float]] = []
     for path in paths:
         image = load_gray(path)
@@ -109,6 +136,7 @@ def select_ranked(paths: list[Path], medium_limit: int, bad_limit: int) -> tuple
     medium = [
         QualitySample(
             path=str(path),
+            script=script,
             character=parse_character_from_name(path),
             label="medium",
             provenance="public_character/good",
@@ -120,6 +148,7 @@ def select_ranked(paths: list[Path], medium_limit: int, bad_limit: int) -> tuple
     bad = [
         QualitySample(
             path=str(path),
+            script=script,
             character=parse_character_from_name(path),
             label="bad",
             provenance="public_character/good",
@@ -131,7 +160,15 @@ def select_ranked(paths: list[Path], medium_limit: int, bad_limit: int) -> tuple
     return medium, bad
 
 
-def build_manifest(public_character_dir: Path, output_path: Path, limit_good: int, limit_medium: int, limit_bad: int) -> dict:
+def build_manifest(
+    public_character_dir: Path,
+    output_path: Path,
+    limit_good: int,
+    limit_medium: int,
+    limit_bad: int,
+    script: str,
+) -> dict:
+    script = normalize_script(script)
     originals_dir = public_character_dir / "originals"
     good_dir = public_character_dir / "good"
     pool = sorted(originals_dir.glob("*.png")) + sorted(good_dir.glob("*.png"))
@@ -152,6 +189,7 @@ def build_manifest(public_character_dir: Path, output_path: Path, limit_good: in
     good_samples = [
         QualitySample(
             path=str(path),
+            script=script,
             character=parse_character_from_name(path),
             label="good",
             provenance=provenance,
@@ -164,6 +202,7 @@ def build_manifest(public_character_dir: Path, output_path: Path, limit_good: in
     medium_samples = [
         QualitySample(
             path=str(path),
+            script=script,
             character=parse_character_from_name(path),
             label="medium",
             provenance=provenance,
@@ -176,6 +215,7 @@ def build_manifest(public_character_dir: Path, output_path: Path, limit_good: in
     bad_samples = [
         QualitySample(
             path=str(path),
+            script=script,
             character=parse_character_from_name(path),
             label="bad",
             provenance=provenance,
@@ -192,6 +232,8 @@ def build_manifest(public_character_dir: Path, output_path: Path, limit_good: in
             handle.write(json.dumps(sample.__dict__, ensure_ascii=False) + "\n")
 
     summary = {
+        "script": script,
+        "public_character_dir": str(public_character_dir),
         "manifest": str(output_path),
         "counts": {
             "good": len(good_samples),
@@ -208,20 +250,40 @@ def build_manifest(public_character_dir: Path, output_path: Path, limit_good: in
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build a quality manifest for the InkPi single-chain scorer.")
-    parser.add_argument("--public-character", type=Path, required=True, help="Path to data/public_character")
-    parser.add_argument("--output", type=Path, required=True, help="Output manifest .jsonl file")
+    parser = argparse.ArgumentParser(description="Build a script-specific quality manifest for the InkPi scorer.")
+    parser.add_argument(
+        "--script",
+        type=str,
+        default=DEFAULT_SCRIPT,
+        help="Script bucket to build: regular or running.",
+    )
+    parser.add_argument(
+        "--public-character",
+        type=Path,
+        default=DEFAULT_PUBLIC_CHARACTER_ROOT,
+        help="Path to the public character root or to a single script directory.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output manifest .jsonl file. Defaults to data/quality_manifests/<script>/quality_manifest.jsonl",
+    )
     parser.add_argument("--limit-good", type=int, default=6000)
     parser.add_argument("--limit-medium", type=int, default=12000)
     parser.add_argument("--limit-bad", type=int, default=8000)
     args = parser.parse_args()
+    script = normalize_script(args.script)
+    source_dir = resolve_script_source_dir(args.public_character, script)
+    output_path = args.output or build_manifest_path(DEFAULT_MANIFEST_ROOT, script)
 
     summary = build_manifest(
-        public_character_dir=args.public_character,
-        output_path=args.output,
+        public_character_dir=source_dir,
+        output_path=output_path,
         limit_good=args.limit_good,
         limit_medium=args.limit_medium,
         limit_bad=args.limit_bad,
+        script=script,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 

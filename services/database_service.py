@@ -1,9 +1,9 @@
-"""SQLite persistence for the single-chain InkPi runtime."""
+"""SQLite persistence for the dual-script InkPi runtime."""
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -14,11 +14,12 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import DB_CONFIG, DB_PATH
+from models.evaluation_framework import normalize_script
 from models.evaluation_result import EvaluationResult
 
 
 class DatabaseService:
-    """Persist and query single-chain evaluation records."""
+    """Persist and query dual-script evaluation records."""
 
     def __init__(self, db_path: Path | None = None):
         self.logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ class DatabaseService:
                     timestamp TEXT NOT NULL,
                     image_path TEXT,
                     processed_image_path TEXT,
+                    script TEXT NOT NULL DEFAULT 'regular',
                     character_name TEXT,
                     ocr_confidence REAL,
                     quality_level TEXT,
@@ -66,16 +68,32 @@ class DatabaseService:
             cursor.execute(f"PRAGMA table_info({self.table_name})")
             existing_columns = {row[1] for row in cursor.fetchall()}
             for column_name, column_type in (
+                ("script", "TEXT NOT NULL DEFAULT 'regular'"),
                 ("dimension_scores_json", "TEXT"),
                 ("score_debug_json", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {column_name} {column_type}")
 
+            if "script" in {row[1] for row in conn.execute(f"PRAGMA table_info({self.table_name})").fetchall()}:
+                conn.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET script = 'regular'
+                    WHERE script IS NULL OR TRIM(script) = ''
+                    """
+                )
+
             cursor.execute(
                 f"""
                 CREATE INDEX IF NOT EXISTS idx_{self.table_name}_timestamp
                 ON {self.table_name}(timestamp DESC)
+                """
+            )
+            cursor.execute(
+                f"""
+                CREATE INDEX IF NOT EXISTS idx_{self.table_name}_script_timestamp
+                ON {self.table_name}(script, timestamp DESC)
                 """
             )
             conn.commit()
@@ -96,6 +114,7 @@ class DatabaseService:
                     timestamp,
                     image_path,
                     processed_image_path,
+                    script,
                     character_name,
                     ocr_confidence,
                     quality_level,
@@ -103,7 +122,7 @@ class DatabaseService:
                     dimension_scores_json,
                     score_debug_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.total_score,
@@ -111,6 +130,7 @@ class DatabaseService:
                     result.timestamp.isoformat(),
                     result.image_path,
                     result.processed_image_path,
+                    result.get_script(),
                     result.character_name,
                     result.ocr_confidence,
                     result.quality_level,
@@ -124,7 +144,7 @@ class DatabaseService:
             record_id = int(cursor.lastrowid)
             conn.commit()
 
-        self.logger.info("Saved evaluation record: id=%s score=%s", record_id, result.total_score)
+        self.logger.info("Saved evaluation record: id=%s score=%s script=%s", record_id, result.total_score, result.get_script())
 
         try:
             from services.cloud_sync_service import cloud_sync_service
@@ -144,45 +164,62 @@ class DatabaseService:
             ).fetchone()
         return self._row_to_result(row) if row else None
 
-    def get_all(self, limit: int = 100, offset: int = 0) -> list[EvaluationResult]:
+    def get_all(self, limit: int = 100, offset: int = 0, script: str | None = None) -> list[EvaluationResult]:
+        params: list[object] = []
+        where_clause = ""
+        if script:
+            where_clause = "WHERE script = ?"
+            params.append(normalize_script(script))
+        params.extend([limit, offset])
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
                 FROM {self.table_name}
+                {where_clause}
                 ORDER BY timestamp DESC
                 LIMIT ? OFFSET ?
                 """,
-                (limit, offset),
+                params,
             ).fetchall()
         return [self._row_to_result(row) for row in rows]
 
-    def get_recent(self, count: int = 10) -> list[EvaluationResult]:
-        return self.get_all(limit=count)
+    def get_recent(self, count: int = 10, script: str | None = None) -> list[EvaluationResult]:
+        return self.get_all(limit=count, script=script)
 
-    def get_by_date_range(self, start_date: datetime, end_date: datetime) -> list[EvaluationResult]:
+    def get_by_date_range(self, start_date: datetime, end_date: datetime, script: str | None = None) -> list[EvaluationResult]:
+        params: list[object] = [start_date.isoformat(), end_date.isoformat()]
+        where_clause = "WHERE timestamp >= ? AND timestamp <= ?"
+        if script:
+            where_clause += " AND script = ?"
+            params.append(normalize_script(script))
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
                 FROM {self.table_name}
-                WHERE timestamp >= ? AND timestamp <= ?
+                {where_clause}
                 ORDER BY timestamp DESC
                 """,
-                (start_date.isoformat(), end_date.isoformat()),
+                params,
             ).fetchall()
         return [self._row_to_result(row) for row in rows]
 
-    def get_by_character(self, character: str) -> list[EvaluationResult]:
+    def get_by_character(self, character: str, script: str | None = None) -> list[EvaluationResult]:
+        params: list[object] = [character]
+        where_clause = "WHERE character_name = ?"
+        if script:
+            where_clause += " AND script = ?"
+            params.append(normalize_script(script))
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
                 SELECT *
                 FROM {self.table_name}
-                WHERE character_name = ?
+                {where_clause}
                 ORDER BY timestamp DESC
                 """,
-                (character,),
+                params,
             ).fetchall()
         return [self._row_to_result(row) for row in rows]
 
@@ -203,24 +240,41 @@ class DatabaseService:
             avg_score = conn.execute(f"SELECT AVG(total_score) FROM {self.table_name}").fetchone()[0] or 0
             max_score = conn.execute(f"SELECT MAX(total_score) FROM {self.table_name}").fetchone()[0] or 0
             min_score = conn.execute(f"SELECT MIN(total_score) FROM {self.table_name}").fetchone()[0] or 0
+            script_rows = conn.execute(
+                f"""
+                SELECT script, COUNT(*) AS count
+                FROM {self.table_name}
+                GROUP BY script
+                """
+            ).fetchall()
 
         return {
             "total_count": int(total_count),
             "average_score": round(float(avg_score), 1) if total_count else 0,
             "max_score": int(max_score),
             "min_score": int(min_score),
+            "script_counts": {
+                normalize_script(row["script"]): int(row["count"])
+                for row in script_rows
+            },
         }
 
-    def get_score_trend(self, limit: int = 30) -> list[dict]:
+    def get_score_trend(self, limit: int = 30, script: str | None = None) -> list[dict]:
+        params: list[object] = [limit]
+        where_clause = ""
+        if script:
+            where_clause = "WHERE script = ?"
+            params = [normalize_script(script), limit]
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
-                SELECT timestamp, total_score, quality_level, character_name
+                SELECT timestamp, total_score, quality_level, character_name, script
                 FROM {self.table_name}
+                {where_clause}
                 ORDER BY timestamp ASC
                 LIMIT ?
                 """,
-                (limit,),
+                params,
             ).fetchall()
 
         return [
@@ -229,6 +283,7 @@ class DatabaseService:
                 "total_score": row["total_score"],
                 "quality_level": row["quality_level"],
                 "character_name": row["character_name"],
+                "script": normalize_script(row["script"]),
             }
             for row in rows
         ]
@@ -245,6 +300,7 @@ class DatabaseService:
             timestamp=timestamp,
             image_path=row["image_path"],
             processed_image_path=row["processed_image_path"],
+            script=normalize_script(row["script"]),
             character_name=row["character_name"],
             ocr_confidence=row["ocr_confidence"],
             quality_level=row["quality_level"] or "medium",

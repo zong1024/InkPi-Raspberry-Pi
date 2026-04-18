@@ -100,6 +100,8 @@ class CloudSyncService:
             "total_score": result.total_score,
             "feedback": result.feedback,
             "timestamp": result.timestamp.isoformat(),
+            "script": result.get_script(),
+            "script_label": result.get_script_label(),
             "character_name": result.character_name,
             "ocr_confidence": result.ocr_confidence,
             "quality_level": result.quality_level,

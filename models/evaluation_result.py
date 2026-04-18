@@ -1,4 +1,4 @@
-"""Evaluation result data model for the single-chain OCR + ONNX pipeline."""
+"""Evaluation result data model for the dual-script InkPi pipeline."""
 
 from __future__ import annotations
 
@@ -11,6 +11,8 @@ from models.evaluation_framework import (
     build_practice_profile,
     build_scope_boundary,
     get_dimension_basis,
+    get_script_label,
+    normalize_script,
 )
 
 
@@ -64,8 +66,14 @@ def summarize_dimension_scores(
     if not available_items:
         return None
 
-    strongest_key, strongest_score = max(available_items, key=lambda item: (item[1], -DIMENSION_ORDER.index(item[0])))
-    weakest_key, weakest_score = min(available_items, key=lambda item: (item[1], DIMENSION_ORDER.index(item[0])))
+    strongest_key, strongest_score = max(
+        available_items,
+        key=lambda item: (item[1], -DIMENSION_ORDER.index(item[0])),
+    )
+    weakest_key, weakest_score = min(
+        available_items,
+        key=lambda item: (item[1], DIMENSION_ORDER.index(item[0])),
+    )
     return {
         "best": {
             "key": strongest_key,
@@ -87,6 +95,7 @@ class EvaluationResult:
     total_score: int
     feedback: str
     timestamp: datetime
+    script: str = "regular"
     character_name: str | None = None
     ocr_confidence: float | None = None
     quality_level: str = "medium"
@@ -100,6 +109,7 @@ class EvaluationResult:
     def to_dict(self) -> dict[str, Any]:
         """Convert to a serializable dictionary."""
 
+        script = self.get_script()
         dimension_scores = self.get_dimension_scores()
         return {
             "id": self.id,
@@ -113,11 +123,13 @@ class EvaluationResult:
             "quality_level": self.quality_level,
             "quality_label": self.get_grade(),
             "quality_confidence": self.quality_confidence,
+            "script": script,
+            "script_label": self.get_script_label(),
             "dimension_scores": dimension_scores,
             "dimension_summary": summarize_dimension_scores(dimension_scores),
-            "dimension_basis": get_dimension_basis(dimension_scores),
+            "dimension_basis": get_dimension_basis(dimension_scores, script=script),
             "practice_profile": self.get_practice_profile(),
-            "scope_boundary": build_scope_boundary(),
+            "scope_boundary": build_scope_boundary(script),
             "score_debug": self.score_debug,
         }
 
@@ -147,6 +159,7 @@ class EvaluationResult:
             timestamp=timestamp,
             image_path=data.get("image_path"),
             processed_image_path=data.get("processed_image_path"),
+            script=normalize_script(data.get("script")),
             character_name=data.get("character_name"),
             ocr_confidence=data.get("ocr_confidence"),
             quality_level=quality_level,
@@ -164,6 +177,7 @@ class EvaluationResult:
         return (
             f"EvaluationResult(total={self.total_score}, "
             f"character={self.character_name}, "
+            f"script={self.get_script()}, "
             f"quality={self.quality_level}, "
             f"ocr={self.ocr_confidence})"
         )
@@ -177,6 +191,16 @@ class EvaluationResult:
         """UI color helper."""
 
         return QUALITY_COLORS.get(self.quality_level, QUALITY_COLORS["medium"])
+
+    def get_script(self) -> str:
+        """Return the normalized machine value for script."""
+
+        return normalize_script(self.script)
+
+    def get_script_label(self) -> str:
+        """Return a human-readable script label."""
+
+        return get_script_label(self.get_script())
 
     def get_dimension_scores(self) -> dict[str, int] | None:
         """Return normalized dimension scores in a stable order."""
@@ -217,6 +241,7 @@ class EvaluationResult:
             total_score=int(self.total_score),
             quality_level=self.quality_level,
             character_name=self.character_name,
+            script=self.get_script(),
         )
 
 

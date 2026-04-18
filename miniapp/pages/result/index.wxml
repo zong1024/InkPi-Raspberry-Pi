@@ -3,7 +3,7 @@
   <view class="page-orb page-orb-b"></view>
 
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
-  <view wx:if="{{loading}}" class="notice">正在加载评测详情...</view>
+  <view wx:if="{{loading}}" class="notice">婵繐绲藉﹢顏堝礉閻樼儤绁伴悹鍥у缁佸鎷犻敂钘夊壈...</view>
 
   <view wx:if="{{result}}" class="paper-panel detail-hero">
     <view class="detail-top">
@@ -11,11 +11,12 @@
         <text class="eyebrow">InkPi Result</text>
         <text class="detail-character">{{result.characterLabel}}</text>
         <text class="detail-meta">{{result.timestamp}} / {{result.deviceLabel}}</text>
+        <text class="detail-support">{{supportScopeText}}</text>
       </view>
 
       <view class="score-plaque" style="background: {{result.scoreSoft}}; color: {{result.scoreColor}};">
         <text class="score-plaque-value">{{result.total_score}}</text>
-        <text class="score-plaque-unit">总分</text>
+        <text class="score-plaque-unit">闁诡剝顕ч崹</text>
       </view>
     </view>
 
@@ -23,14 +24,16 @@
       <text class="detail-grade" style="color: {{result.scoreColor}};">{{result.qualityLabel}}</text>
       <view class="chip-row">
         <text class="meta-chip">OCR {{result.ocrText}}</text>
-        <text class="meta-chip">评级 {{result.qualityText}}</text>
+        <text class="meta-chip">閻犲洤瀚?{{result.qualityText}}</text>
+        <text class="meta-chip">{{result.scriptBadgeText}}</text>
+        <text wx:if="{{!result.scriptSupported}}" class="meta-chip detail-warning">{{result.scriptStatusText}}</text>
       </view>
     </view>
   </view>
 
   <view wx:if="{{result}}" class="paper-panel metrics-panel">
-    <text class="panel-title">本次评测概览</text>
-    <text class="panel-subtitle">结果由预处理、OCR 识别、主分模型和四维解释层共同生成。</text>
+    <text class="panel-title">闁哄牜鍓氶鑲╂嫚閸曨剛銈存慨鎺戝€介～</text>
+    <text class="panel-subtitle">缂備焦鎸婚悘澶愭偨闁稁鏆曞璺哄閹﹪濡存稉鐩婻 閻犲洤妫楅崺鍡涘Υ娴ｅ嘲鐦滈柛鎺戞鑶╅柛銊ヮ儏閹蜂即宕跺☉姘▕閻熸瑱缍侀崳瀵镐沪閸屾艾褰欓柛姘灱閺佹捇骞嬮幇鈹惧亾</text>
 
     <view wx:for="{{metrics}}" wx:key="title" class="metric-card">
       <view class="metric-top">
@@ -42,7 +45,7 @@
   </view>
 
   <view wx:if="{{result}}" class="paper-panel dimensions-panel">
-    <text class="panel-title">四维解释分</text>
+    <text class="panel-title">闁搞儲绋撳ǎ顔炬喆閿濆娅為柛</text>
     <text class="panel-subtitle">{{dimensionSummary}}</text>
 
     <view wx:if="{{dimensionCards.length}}" class="dimension-grid">
@@ -57,12 +60,12 @@
       </view>
     </view>
 
-    <text wx:else class="metric-note">老记录暂时没有四维解释分，新的评测结果会自动生成。</text>
+    <text wx:else class="metric-note">闁奸娴囬鍥亹閺囩喐鐣柡鍐煐閻ュ懘寮垫径濠冪＝缂備胶顥愯闂佹彃锕ら崹搴ㄦ晬鐏炵偓鐓€闁汇劌瀚惁搴∶圭€ｎ剛娉㈤柡瀣矆缁变即鎳涢鍕楅柣銏㈠枑閸ㄦ岸濡</text>
   </view>
 
   <view wx:if="{{basisCards.length}}" class="paper-panel basis-panel">
-    <text class="panel-title">评价依据</text>
-    <text class="panel-subtitle">四维分不是随意命名，而是把课堂观察语汇映射成可计算指标。</text>
+    <text class="panel-title">閻犲洤瀚悳顖涚瑹濠靛洤绁</text>
+    <text class="panel-subtitle">闁搞儲绋撳ǎ顕€宕氶崱鏇犵憹闁哄嫷鍨跺▓銏ゅ箛韫囨挻鍤掗柛姘▌缁辨繈鎳撶仦鐐﹂柟璺猴龚椤曟娊宕奸崒婵愭綆閻庣數鍠曢銏犘ч崶銊π侀悘蹇撳閸ㄦ岸宕ｉ婵愬悁缂佺姵顨嗙€垫岸寮介崶銉㈠亾</text>
 
     <view wx:for="{{basisCards}}" wx:key="key" class="basis-card">
       <view class="basis-top">
@@ -77,19 +80,19 @@
         <text wx:for="{{item.observation_points}}" wx:for-item="point" wx:key="*this" class="basis-tag">{{point}}</text>
       </view>
 
-      <text class="basis-feature">关联特征：{{item.featureText}}</text>
-      <text class="basis-tip">训练建议：{{item.practice_tip}}</text>
+      <text class="basis-feature">闁稿繐鐤囨禒鍫ユ偋閻熸壆绐欓柨娑欘劯{item.featureText}}</text>
+      <text class="basis-tip">閻犱緡鍘剧划灞筋嚈妤︽鍞撮柨娑欘劯{item.practice_tip}}</text>
     </view>
   </view>
 
   <view wx:if="{{reviewSummary}}" class="paper-panel review-panel">
-    <text class="panel-title">教师复评</text>
+    <text class="panel-title">闁轰焦鐟ョ粭鈧璺虹Х閻</text>
     <text class="panel-subtitle">{{reviewSummary.latestReviewer}} / {{reviewSummary.latestRole}}</text>
 
     <view class="chip-row">
-      <text class="meta-chip">复评次数 {{reviewSummary.reviewCount}}</text>
-      <text class="meta-chip">人工均分 {{reviewSummary.averageReviewScoreText}}</text>
-      <text class="meta-chip">分差 {{reviewSummary.scoreGapText}}</text>
+      <text class="meta-chip">濠㈣泛绉烽惁搴♀枎閳╁啯娈?{{reviewSummary.reviewCount}}</text>
+      <text class="meta-chip">濞存粌鎼导鎰板锤閸パ冪€?{{reviewSummary.averageReviewScoreText}}</text>
+      <text class="meta-chip">闁告帒妫楀Ο?{{reviewSummary.scoreGapText}}</text>
       <text class="meta-chip">{{reviewSummary.agreementText}}</text>
     </view>
 
@@ -97,19 +100,19 @@
   </view>
 
   <view wx:if="{{practiceProfile}}" class="paper-panel practice-panel">
-    <text class="panel-title">模型练习建议</text>
+    <text class="panel-title">婵☆垪鈧磭鈧绱掗崘褏鐦庣€点倝缂氶</text>
     <text class="panel-subtitle">{{practiceProfile.stage_label}} / {{practiceProfile.stage_goal}}</text>
     <text class="practice-copy">{{practiceProfile.coach_prompt}}</text>
 
     <view class="practice-grid">
       <view wx:if="{{practiceProfile.best_dimension}}" class="practice-card practice-card-good">
-        <text class="practice-card-label">当前保留项</text>
+        <text class="practice-card-label">鐟滅増鎸告晶鐘崇┍濠靛牊娈屽</text>
         <text class="practice-card-value">{{practiceProfile.best_dimension.label}} {{practiceProfile.best_dimension.score}}</text>
         <text class="practice-card-note">{{practiceProfile.best_dimension.tip}}</text>
       </view>
 
       <view wx:if="{{practiceProfile.focus_dimension}}" class="practice-card practice-card-focus">
-        <text class="practice-card-label">优先提升项</text>
+        <text class="practice-card-label">濞村吋锚閸樻盯骞撻幇顒€纾冲</text>
         <text class="practice-card-value">{{practiceProfile.focus_dimension.label}} {{practiceProfile.focus_dimension.score}}</text>
         <text class="practice-card-note">{{practiceProfile.focus_dimension.tip}}</text>
       </view>
@@ -124,7 +127,7 @@
   </view>
 
   <view wx:if="{{result}}" class="paper-panel follow-panel">
-    <text class="panel-title">继续练下去</text>
+    <text class="panel-title">缂備綀鍛暰缂備礁鍟╃粭鍛村储</text>
     <text class="panel-subtitle">{{resultFollowUp.note}}</text>
 
     <view class="chip-row follow-chip-row">
@@ -133,15 +136,15 @@
 
     <view class="practice-grid">
       <view wx:if="{{resultFollowUp.focusDimension}}" class="practice-card practice-card-focus">
-        <text class="practice-card-label">下一次先练</text>
+        <text class="practice-card-label">濞戞挸顑勭粩鏉戔枎閳ュ啿甯ョ紓</text>
         <text class="practice-card-value">{{resultFollowUp.focusDimension.label}} {{resultFollowUp.focusDimension.score}}</text>
         <text class="practice-card-note">{{resultFollowUp.focusDimension.tip || resultFollowUp.note}}</text>
       </view>
 
       <view wx:if="{{resultFollowUp.strongDimension}}" class="practice-card practice-card-good">
-        <text class="practice-card-label">这次别丢掉</text>
+        <text class="practice-card-label">閺夆晜鐟﹂濂稿礆椤愨剝涓㈤柟</text>
         <text class="practice-card-value">{{resultFollowUp.strongDimension.label}} {{resultFollowUp.strongDimension.score}}</text>
-        <text class="practice-card-note">{{resultFollowUp.strongDimension.tip || '下一轮练习时，尽量把这项稳定表现继续保住。'}}</text>
+        <text class="practice-card-note">{{resultFollowUp.strongDimension.tip || '濞戞挸顑勭粩瀛樻姜椤斿墽鐭婂☉鏃傚У濡炲倿鏁嶇仦鑺ユ櫦闂佹彃绻戞俊鍛婃交濞嗘挶鈧秶绮欓崘鑼毎閻炴稏鍔庨獮鍥╃磼瑜忛悽缁樼┍濠靛懐绉堕柕?}}</text>
       </view>
     </view>
 
@@ -158,24 +161,24 @@
           <text class="follow-preview-char">{{item.character}}</text>
           <text class="follow-preview-badge">{{item.badgeText}}</text>
         </view>
-        <text class="follow-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+        <text class="follow-preview-meta">闁秆冩搐閸?{{item.averageText}} / 闁哄牃鍋撻弶?{{item.latestScoreText}}</text>
       </view>
     </view>
 
-    <button class="secondary-btn follow-cta" bindtap="goPractice">去练习中心安排下一轮</button>
+    <button class="secondary-btn follow-cta" bindtap="goPractice">闁告宕电划灞剧▕閻樿精鍘煫鍥у暙閻ｃ劑骞掗幒宥囩憮濞戞挴鍋撻弶</button>
   </view>
 
   <view wx:if="{{result}}" class="paper-panel feedback-panel">
-    <text class="panel-title">评语建议</text>
-    <text class="feedback-quote">{{result.feedback || '暂无评语'}}</text>
+    <text class="panel-title">閻犲洤瀚銏狀嚈妤︽鍞</text>
+    <text class="feedback-quote">{{result.feedback || '闁哄棗鍊瑰Λ銈囨嫚閸曨噮鍤?}}</text>
   </view>
 
   <view wx:if="{{result}}" class="detail-actions">
-    <button class="ghost-btn detail-back" bindtap="goBack">返回历史</button>
-    <button class="ghost-btn detail-stats" bindtap="goStats">查看统计</button>
+    <button class="ghost-btn detail-back" bindtap="goBack">閺夆晜鏌ㄥú鏍储閸℃钑</button>
+    <button class="ghost-btn detail-stats" bindtap="goStats">闁哄被鍎冲﹢鍛磼閻旀椿鍚€</button>
   </view>
 
   <view wx:if="{{result}}" class="detail-actions">
-    <button class="detail-delete" bindtap="deleteCurrent" loading="{{deleting}}">删除这条记录</button>
+    <button class="detail-delete" bindtap="deleteCurrent" loading="{{deleting}}">闁告帞濞€濞呭孩娼诲▎鎰拫閻犱焦婢樼紞</button>
   </view>
 </view>

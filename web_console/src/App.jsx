@@ -26,6 +26,11 @@ const DIMENSION_LABELS = {
   stability: "稳定",
 };
 
+const SCRIPT_LABELS = {
+  regular: "楷书",
+  running: "行书",
+};
+
 const ThreeBackdrop = lazy(() => import("./ThreeBackdrop"));
 
 function useOpsDashboard() {
@@ -339,7 +344,9 @@ function ResultFeed({ results }) {
           <div className="result-score">{item.total_score}</div>
           <div className="result-body">
             <strong>{item.character_name || "未识别"}</strong>
-            <span>{item.quality_level || "unknown"}</span>
+            <span>
+              {(item.script_label || SCRIPT_LABELS[item.script] || "未标注书体")} / {item.quality_level || "unknown"}
+            </span>
             <small>{item.timestamp || "--"}</small>
             <div className="dimension-strip">
               {Object.entries(item.dimension_scores || {}).map(([key, value]) => (
@@ -381,7 +388,9 @@ function TrendChart({ points }) {
         {points.map((item) => (
           <div key={`${item.timestamp}-${item.total_score}`}>
             <strong>{item.total_score}</strong>
-            <span>{item.character_name || "字"}</span>
+            <span>
+              {item.character_name || "字"} / {item.script_label || SCRIPT_LABELS[item.script] || "未标注书体"}
+            </span>
           </div>
         ))}
       </div>
@@ -447,6 +456,10 @@ function CloudPanel({ snapshot }) {
             <strong>
               {lastResult.character_name || "未识别"} / {lastResult.total_score}
             </strong>
+            <p>
+              {(lastResult.script_label || SCRIPT_LABELS[lastResult.script] || "未标注书体")} /{" "}
+              {lastResult.quality_level || "unknown"}
+            </p>
             <p>{lastResult.feedback}</p>
           </>
         ) : (
@@ -468,6 +481,7 @@ function stackItems(snapshot) {
 
 function modelItems(snapshot) {
   if (!snapshot?.models) return [];
+  const scorerModels = snapshot.models.quality_scorer?.models || {};
   return [
     {
       title: "OCR 本地模型",
@@ -482,11 +496,25 @@ function modelItems(snapshot) {
       health: snapshot.models.ocr?.remote_ready ? "good" : "warn",
     },
     {
-      title: "ONNX 评分模型",
+      title: "楷书评分模型",
+      message: scorerModels.regular?.ready
+        ? `已加载 ${scorerModels.regular?.model_path}`
+        : `缺失 ${scorerModels.regular?.model_path || "quality_scorer_regular.onnx"}`,
+      health: scorerModels.regular?.ready ? "good" : "bad",
+    },
+    {
+      title: "行书评分模型",
+      message: scorerModels.running?.ready
+        ? `已加载 ${scorerModels.running?.model_path}`
+        : `缺失 ${scorerModels.running?.model_path || "quality_scorer_running.onnx"}`,
+      health: scorerModels.running?.ready ? "good" : "bad",
+    },
+    {
+      title: "双书体路由",
       message: snapshot.models.quality_scorer?.ready
-        ? `输入尺寸 ${snapshot.models.quality_scorer?.input_size}`
-        : `模型缺失：${snapshot.models.quality_scorer?.model_path}`,
-      health: snapshot.models.quality_scorer?.ready ? "good" : "bad",
+        ? `手动选择书体后路由到对应 ONNX，输入尺寸 ${snapshot.models.quality_scorer?.input_size}`
+        : "至少有一套书体模型未就绪",
+      health: snapshot.models.quality_scorer?.ready ? "good" : "warn",
     },
     {
       title: "四维解释层",

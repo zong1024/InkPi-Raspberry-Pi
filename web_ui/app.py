@@ -18,6 +18,7 @@ from flask import Flask, Response, jsonify, request, send_file, send_from_direct
 import numpy as np
 
 from config import APP_CONFIG, IMAGES_DIR, IS_RASPBERRY_PI, LOG_CONFIG
+from models.evaluation_framework import get_script_label, normalize_script
 from models.evaluation_result import EvaluationResult
 from services.camera_service import camera_service
 from services.database_service import database_service
@@ -189,7 +190,8 @@ def create_app() -> Flask:
     @app.get("/api/history")
     def history():
         limit = min(max(int(request.args.get("limit", 40)), 1), 200)
-        records = database_service.get_all(limit=limit)
+        script = str(request.args.get("script", "")).strip() or None
+        records = database_service.get_all(limit=limit, script=script)
         return jsonify({"items": [_serialize_result(item) for item in records]})
 
     @app.get("/api/results/<int:record_id>")
@@ -235,6 +237,10 @@ def create_app() -> Flask:
 
     @app.post("/api/evaluate/capture")
     def evaluate_capture():
+        payload = request.get_json(silent=True) or {}
+        script, script_error = _parse_script_from_request(payload)
+        if script_error:
+            return jsonify({"error": "invalid_script", "message": script_error}), 400
         if not _ensure_camera():
             message = state.camera_last_error or "摄像头不可用。"
             return jsonify({"error": "camera_unavailable", "message": message}), 503
@@ -248,9 +254,11 @@ def create_app() -> Flask:
             return jsonify({"error": "capture_failed", "message": "未能从摄像头获取图像。"}), 503
 
         try:
-            result = _evaluate_and_store(frame, source_name="camera_capture.jpg")
+            result = _evaluate_and_store(frame, source_name="camera_capture.jpg", script=script or "regular")
         except PreprocessingError as exc:
             return _preprocessing_error_response(exc)
+        except ValueError as exc:
+            return jsonify({"error": "invalid_script", "message": str(exc)}), 400
         except Exception as exc:  # noqa: BLE001
             app.logger.exception("Capture evaluation failed: %s", exc)
             operations_monitor_service.record_pipeline("evaluation", "error", str(exc))
@@ -262,6 +270,12 @@ def create_app() -> Flask:
     def evaluate_upload():
         image = None
         source_name = "uploaded_image.jpg"
+        payload = request.get_json(silent=True) or {}
+        script, script_error = _parse_script_from_request(payload)
+        if request.files:
+            script, script_error = _parse_script_from_request({})
+        if script_error:
+            return jsonify({"error": "invalid_script", "message": script_error}), 400
 
         uploaded = request.files.get("image")
         if uploaded and uploaded.filename:
@@ -269,7 +283,6 @@ def create_app() -> Flask:
             image = cv2.imdecode(data, cv2.IMREAD_COLOR)
             source_name = Path(uploaded.filename).name
         else:
-            payload = request.get_json(silent=True) or {}
             image_data = payload.get("image_data")
             if image_data:
                 image = _decode_data_url(image_data)
@@ -279,9 +292,11 @@ def create_app() -> Flask:
             return jsonify({"error": "invalid_image", "message": "没有收到可解析的图像。"}), 400
 
         try:
-            result = _evaluate_and_store(image, source_name=source_name)
+            result = _evaluate_and_store(image, source_name=source_name, script=script or "regular")
         except PreprocessingError as exc:
             return _preprocessing_error_response(exc)
+        except ValueError as exc:
+            return jsonify({"error": "invalid_script", "message": str(exc)}), 400
         except Exception as exc:  # noqa: BLE001
             app.logger.exception("Upload evaluation failed: %s", exc)
             operations_monitor_service.record_pipeline("evaluation", "error", str(exc))
@@ -315,6 +330,8 @@ def _serialize_result(result: EvaluationResult | None, include_debug: bool = Fal
         "feedback": result.feedback,
         "timestamp": result.timestamp.isoformat() if result.timestamp else None,
         "display_time": result.timestamp.strftime("%m-%d %H:%M") if result.timestamp else "--",
+        "script": result.get_script(),
+        "script_label": result.get_script_label(),
         "character_name": result.character_name or "未识别",
         "ocr_confidence": result.ocr_confidence,
         "quality_confidence": result.quality_confidence,
@@ -337,6 +354,24 @@ def _decode_data_url(image_data: str) -> np.ndarray | None:
         return None
     array = np.frombuffer(raw, dtype=np.uint8)
     return cv2.imdecode(array, cv2.IMREAD_COLOR)
+
+
+def _parse_script_from_request(payload: dict[str, Any] | None = None) -> tuple[str | None, str | None]:
+    if payload is None:
+        payload = {}
+
+    raw_script = None
+    if request.form:
+        raw_script = request.form.get("script")
+    if not raw_script:
+        raw_script = payload.get("script")
+    if raw_script is None:
+        return None, "必须显式选择书体（楷书或行书）。"
+
+    script = normalize_script(raw_script)
+    if script not in {"regular", "running"}:
+        return None, "当前仅支持楷书与行书单字评测。"
+    return script, None
 
 
 def _ensure_camera() -> bool:
@@ -377,12 +412,12 @@ def _get_camera_status() -> dict[str, Any]:
     }
 
 
-def _evaluate_and_store(image: np.ndarray, source_name: str) -> EvaluationResult:
+def _evaluate_and_store(image: np.ndarray, source_name: str, script: str) -> EvaluationResult:
     operations_monitor_service.record_pipeline(
         "ingest",
         "running",
         "Image accepted by the local runtime.",
-        {"source_name": source_name},
+        {"source_name": source_name, "script": script, "script_label": get_script_label(script)},
     )
     timestamp = int(time.time() * 1000)
     original_path = IMAGES_DIR / f"webui_{timestamp}_{Path(source_name).stem}.jpg"
@@ -406,6 +441,7 @@ def _evaluate_and_store(image: np.ndarray, source_name: str) -> EvaluationResult
 
     result = evaluation_service.evaluate(
         processed,
+        script=script,
         original_image_path=str(original_path),
         processed_image_path=processed_path,
         ocr_image=ocr_image,

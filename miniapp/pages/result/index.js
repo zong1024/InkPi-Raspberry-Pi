@@ -2,6 +2,7 @@ const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 const { RECENT_PRACTICE_LIMIT } = require('../../config');
 const { buildGrowthInsights, buildResultFollowUp } = require('../../utils/practice');
+const { FORMAL_SUPPORT_TEXT, getScriptMeta } = require('../../utils/script');
 
 const DIMENSION_LABELS = {
   structure: '结构',
@@ -30,9 +31,9 @@ function getScorePalette(score) {
 }
 
 function getQualityLabel(level) {
-  if (level === 'good') return '甲';
-  if (level === 'bad') return '丙';
-  return '乙';
+  if (level === 'good') return '优';
+  if (level === 'bad') return '待提升';
+  return '良';
 }
 
 function formatConfidence(value) {
@@ -81,6 +82,11 @@ function buildMetrics(result) {
       note: `OCR 置信度 ${result.ocrText}`,
     },
     {
+      title: '书体',
+      value: result.scriptLabel,
+      note: result.scriptStatusText,
+    },
+    {
       title: '主分等级',
       value: result.qualityLabel,
       note: `质量置信度 ${result.qualityText}`,
@@ -90,7 +96,7 @@ function buildMetrics(result) {
       value: result.practiceProfile ? result.practiceProfile.stage_label : '辅助评测',
       note: result.practiceProfile
         ? result.practiceProfile.scope_note
-        : '当前系统面向楷书单字辅助评测，不替代教师终评。',
+        : '当前系统正式支持楷书、行书单字，其他书体暂不支持，也不替代教师终评。',
     },
   ];
 }
@@ -119,7 +125,9 @@ function normalizeReviewSummary(summary = null, reviews = []) {
         : `${Math.round(Number(payload.score_gap) * 10) / 10}`,
     latestReviewer: latestReview ? latestReview.reviewer_name || '教师复评' : '待教师复评',
     latestRole: latestReview ? latestReview.reviewer_role || '人工校核' : '等待复评',
-    latestNote: latestReview ? latestReview.notes || '本次复评未填写附加说明。' : '当前结果还没有进入教师/专家复评。',
+    latestNote: latestReview
+      ? latestReview.notes || '本次复评未填写附加说明。'
+      : '当前结果还没有进入教师 / 专家复评。',
   };
 }
 
@@ -139,6 +147,7 @@ Page({
     growthSummary: EMPTY_GROWTH.growthSummary,
     resultFollowUp: EMPTY_FOLLOW_UP,
     practicePreview: [],
+    supportScopeText: FORMAL_SUPPORT_TEXT,
     error: '',
     deleting: false,
   },
@@ -169,10 +178,12 @@ Page({
       const practiceProfile = rawResult.practice_profile || null;
       const growthInsights = buildGrowthInsights((historyPayload && historyPayload.items) || []);
       const reviewSummary = normalizeReviewSummary(rawResult.expert_review_summary, rawResult.expert_reviews);
+      const scriptMeta = getScriptMeta(rawResult);
 
       const result = {
         ...rawResult,
         ...palette,
+        ...scriptMeta,
         qualityLabel: rawResult.quality_label || getQualityLabel(rawResult.quality_level),
         characterLabel: rawResult.character_name || '未识别',
         deviceLabel: rawResult.device_name || 'InkPi 设备',
