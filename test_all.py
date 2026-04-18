@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -15,7 +16,7 @@ from models.evaluation_result import EvaluationResult
 from services.database_service import DatabaseService
 from services.dimension_scorer_service import dimension_scorer_service
 from services.evaluation_service import evaluation_service
-from services.local_ocr_service import OcrRecognition, local_ocr_service
+from services.local_ocr_service import LocalOcrService, OcrRecognition, local_ocr_service
 from services.preprocessing_service import PreprocessingError
 from services.quality_scorer_service import QualityScore, quality_scorer_service
 
@@ -204,6 +205,45 @@ class EvaluationServiceTests(unittest.TestCase):
         self.assertEqual(result.character_name, "永")
         self.assertGreater(score_inputs["ocr_mean"], 200.0)
         self.assertLess(score_inputs["score_mean"], 10.0)
+
+
+class LocalOcrServiceConfigTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_env = {
+            "INKPI_CLOUD_BACKEND_URL": os.environ.get("INKPI_CLOUD_BACKEND_URL"),
+            "INKPI_CLOUD_DEVICE_KEY": os.environ.get("INKPI_CLOUD_DEVICE_KEY"),
+            "INKPI_REMOTE_OCR_BACKEND_URL": os.environ.get("INKPI_REMOTE_OCR_BACKEND_URL"),
+            "INKPI_REMOTE_OCR_DEVICE_KEY": os.environ.get("INKPI_REMOTE_OCR_DEVICE_KEY"),
+        }
+
+    def tearDown(self) -> None:
+        for key, value in self.original_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_remote_ocr_env_overrides_cloud_backend_env(self) -> None:
+        os.environ["INKPI_CLOUD_BACKEND_URL"] = "http://127.0.0.1:5001"
+        os.environ["INKPI_CLOUD_DEVICE_KEY"] = "cloud-device-key"
+        os.environ["INKPI_REMOTE_OCR_BACKEND_URL"] = "https://ocr.example.com"
+        os.environ["INKPI_REMOTE_OCR_DEVICE_KEY"] = "remote-device-key"
+
+        service = LocalOcrService()
+
+        self.assertEqual(service.remote_backend_url, "https://ocr.example.com")
+        self.assertEqual(service.remote_device_key, "remote-device-key")
+        self.assertTrue(service.remote_available)
+
+    def test_remote_fallback_can_be_disabled_for_local_only_contexts(self) -> None:
+        os.environ["INKPI_CLOUD_BACKEND_URL"] = "http://127.0.0.1:5001"
+        os.environ["INKPI_CLOUD_DEVICE_KEY"] = "cloud-device-key"
+
+        service = LocalOcrService(allow_remote_fallback=False)
+
+        self.assertEqual(service.remote_backend_url, "")
+        self.assertEqual(service.remote_device_key, "")
+        self.assertFalse(service.remote_available)
 
 
 class QualityScorerCalibrationTests(unittest.TestCase):

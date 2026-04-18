@@ -294,9 +294,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         ocr_service = app.extensions.get("ocr_service")
         if ocr_service is None:
             try:
-                from services.local_ocr_service import local_ocr_service
+                from services.local_ocr_service import LocalOcrService
 
-                ocr_service = local_ocr_service
+                # Keep the cloud OCR endpoint local-only so it cannot recurse
+                # into the same /api/device/ocr endpoint via remote fallback.
+                ocr_service = LocalOcrService(allow_remote_fallback=False)
+                app.extensions["ocr_service"] = ocr_service
             except Exception as exc:  # noqa: BLE001
                 return json_error(f"ocr_service_unavailable:{exc}", 503)
 

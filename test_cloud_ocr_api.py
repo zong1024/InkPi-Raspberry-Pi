@@ -6,6 +6,7 @@ import gc
 import io
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import cv2
@@ -67,6 +68,34 @@ class CloudOcrApiTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["item"]["character"], "神")
         self.assertAlmostEqual(payload["item"]["confidence"], 0.93, places=3)
+
+    def test_device_ocr_endpoint_uses_local_only_service_when_not_injected(self) -> None:
+        image = np.ones((96, 96), dtype=np.uint8) * 255
+        ok, encoded = cv2.imencode(".jpg", image)
+        self.assertTrue(ok)
+
+        self.app.extensions.pop("ocr_service", None)
+
+        class _LocalOnlyUnavailableService:
+            available = False
+
+            def recognize(self, image):
+                del image
+                return None
+
+        with patch("services.local_ocr_service.LocalOcrService", return_value=_LocalOnlyUnavailableService()) as factory:
+            response = self.client.post(
+                "/api/device/ocr",
+                headers={"X-Device-Key": "device-key"},
+                data={
+                    "image": (io.BytesIO(encoded.tobytes()), "sample.jpg"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["error"], "ocr_service_unavailable")
+        factory.assert_called_once_with(allow_remote_fallback=False)
 
 
 if __name__ == "__main__":

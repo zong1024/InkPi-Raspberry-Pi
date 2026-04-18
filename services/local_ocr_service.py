@@ -28,14 +28,33 @@ class OcrRecognition:
 class LocalOcrService:
     """Run local OCR first and fall back to the cloud OCR endpoint when configured."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        allow_remote_fallback: bool = True,
+        remote_backend_url: str | None = None,
+        remote_device_key: str | None = None,
+    ) -> None:
         self.logger = logging.getLogger(__name__)
         self.config = OCR_CONFIG
         self.min_confidence = float(self.config.get("min_confidence", 0.32))
         self.device = str(self.config.get("device", "cpu"))
         self.language = str(self.config.get("language", "ch"))
-        self.remote_backend_url = str(os.environ.get("INKPI_CLOUD_BACKEND_URL", "")).rstrip("/")
-        self.remote_device_key = str(os.environ.get("INKPI_CLOUD_DEVICE_KEY", "")).strip()
+        self.allow_remote_fallback = bool(allow_remote_fallback)
+        configured_backend_url = remote_backend_url
+        if configured_backend_url is None:
+            configured_backend_url = (
+                os.environ.get("INKPI_REMOTE_OCR_BACKEND_URL")
+                or os.environ.get("INKPI_CLOUD_BACKEND_URL", "")
+            )
+        configured_device_key = remote_device_key
+        if configured_device_key is None:
+            configured_device_key = (
+                os.environ.get("INKPI_REMOTE_OCR_DEVICE_KEY")
+                or os.environ.get("INKPI_CLOUD_DEVICE_KEY", "")
+            )
+        self.remote_backend_url = str(configured_backend_url).rstrip("/") if self.allow_remote_fallback else ""
+        self.remote_device_key = str(configured_device_key).strip() if self.allow_remote_fallback else ""
         self.remote_timeout = float(os.environ.get("INKPI_REMOTE_OCR_TIMEOUT", "4.0"))
         self._ocr = None
         self._available = False
@@ -83,7 +102,7 @@ class LocalOcrService:
 
     @property
     def remote_available(self) -> bool:
-        return bool(self.remote_backend_url) and bool(self.remote_device_key)
+        return self.allow_remote_fallback and bool(self.remote_backend_url) and bool(self.remote_device_key)
 
     def recognize(self, image: np.ndarray) -> Optional[OcrRecognition]:
         """Recognize the best single character from a preprocessed ROI."""

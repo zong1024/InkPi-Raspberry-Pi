@@ -23,22 +23,22 @@ class MetricChip(QFrame):
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setObjectName("metricChip")
-        self.setFixedHeight(34)
+        self.setFixedHeight(28)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 6)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(4)
 
         self.title_label = QLabel(title)
         self.title_label.setObjectName("miniLabel")
-        self.title_label.setFont(app_font(8, QFont.Weight.Bold))
+        self.title_label.setFont(app_font(7, QFont.Weight.Bold))
         layout.addWidget(self.title_label)
 
         layout.addStretch()
 
         self.value_label = QLabel("--")
         self.value_label.setObjectName("bodyStrong")
-        self.value_label.setFont(display_font(11, QFont.Weight.Bold))
+        self.value_label.setFont(display_font(10, QFont.Weight.Bold))
         layout.addWidget(self.value_label)
 
     def set_score(self, score: int | None) -> None:
@@ -61,14 +61,14 @@ class ResultView(QWidget):
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(6)
+        root.setSpacing(4)
 
         header = QFrame()
         header.setObjectName("pageHeader")
-        header.setFixedHeight(34)
+        header.setFixedHeight(30)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(12, 4, 12, 4)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(10, 2, 10, 2)
+        header_layout.setSpacing(6)
 
         brand = QLabel("InkPi")
         brand.setObjectName("brandAccent")
@@ -83,63 +83,63 @@ class ResultView(QWidget):
 
         self.btn_speak = QPushButton("播")
         self.btn_speak.setObjectName("headerIconButton")
-        self.btn_speak.setFixedSize(26, 24)
-        self.btn_speak.setFont(app_font(10, QFont.Weight.Bold))
+        self.btn_speak.setFixedSize(24, 22)
+        self.btn_speak.setFont(app_font(9, QFont.Weight.Bold))
         self.btn_speak.clicked.connect(self._on_speak)
         header_layout.addWidget(self.btn_speak)
 
         self.btn_new = QPushButton("新")
         self.btn_new.setObjectName("headerIconButton")
-        self.btn_new.setFixedSize(26, 24)
-        self.btn_new.setFont(app_font(10, QFont.Weight.Bold))
+        self.btn_new.setFixedSize(24, 22)
+        self.btn_new.setFont(app_font(9, QFont.Weight.Bold))
         self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
         header_layout.addWidget(self.btn_new)
         root.addWidget(header)
 
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(8)
+        top_row.setSpacing(6)
 
         self.score_card = QFrame()
         self.score_card.setObjectName("scoreCard")
-        self.score_card.setFixedSize(146, 154)
+        self.score_card.setFixedSize(132, 138)
         score_layout = QVBoxLayout(self.score_card)
-        score_layout.setContentsMargins(14, 12, 14, 12)
-        score_layout.setSpacing(4)
+        score_layout.setContentsMargins(12, 10, 12, 10)
+        score_layout.setSpacing(2)
 
         total_label = QLabel("TOTAL SCORE")
         total_label.setObjectName("miniLabel")
-        total_label.setFont(app_font(8, QFont.Weight.Bold))
+        total_label.setFont(app_font(7, QFont.Weight.Bold))
         score_layout.addWidget(total_label)
 
         self.total_score_label = QLabel("--")
         self.total_score_label.setObjectName("scoreNumber")
         self.total_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.total_score_label.setFont(display_font(44, QFont.Weight.Bold))
+        self.total_score_label.setFont(display_font(40, QFont.Weight.Bold))
         score_layout.addWidget(self.total_score_label, stretch=1)
 
         self.grade_label = QLabel("--")
         self.grade_label.setObjectName("scoreGrade")
         self.grade_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.grade_label.setFont(display_font(15, QFont.Weight.Bold))
-        self.grade_label.setFixedWidth(44)
+        self.grade_label.setFont(display_font(12, QFont.Weight.Bold))
+        self.grade_label.setFixedWidth(38)
         score_layout.addWidget(self.grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.feedback_short = QLabel("等待本轮评测")
         self.feedback_short.setObjectName("sectionSubtitle")
         self.feedback_short.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.feedback_short.setWordWrap(True)
-        self.feedback_short.setFixedHeight(28)
-        self.feedback_short.setFont(app_font(9))
+        self.feedback_short.setFixedHeight(24)
+        self.feedback_short.setFont(app_font(8))
         score_layout.addWidget(self.feedback_short)
         top_row.addWidget(self.score_card)
 
         self.coach_card = QFrame()
         self.coach_card.setObjectName("feedbackCard")
-        self.coach_card.setFixedHeight(154)
+        self.coach_card.setFixedHeight(138)
         coach_layout = QVBoxLayout(self.coach_card)
-        coach_layout.setContentsMargins(12, 10, 12, 10)
-        coach_layout.setSpacing(6)
+        coach_layout.setContentsMargins(10, 8, 10, 8)
+        coach_layout.setSpacing(4)
 
         coach_header = QHBoxLayout()
         coach_header.setContentsMargins(0, 0, 0, 0)
@@ -147,38 +147,38 @@ class ResultView(QWidget):
 
         self.stage_badge = QLabel("练习阶段")
         self.stage_badge.setObjectName("coachBadge")
-        self.stage_badge.setFont(app_font(8, QFont.Weight.Bold))
+        self.stage_badge.setFont(app_font(7, QFont.Weight.Bold))
         coach_header.addWidget(self.stage_badge)
 
         coach_header.addStretch()
 
         self.character_meta = QLabel("识别字：--")
         self.character_meta.setObjectName("miniLabel")
-        self.character_meta.setFont(app_font(8, QFont.Weight.Bold))
+        self.character_meta.setFont(app_font(7, QFont.Weight.Bold))
         coach_header.addWidget(self.character_meta)
         coach_layout.addLayout(coach_header)
 
         self.coach_prompt = QLabel("本轮结果会告诉你该保留什么，以及下一轮先改什么。")
         self.coach_prompt.setObjectName("bodyStrong")
         self.coach_prompt.setWordWrap(True)
-        self.coach_prompt.setFixedHeight(30)
-        self.coach_prompt.setFont(app_font(10, QFont.Weight.Bold))
+        self.coach_prompt.setFixedHeight(24)
+        self.coach_prompt.setFont(app_font(9, QFont.Weight.Bold))
         coach_layout.addWidget(self.coach_prompt)
 
         self.focus_line = QLabel("优先提升：--")
         self.focus_line.setObjectName("hintText")
-        self.focus_line.setFont(app_font(9, QFont.Weight.Bold))
+        self.focus_line.setFont(app_font(8, QFont.Weight.Bold))
         coach_layout.addWidget(self.focus_line)
 
         self.keep_line = QLabel("继续保持：--")
         self.keep_line.setObjectName("hintText")
-        self.keep_line.setFont(app_font(9, QFont.Weight.Bold))
+        self.keep_line.setFont(app_font(8, QFont.Weight.Bold))
         coach_layout.addWidget(self.keep_line)
 
         metric_grid = QGridLayout()
         metric_grid.setContentsMargins(0, 0, 0, 0)
-        metric_grid.setHorizontalSpacing(6)
-        metric_grid.setVerticalSpacing(6)
+        metric_grid.setHorizontalSpacing(4)
+        metric_grid.setVerticalSpacing(4)
         for index, key in enumerate(("structure", "stroke", "integrity", "stability")):
             chip = MetricChip(DIMENSION_LABELS[key])
             self.metric_chips[key] = chip
@@ -189,68 +189,68 @@ class ResultView(QWidget):
 
         self.summary_card = QFrame()
         self.summary_card.setObjectName("resultSummaryCard")
-        self.summary_card.setFixedHeight(54)
+        self.summary_card.setFixedHeight(46)
         summary_layout = QVBoxLayout(self.summary_card)
-        summary_layout.setContentsMargins(12, 8, 12, 8)
-        summary_layout.setSpacing(2)
+        summary_layout.setContentsMargins(10, 6, 10, 6)
+        summary_layout.setSpacing(1)
 
         summary_title = QLabel("下一轮怎么练")
         summary_title.setObjectName("miniLabel")
-        summary_title.setFont(app_font(8, QFont.Weight.Bold))
+        summary_title.setFont(app_font(7, QFont.Weight.Bold))
         summary_layout.addWidget(summary_title)
 
         self.action_primary = QLabel("1. 先完成一次稳定拍摄。")
         self.action_primary.setObjectName("actionLine")
-        self.action_primary.setFont(app_font(9, QFont.Weight.Bold))
+        self.action_primary.setFont(app_font(8, QFont.Weight.Bold))
         summary_layout.addWidget(self.action_primary)
 
         self.action_secondary = QLabel("2. 再连续记录 3 次，比较变化。")
         self.action_secondary.setObjectName("sectionSubtitle")
         self.action_secondary.setWordWrap(True)
-        self.action_secondary.setFont(app_font(8))
+        self.action_secondary.setFont(app_font(7))
         summary_layout.addWidget(self.action_secondary)
         root.addWidget(self.summary_card)
 
         button_row = QHBoxLayout()
         button_row.setContentsMargins(0, 0, 0, 0)
-        button_row.setSpacing(8)
+        button_row.setSpacing(6)
 
         self.btn_history = QPushButton("历史")
         self.btn_history.setObjectName("ghostButton")
-        self.btn_history.setFixedSize(88, 40)
-        self.btn_history.setFont(app_font(10, QFont.Weight.Bold))
+        self.btn_history.setFixedSize(74, 34)
+        self.btn_history.setFont(app_font(9, QFont.Weight.Bold))
         self.btn_history.clicked.connect(self.history_requested.emit)
         button_row.addWidget(self.btn_history)
 
         self.btn_home = QPushButton("首页")
         self.btn_home.setObjectName("ghostButton")
-        self.btn_home.setFixedSize(88, 40)
-        self.btn_home.setFont(app_font(10, QFont.Weight.Bold))
+        self.btn_home.setFixedSize(74, 34)
+        self.btn_home.setFont(app_font(9, QFont.Weight.Bold))
         self.btn_home.clicked.connect(self.back_requested.emit)
         button_row.addWidget(self.btn_home)
 
         self.btn_retry = QPushButton("按建议再练一张")
         self.btn_retry.setObjectName("primaryButton")
-        self.btn_retry.setFixedSize(236, 40)
-        self.btn_retry.setFont(display_font(11, QFont.Weight.Bold))
+        self.btn_retry.setFixedSize(226, 34)
+        self.btn_retry.setFont(display_font(10, QFont.Weight.Bold))
         self.btn_retry.clicked.connect(self.new_evaluation_requested.emit)
         button_row.addWidget(self.btn_retry)
         root.addLayout(button_row)
 
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 0, 0, 0)
-        footer.setSpacing(6)
+        footer.setSpacing(4)
 
         self.footer_left = QLabel("识别字：--")
         self.footer_left.setObjectName("miniLabel")
-        self.footer_left.setFont(app_font(8, QFont.Weight.Bold))
+        self.footer_left.setFont(app_font(7, QFont.Weight.Bold))
         footer.addWidget(self.footer_left)
 
         footer.addStretch()
 
         self.footer_right = QLabel("结果页已生成下一练建议")
         self.footer_right.setObjectName("miniLabel")
-        self.footer_right.setFont(app_font(8, QFont.Weight.Bold))
+        self.footer_right.setFont(app_font(7, QFont.Weight.Bold))
         footer.addWidget(self.footer_right)
         root.addLayout(footer)
 
@@ -285,7 +285,7 @@ class ResultView(QWidget):
 
         if profile:
             self.stage_badge.setText(profile.get("stage_label", "练习阶段"))
-            self.coach_prompt.setText(self._clip(profile.get("coach_prompt") or result.feedback, 34))
+            self.coach_prompt.setText(self._clip(profile.get("coach_prompt") or result.feedback, 28))
         else:
             self.stage_badge.setText("练习阶段")
             self.coach_prompt.setText("本轮先看清强项和待提升项，再进入下一张。")
@@ -312,11 +312,11 @@ class ResultView(QWidget):
         else:
             self.keep_line.setText("继续保持：本轮已有可用基础")
 
-        self.action_primary.setText(f"1. {self._clip(actions[0], 22)}" if actions else "1. 先连续记录 3 次，确认波动。")
+        self.action_primary.setText(f"1. {self._clip(actions[0], 18)}" if actions else "1. 先连续记录 3 次。")
         if len(actions) > 1:
-            self.action_secondary.setText(f"2. {self._clip(actions[1], 28)}")
+            self.action_secondary.setText(f"2. {self._clip(actions[1], 22)}")
         elif result.feedback:
-            self.action_secondary.setText(f"2. 模型提示：{self._clip(result.feedback, 24)}")
+            self.action_secondary.setText(f"2. 模型提示：{self._clip(result.feedback, 18)}")
         else:
             self.action_secondary.setText("2. 看懂待提升项后，再进入下一张。")
 

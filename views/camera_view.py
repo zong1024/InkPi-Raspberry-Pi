@@ -20,7 +20,7 @@ from services.database_service import database_service
 from services.evaluation_service import evaluation_service
 from services.preprocessing_service import PreprocessingError, preprocessing_service
 from services.speech_service import speech_service
-from views.ui_theme import app_font, display_font
+from views.ui_theme import app_font, display_font, icon_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -65,19 +65,19 @@ class CameraView(QWidget):
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(6)
+        root.setSpacing(4)
 
         header = QFrame()
         header.setObjectName("pageHeader")
-        header.setFixedHeight(34)
+        header.setFixedHeight(28)
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(6, 4, 6, 4)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(4, 1, 4, 1)
+        header_layout.setSpacing(6)
 
-        self.btn_back = QPushButton("← 返回")
-        self.btn_back.setObjectName("ghostButton")
-        self.btn_back.setFixedHeight(24)
-        self.btn_back.setFont(app_font(9, QFont.Weight.Bold))
+        self.btn_back = QPushButton("←")
+        self.btn_back.setObjectName("headerIconButton")
+        self.btn_back.setFixedSize(24, 24)
+        self.btn_back.setFont(icon_font(12, QFont.Weight.Bold))
         self.btn_back.clicked.connect(self.cancelled.emit)
         header_layout.addWidget(self.btn_back)
 
@@ -85,32 +85,32 @@ class CameraView(QWidget):
 
         title = QLabel("INKPI CAPTURE")
         title.setObjectName("pageTitle")
-        title.setFont(display_font(11, QFont.Weight.Bold))
+        title.setFont(display_font(10, QFont.Weight.Bold))
         header_layout.addWidget(title)
 
         header_layout.addStretch()
 
         self.camera_state = QLabel("连接中")
         self.camera_state.setObjectName("statusPill")
-        self.camera_state.setFont(app_font(9, QFont.Weight.Bold))
+        self.camera_state.setFont(app_font(7, QFont.Weight.Bold))
         header_layout.addWidget(self.camera_state)
         root.addWidget(header)
 
         guide_card = QFrame()
         guide_card.setObjectName("actionCard")
-        guide_card.setFixedHeight(32)
+        guide_card.setFixedHeight(28)
         guide_layout = QHBoxLayout(guide_card)
-        guide_layout.setContentsMargins(10, 6, 10, 6)
-        guide_layout.setSpacing(6)
+        guide_layout.setContentsMargins(10, 4, 10, 4)
+        guide_layout.setSpacing(5)
 
         guide_title = QLabel("拍前确认")
         guide_title.setObjectName("miniLabel")
-        guide_title.setFont(app_font(8, QFont.Weight.Bold))
+        guide_title.setFont(app_font(7, QFont.Weight.Bold))
         guide_layout.addWidget(guide_title)
 
         self.capture_hint = QLabel(self._idle_hint)
         self.capture_hint.setObjectName("hintText")
-        self.capture_hint.setFont(app_font(8, QFont.Weight.Bold))
+        self.capture_hint.setFont(app_font(6, QFont.Weight.Bold))
         guide_layout.addWidget(self.capture_hint, stretch=1)
         root.addWidget(guide_card)
 
@@ -118,32 +118,32 @@ class CameraView(QWidget):
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setFixedHeight(172)
-        self.preview_label.setFont(app_font(11))
+        self.preview_label.setFixedHeight(164)
+        self.preview_label.setFont(app_font(10))
         root.addWidget(self.preview_label)
 
         bottom_row = QHBoxLayout()
         bottom_row.setContentsMargins(0, 0, 0, 0)
-        bottom_row.setSpacing(10)
+        bottom_row.setSpacing(8)
 
         self.btn_load = QPushButton("上传图片")
         self.btn_load.setObjectName("buttonCard")
-        self.btn_load.setFixedSize(92, 52)
-        self.btn_load.setFont(app_font(10, QFont.Weight.Bold))
+        self.btn_load.setFixedSize(88, 46)
+        self.btn_load.setFont(app_font(8, QFont.Weight.Bold))
         self.btn_load.clicked.connect(self._on_load_image)
         bottom_row.addWidget(self.btn_load)
 
         self.btn_capture = QPushButton("拍")
         self.btn_capture.setObjectName("floatingButton")
-        self.btn_capture.setFixedSize(56, 56)
-        self.btn_capture.setFont(display_font(14, QFont.Weight.Bold))
+        self.btn_capture.setFixedSize(52, 52)
+        self.btn_capture.setFont(display_font(12, QFont.Weight.Bold))
         self.btn_capture.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_capture, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         self.btn_eval = QPushButton("生成评分与建议")
         self.btn_eval.setObjectName("primaryButton")
-        self.btn_eval.setFixedSize(168, 52)
-        self.btn_eval.setFont(display_font(10, QFont.Weight.Bold))
+        self.btn_eval.setFixedSize(160, 46)
+        self.btn_eval.setFont(display_font(8, QFont.Weight.Bold))
         self.btn_eval.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_eval)
         root.addLayout(bottom_row)
