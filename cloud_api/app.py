@@ -57,6 +57,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         return {
             "keyword": str(request.args.get("keyword", "")).strip(),
             "quality_level": str(request.args.get("quality_level", "all")).strip() or "all",
+            "script": str(request.args.get("script", "all")).strip() or "all",
             "device_name": str(request.args.get("device_name", "all")).strip() or "all",
             "date_range": str(request.args.get("date_range", "all")).strip() or "all",
         }
@@ -124,6 +125,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         offset = int(request.args.get("offset", 0))
         keyword = str(request.args.get("keyword", "")).strip()
         quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
+        script = str(request.args.get("script", "all")).strip() or "all"
         device_name = str(request.args.get("device_name", "all")).strip() or "all"
         date_range = str(request.args.get("date_range", "all")).strip() or "all"
         sort = str(request.args.get("sort", "latest")).strip() or "latest"
@@ -135,6 +137,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     offset=offset,
                     keyword=keyword,
                     quality_level=quality_level,
+                    script=script,
                     device_name=device_name,
                     date_range=date_range,
                     sort=sort,
@@ -156,11 +159,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @app.get("/api/system/methodology")
     @auth_required
     def methodology():
-        summary = db.get_summary(**summary_filters_from_request())
+        selected_script = str(request.args.get("script", "regular")).strip() or "regular"
+        summary = db.get_summary()
         return jsonify(
             {
                 "ok": True,
-                **build_methodology_payload(summary),
+                **build_methodology_payload(summary, script=selected_script),
             }
         )
 
@@ -168,7 +172,8 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @auth_required
     def validation_overview():
         summary = db.get_summary(**summary_filters_from_request())
-        methodology_payload = build_methodology_payload(summary)
+        selected_script = str(request.args.get("script", "regular")).strip() or "regular"
+        methodology_payload = build_methodology_payload(summary, script=selected_script)
         return jsonify(
             {
                 "ok": True,
@@ -193,14 +198,15 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         result = db.get_result(result_id)
         if not result:
             return json_error("result_not_found", 404)
-        result["dimension_basis"] = get_dimension_basis(result.get("dimension_scores"))
+        result["dimension_basis"] = get_dimension_basis(result.get("dimension_scores"), script=result.get("script"))
         result["practice_profile"] = build_practice_profile(
             result.get("dimension_scores"),
             total_score=int(result.get("total_score") or 0),
             quality_level=str(result.get("quality_level") or "medium"),
             character_name=result.get("character_name"),
+            script=result.get("script"),
         )
-        result["scope_boundary"] = build_scope_boundary()
+        result["scope_boundary"] = build_scope_boundary(result.get("script"))
         result["expert_review_summary"] = db.get_result_review_summary(result_id)
         result["expert_reviews"] = db.list_expert_reviews(result_id)
         return jsonify({"ok": True, "result": result})
@@ -257,7 +263,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             return json_error("invalid_device_key", 401)
 
         payload = request.get_json(silent=True) or {}
-        if "local_record_id" not in payload or "total_score" not in payload:
+        if "local_record_id" not in payload or "total_score" not in payload or "script" not in payload:
             return json_error("invalid_payload", 400)
 
         device_name = (

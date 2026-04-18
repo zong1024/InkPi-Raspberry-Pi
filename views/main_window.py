@@ -18,6 +18,11 @@ from views.result_view import ResultView
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+SCRIPT_LABELS = {
+    "regular": "楷书",
+    "running": "行书",
+}
+
 
 class MainWindow(QMainWindow):
     """Top-level application window."""
@@ -25,9 +30,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(__name__)
+        self.current_script_key = "regular"
+        self.current_script_label = SCRIPT_LABELS[self.current_script_key]
+        self.result_script_labels_by_id: dict[int, str] = {}
         self.current_result: EvaluationResult | None = None
         self._init_ui()
         self._connect_signals()
+        self._sync_script_context()
         self.show_home()
 
     def _init_ui(self) -> None:
@@ -102,10 +111,12 @@ class MainWindow(QMainWindow):
         self.btn_history.clicked.connect(self.show_history)
 
         self.home_view.start_evaluation.connect(self.show_camera)
+        self.home_view.script_selected.connect(self._set_script)
         self.home_view.view_history.connect(self.show_history)
         self.home_view.recent_selected.connect(self._open_result)
 
-        self.camera_view.capture_completed.connect(self._open_result)
+        self.camera_view.script_selected.connect(self._set_script)
+        self.camera_view.capture_completed.connect(self._open_captured_result)
         self.camera_view.cancelled.connect(self.show_home)
 
         self.result_view.back_requested.connect(self.show_home)
@@ -144,9 +155,75 @@ class MainWindow(QMainWindow):
         self._set_page(3, None)
 
     def _open_result(self, result: EvaluationResult) -> None:
-        self.current_result = result
+        self.current_result = self._attach_script_to_result(result)
         self.result_view.set_result(result)
         self.show_result()
+
+    def _open_captured_result(self, result: EvaluationResult) -> None:
+        self.current_result = self._attach_script_to_result(result, preferred_script_key=self.current_script_key)
+        self.result_view.set_result(result)
+        self.show_result()
+
+    def _set_script(self, script_key: str) -> None:
+        if script_key not in SCRIPT_LABELS or script_key == self.current_script_key:
+            return
+        self.current_script_key = script_key
+        self.current_script_label = SCRIPT_LABELS[script_key]
+        self._sync_script_context()
+
+        current_index = self.stack.currentIndex()
+        if current_index == 0:
+            self.home_view.refresh()
+        elif current_index == 3:
+            self.history_view.refresh_data()
+
+    def _sync_script_context(self) -> None:
+        self.home_view.set_current_script(self.current_script_key)
+        self.home_view.set_result_script_labels(self.result_script_labels_by_id)
+        self.camera_view.set_current_script(self.current_script_key)
+        self.result_view.set_current_script(self.current_script_key)
+        self.history_view.set_current_script(self.current_script_key)
+        self.history_view.set_result_script_labels(self.result_script_labels_by_id)
+
+    def _attach_script_to_result(
+        self,
+        result: EvaluationResult,
+        *,
+        preferred_script_key: str | None = None,
+    ) -> EvaluationResult:
+        script_key = self._resolve_result_script_key(result, preferred_script_key)
+        script_label = SCRIPT_LABELS.get(script_key, SCRIPT_LABELS["regular"])
+        result.script = script_key
+        setattr(result, "qt_script_key", script_key)
+        setattr(result, "qt_script_label", script_label)
+
+        if result.id is not None:
+            self.result_script_labels_by_id[result.id] = script_label
+            self.home_view.set_result_script_labels(self.result_script_labels_by_id)
+            self.history_view.set_result_script_labels(self.result_script_labels_by_id)
+        return result
+
+    def _resolve_result_script_key(
+        self,
+        result: EvaluationResult,
+        preferred_script_key: str | None = None,
+    ) -> str:
+        if hasattr(result, "get_script"):
+            value = result.get_script()
+            if value in SCRIPT_LABELS:
+                return value
+        for attr_name in ("qt_script_key", "script_key", "script_type", "script"):
+            value = getattr(result, attr_name, None)
+            if isinstance(value, str) and value in SCRIPT_LABELS:
+                return value
+        if result.id is not None and result.id in self.result_script_labels_by_id:
+            label = self.result_script_labels_by_id[result.id]
+            for key, known_label in SCRIPT_LABELS.items():
+                if known_label == label:
+                    return key
+        if preferred_script_key in SCRIPT_LABELS:
+            return preferred_script_key
+        return "regular"
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self.camera_view.cleanup()

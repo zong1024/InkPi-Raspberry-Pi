@@ -18,6 +18,7 @@ This folder is a self-contained Overleaf-ready paper project for the current Ink
 
 ## Notes
 
-- The paper is written against the current project state as of `2026-04-08`.
+- The paper is written against the current project state as of `2026-04-19`.
+- The current paper wording assumes formal support for `楷书 + 行书` single-character evaluation only.
 - The public backend deployment described in the text corresponds to the current Debian 12 backend node.
 - If you need to replace the author, school, or course information, edit the title block in `main.tex`.

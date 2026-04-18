@@ -35,12 +35,24 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_choice(name: str, default: str, allowed: tuple[str, ...]) -> str:
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return default
+    normalized = value.strip().lower()
+    if normalized in allowed:
+        return normalized
+    return default
+
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 PATHS = {
     "project_root": PROJECT_ROOT,
     "models_dir": PROJECT_ROOT / "models",
+    "quality_models_dir": PROJECT_ROOT / "models",
     "data_dir": PROJECT_ROOT / "data",
+    "quality_manifests_dir": PROJECT_ROOT / "data" / "quality_manifests",
     "images_dir": PROJECT_ROOT / "data" / "images",
     "processed_dir": PROJECT_ROOT / "data" / "processed",
     "logs_dir": PROJECT_ROOT / "logs",
@@ -138,13 +150,47 @@ OCR_CONFIG = {
 }
 
 
+SCRIPT_CONFIG = {
+    "supported": ("regular", "running"),
+    "labels": {
+        "regular": "楷书",
+        "running": "行书",
+    },
+    "unsupported_labels": ["隶书", "草书", "篆书", "多字作品"],
+}
+SCRIPT_CONFIG["default"] = _env_choice("INKPI_DEFAULT_SCRIPT", "regular", SCRIPT_CONFIG["supported"])
+
+
+def _quality_script_paths(script: str) -> dict[str, Path | str]:
+    return {
+        "script": script,
+        "label": SCRIPT_CONFIG["labels"][script],
+        "artifact_dir": PATHS["quality_models_dir"],
+        "onnx_path": PATHS["quality_models_dir"] / f"quality_scorer_{script}.onnx",
+        "metrics_path": PATHS["quality_models_dir"] / f"quality_scorer_{script}.metrics.json",
+    }
+
+
 QUALITY_SCORER_CONFIG = {
-    "onnx_path": PATHS["models_dir"] / "quality_scorer.onnx",
+    "artifact_root": PATHS["quality_models_dir"],
+    "manifest_root": PATHS["quality_manifests_dir"],
     "input_size": 32,
     "num_threads": 2,
     "score_scale": 100.0,
     "labels": ["bad", "medium", "good"],
     "default_level": "medium",
+    "default_script": SCRIPT_CONFIG["default"],
+    "scripts": {
+        "regular": _quality_script_paths("regular"),
+        "running": _quality_script_paths("running"),
+    },
+    # Keep legacy flat-file aliases until runtime fully switches to script-scoped loading.
+    "onnx_path": PATHS["models_dir"] / "quality_scorer.onnx",
+    "metrics_path": PATHS["models_dir"] / "quality_scorer.metrics.json",
+    "legacy_onnx_path": PATHS["models_dir"] / "quality_scorer.onnx",
+    "legacy_metrics_path": PATHS["models_dir"] / "quality_scorer.metrics.json",
+    "default_script_onnx_path": (PATHS["quality_models_dir"] / f"quality_scorer_{SCRIPT_CONFIG['default']}.onnx"),
+    "default_script_metrics_path": (PATHS["quality_models_dir"] / f"quality_scorer_{SCRIPT_CONFIG['default']}.metrics.json"),
     "feedback_by_level": {
         "good": "自动识别显示这张作品整体完成度很高，适合直接进入展示或归档。",
         "medium": "自动识别显示这张作品已经比较稳定，但仍有继续打磨空间。",
@@ -156,8 +202,17 @@ QUALITY_SCORER_CONFIG = {
 MODEL_CONFIG = {
     "ocr_engine": OCR_CONFIG["engine"],
     "quality_scorer_path": QUALITY_SCORER_CONFIG["onnx_path"],
+    "quality_default_script_path": QUALITY_SCORER_CONFIG["default_script_onnx_path"],
+    "quality_default_script": QUALITY_SCORER_CONFIG["default_script"],
+    "quality_scorer_paths": {
+        script: config["onnx_path"] for script, config in QUALITY_SCORER_CONFIG["scripts"].items()
+    },
+    "quality_scorer_metrics_paths": {
+        script: config["metrics_path"] for script, config in QUALITY_SCORER_CONFIG["scripts"].items()
+    },
     "quality_labels": QUALITY_SCORER_CONFIG["labels"],
     "input_size": QUALITY_SCORER_CONFIG["input_size"],
+    "supported_scripts": list(SCRIPT_CONFIG["supported"]),
 }
 
 

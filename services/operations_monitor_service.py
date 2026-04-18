@@ -216,6 +216,7 @@ class OperationsMonitorService:
         from services.local_ocr_service import local_ocr_service
         from services.quality_scorer_service import quality_scorer_service
 
+        scorer_status = quality_scorer_service.get_model_status()
         return {
             "ocr": {
                 "local_ready": bool(getattr(local_ocr_service, "_available", False)),
@@ -227,7 +228,7 @@ class OperationsMonitorService:
             },
             "quality_scorer": {
                 "ready": bool(quality_scorer_service.available),
-                "model_path": str(quality_scorer_service.model_path),
+                "models": scorer_status,
                 "input_size": int(quality_scorer_service.input_size),
                 "labels": quality_scorer_service.labels,
             },
@@ -331,6 +332,8 @@ class OperationsMonitorService:
                 {
                     "id": item.id,
                     "character_name": item.character_name,
+                    "script": item.get_script(),
+                    "script_label": item.get_script_label(),
                     "total_score": item.total_score,
                     "quality_level": item.quality_level,
                     "timestamp": item.timestamp.isoformat() if item.timestamp else None,

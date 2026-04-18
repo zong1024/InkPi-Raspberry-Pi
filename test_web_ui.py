@@ -16,6 +16,7 @@ def build_result(record_id: int = 1) -> EvaluationResult:
         total_score=86,
         feedback="整体完成度不错，可以继续稳定结构。",
         timestamp=datetime(2026, 4, 1, 10, 30, 0),
+        script="running",
         character_name="永",
         ocr_confidence=0.95,
         quality_level="good",
@@ -67,6 +68,7 @@ class WebUiSmokeTest(unittest.TestCase):
             payload = response.get_json()
             self.assertIn("history", payload)
             self.assertIn("stats", payload)
+            self.assertEqual(payload["history"][0]["script"], "running")
             self.assertEqual(payload["history"][0]["dimension_scores"]["integrity"], 90)
             self.assertNotIn("score_debug", payload["history"][0])
             response.close()
@@ -79,6 +81,7 @@ class WebUiSmokeTest(unittest.TestCase):
             payload = response.get_json()
             self.assertIn("items", payload)
             self.assertIsInstance(payload["items"], list)
+            self.assertEqual(payload["items"][0]["script_label"], "行书")
             self.assertEqual(payload["items"][0]["dimension_scores"]["structure"], 84)
             self.assertNotIn("score_debug", payload["items"][0])
             response.close()
@@ -104,6 +107,8 @@ class WebUiSmokeTest(unittest.TestCase):
         self.assertIn("runtime_logs", payload)
         self.assertIn("host", payload["snapshot"])
         self.assertIn("models", payload["snapshot"])
+        self.assertIn("regular", payload["snapshot"]["models"]["quality_scorer"]["models"])
+        self.assertIn("running", payload["snapshot"]["models"]["quality_scorer"]["models"])
         self.assertIn("hardware", payload["snapshot"])
         response.close()
 

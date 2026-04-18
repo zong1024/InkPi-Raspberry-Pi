@@ -2,6 +2,13 @@ const api = require('../../utils/api');
 const auth = require('../../utils/auth');
 const { POLL_INTERVAL, RECENT_PRACTICE_LIMIT } = require('../../config');
 const { buildGrowthInsights } = require('../../utils/practice');
+const {
+  FORMAL_SUPPORT_TEXT,
+  SCRIPT_OPTIONS,
+  SCRIPT_VALUES,
+  UNSUPPORTED_SCOPE_TEXT,
+  filterResultsByScript,
+} = require('../../utils/script');
 
 const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天'];
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
@@ -60,6 +67,17 @@ function normalizeSummary(summary = {}) {
     barHeight: item.average_score ? Math.max(12, Math.round(Number(item.average_score))) : 12,
   }));
 
+  let progressLabel = '等待最近两周的样本对比';
+  if (progressDelta !== null) {
+    if (progressDelta > 0) {
+      progressLabel = '较前一周继续提升';
+    } else if (progressDelta < 0) {
+      progressLabel = '较前一周有所回落';
+    } else {
+      progressLabel = '最近两周保持稳定';
+    }
+  }
+
   return {
     total,
     averageText: formatNumber(summary.average_score),
@@ -69,14 +87,7 @@ function normalizeSummary(summary = {}) {
     excellentRateText: formatPercent(summary.excellent_rate),
     progressText:
       progressDelta === null ? '--' : `${progressDelta > 0 ? '+' : ''}${progressDelta.toFixed(1)} 分`,
-    progressLabel:
-      progressDelta === null
-        ? '等待最近两周的样本对比'
-        : progressDelta > 0
-          ? '较前一周继续提升'
-          : progressDelta < 0
-            ? '较前一周有所回落'
-            : '最近两周保持稳定',
+    progressLabel,
     progressTrend: summary.progress_trend || 'flat',
     scoreBands,
     dimensions,
@@ -105,12 +116,15 @@ function normalizeMethodology(payload = {}) {
 
   return {
     framework: {
-      projectPosition: framework.project_position || '面向单字书法练习的辅助评测系统',
-      currentScope: framework.current_scope || '当前阶段聚焦楷书单字与初学者练习。',
-      boundaryNote: framework.boundary_note || '四维分用于解释，不替代教师终评。',
+      projectPosition: '面向楷书 + 行书单字练习的辅助评测系统',
+      currentScope: '当前版本正式支持楷书、行书单字；其他书体暂不支持。',
+      boundaryNote:
+        '四维分用于解释，不替代教师终评；楷书和行书之外的书体当前不在正式支持范围内。',
+      supportScopeText: FORMAL_SUPPORT_TEXT,
+      unsupportedNote: UNSUPPORTED_SCOPE_TEXT,
       targetUsers: framework.target_users || [],
-      currentScripts: framework.current_scripts || [],
-      roadmapScripts: framework.roadmap_scripts || [],
+      currentScripts: ['楷书', '行书'],
+      roadmapScripts: [],
     },
     validation: {
       statusLabel: snapshot.status_label || '仍处于样本积累阶段',
@@ -128,7 +142,7 @@ function normalizeMethodology(payload = {}) {
       expertReviewTarget: snapshot.expert_review_target || plan.expert_review_target || 0,
       trialUserTarget: snapshot.trial_user_target || plan.trial_user_target || 0,
       nextMilestone: snapshot.next_milestone || plan.next_milestone || '',
-      currentStage: plan.current_stage || 'Stage 1 / 楷书单字辅助评测',
+      currentStage: 'Stage 1 / 楷书 + 行书正式支持',
       reviewPolicy: plan.manual_review_policy || [],
     },
     references,
@@ -150,10 +164,14 @@ Page({
     practiceSteps: EMPTY_GROWTH.sessionPlan.actions.slice(0, 2),
     methodology: normalizeMethodology(),
     dateOptions: DATE_OPTIONS,
+    scriptOptions: SCRIPT_OPTIONS,
     deviceOptions: ['全部设备'],
     deviceValues: ['all'],
+    supportScopeText: FORMAL_SUPPORT_TEXT,
+    activeScriptLabel: SCRIPT_OPTIONS[0],
     filters: {
       dateIndex: 0,
+      scriptIndex: 0,
       deviceIndex: 0,
     },
   },
@@ -197,6 +215,7 @@ Page({
     const { filters, deviceValues } = this.data;
     return {
       date_range: DATE_VALUES[filters.dateIndex] || 'all',
+      script: SCRIPT_VALUES[filters.scriptIndex] || 'all',
       device_name: deviceValues[filters.deviceIndex] || 'all',
     };
   },
@@ -216,12 +235,15 @@ Page({
 
       const summary = normalizeSummary(summaryPayload.summary || {});
       const methodology = normalizeMethodology(methodologyPayload);
-      const growthInsights = buildGrowthInsights(historyPayload.items || []);
+      const scriptValue = params.script || 'all';
+      const growthItems = filterResultsByScript((historyPayload && historyPayload.items) || [], scriptValue);
+      const growthInsights = buildGrowthInsights(growthItems);
       const availableDevices = (summaryPayload.summary && summaryPayload.summary.available_devices) || [];
       const deviceOptions = ['全部设备', ...availableDevices];
       const deviceValues = ['all', ...availableDevices];
       const currentDevice = this.data.deviceValues[this.data.filters.deviceIndex] || 'all';
       const nextDeviceIndex = Math.max(deviceValues.indexOf(currentDevice), 0);
+      const nextScriptLabel = SCRIPT_OPTIONS[this.data.filters.scriptIndex] || SCRIPT_OPTIONS[0];
 
       this.setData({
         summary,
@@ -235,6 +257,7 @@ Page({
         lastUpdated: this.formatTime(new Date()),
         deviceOptions,
         deviceValues,
+        activeScriptLabel: nextScriptLabel,
         filters: {
           ...this.data.filters,
           deviceIndex: nextDeviceIndex,
@@ -261,6 +284,18 @@ Page({
         ...this.data.filters,
         dateIndex: Number(event.detail.value),
       },
+    });
+    this.loadStats();
+  },
+
+  onScriptChange(event) {
+    const scriptIndex = Number(event.detail.value);
+    this.setData({
+      filters: {
+        ...this.data.filters,
+        scriptIndex,
+      },
+      activeScriptLabel: SCRIPT_OPTIONS[scriptIndex] || SCRIPT_OPTIONS[0],
     });
     this.loadStats();
   },

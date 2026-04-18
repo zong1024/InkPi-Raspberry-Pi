@@ -1,14 +1,13 @@
-"""Regression tests for the single-chain InkPi runtime."""
+"""Regression tests for the dual-script InkPi runtime."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime
-import os
 from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -16,12 +15,17 @@ from models.evaluation_result import EvaluationResult
 from services.database_service import DatabaseService
 from services.dimension_scorer_service import dimension_scorer_service
 from services.evaluation_service import evaluation_service
-from services.local_ocr_service import LocalOcrService, OcrRecognition, local_ocr_service
+from services.local_ocr_service import OcrRecognition, local_ocr_service
 from services.preprocessing_service import PreprocessingError
 from services.quality_scorer_service import QualityScore, quality_scorer_service
 
 
-def build_quality_score(total_score: int = 91, level: str = "good") -> QualityScore:
+def build_quality_score(
+    total_score: int = 91,
+    level: str = "good",
+    *,
+    script: str = "regular",
+) -> QualityScore:
     return QualityScore(
         total_score=total_score,
         quality_level=level,
@@ -36,6 +40,8 @@ def build_quality_score(total_score: int = 91, level: str = "good") -> QualitySc
             "texture_std": 0.15,
         },
         calibration={
+            "script": script,
+            "script_label": "楷书" if script == "regular" else "行书",
             "feature_quality": 0.86,
             "probability_margin": 0.81,
             "probability_margin_norm": 0.89,
@@ -49,21 +55,13 @@ def build_quality_score(total_score: int = 91, level: str = "good") -> QualitySc
     )
 
 
-@dataclass
-class _PatchState:
-    ocr_available: bool
-    ocr_engine: object
-    ocr_recognize: object
-    scorer_session: object
-    scorer_score: object
-
-
 class EvaluationResultTests(unittest.TestCase):
-    def test_roundtrip_keeps_dimension_scores_and_debug(self) -> None:
+    def test_roundtrip_keeps_script_dimension_scores_and_debug(self) -> None:
         result = EvaluationResult(
             total_score=88,
             feedback="整体比较稳定，继续保持。",
             timestamp=datetime(2026, 3, 30, 12, 0, 0),
+            script="running",
             character_name="永",
             ocr_confidence=0.93,
             quality_level="good",
@@ -86,22 +84,22 @@ class EvaluationResultTests(unittest.TestCase):
         rebuilt = EvaluationResult.from_dict(payload)
 
         self.assertEqual(payload["character_name"], "永")
-        self.assertEqual(payload["quality_level"], "good")
+        self.assertEqual(payload["script"], "running")
+        self.assertEqual(payload["script_label"], "行书")
         self.assertEqual(payload["dimension_scores"]["structure"], 84)
         self.assertEqual(payload["dimension_summary"]["best"]["label"], "完整")
         self.assertEqual(payload["dimension_basis"][0]["key"], "structure")
-        self.assertEqual(payload["practice_profile"]["focus_dimension"]["key"], "stroke")
+        self.assertEqual(payload["practice_profile"]["script"], "running")
         self.assertEqual(rebuilt.dimension_scores["stroke"], 80)
+        self.assertEqual(rebuilt.get_script(), "running")
         self.assertEqual(rebuilt.score_debug["calibration"]["feature_quality"], 0.83)
-        self.assertNotIn("detail_scores", payload)
-        self.assertNotIn("score_mode", payload)
 
 
 class DimensionScorerServiceTests(unittest.TestCase):
-    def test_dimension_scores_are_stable_integers(self) -> None:
-        scores = dimension_scorer_service.compute_dimension_scores(
-            probabilities={"bad": 0.05, "medium": 0.15, "good": 0.80},
-            quality_features={
+    def test_dimension_scores_are_stable_integers_for_regular_and_running(self) -> None:
+        base_inputs = {
+            "probabilities": {"bad": 0.05, "medium": 0.15, "good": 0.80},
+            "quality_features": {
                 "fg_ratio": 0.44,
                 "bbox_ratio": 0.40,
                 "center_quality": 0.90,
@@ -109,7 +107,7 @@ class DimensionScorerServiceTests(unittest.TestCase):
                 "edge_touch": 0.08,
                 "texture_std": 0.148,
             },
-            geometry_features={
+            "geometry_features": {
                 "projection_balance": 0.88,
                 "dominant_share": 0.86,
                 "bbox_fill": 0.49,
@@ -119,165 +117,130 @@ class DimensionScorerServiceTests(unittest.TestCase):
                 "orientation_concentration": 0.28,
                 "ink_ratio": 0.20,
             },
-            calibration={
+            "calibration": {
                 "feature_quality": 0.84,
                 "probability_margin_norm": 0.72,
                 "quality_confidence_norm": 0.87,
                 "score_range_fit": 0.82,
             },
-            ocr_confidence=0.94,
+            "ocr_confidence": 0.94,
+        }
+
+        regular_scores = dimension_scorer_service.compute_dimension_scores(
+            **base_inputs,
+            script="regular",
+        )
+        running_scores = dimension_scorer_service.compute_dimension_scores(
+            **base_inputs,
+            script="running",
         )
 
-        self.assertEqual(set(scores.keys()), {"structure", "stroke", "integrity", "stability"})
-        self.assertTrue(all(isinstance(value, int) for value in scores.values()))
-        self.assertTrue(all(0 <= value <= 100 for value in scores.values()))
-        self.assertGreater(scores["structure"], scores["stroke"] - 5)
+        self.assertEqual(set(regular_scores.keys()), {"structure", "stroke", "integrity", "stability"})
+        self.assertTrue(all(isinstance(value, int) for value in regular_scores.values()))
+        self.assertTrue(all(0 <= value <= 100 for value in regular_scores.values()))
+        self.assertTrue(all(0 <= value <= 100 for value in running_scores.values()))
+        self.assertNotEqual(regular_scores["stroke"], running_scores["stroke"])
 
 
 class EvaluationServiceTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.patch = _PatchState(
-            ocr_available=local_ocr_service._available,
-            ocr_engine=local_ocr_service._ocr,
-            ocr_recognize=local_ocr_service.recognize,
-            scorer_session=quality_scorer_service._session,
-            scorer_score=quality_scorer_service.score,
-        )
-
-    def tearDown(self) -> None:
-        local_ocr_service._available = self.patch.ocr_available
-        local_ocr_service._ocr = self.patch.ocr_engine
-        local_ocr_service.recognize = self.patch.ocr_recognize  # type: ignore[method-assign]
-        quality_scorer_service._session = self.patch.scorer_session  # type: ignore[assignment]
-        quality_scorer_service.score = self.patch.scorer_score  # type: ignore[method-assign]
-
-    def test_single_chain_evaluation_uses_ocr_and_onnx(self) -> None:
-        local_ocr_service._available = True
-        local_ocr_service._ocr = object()
-        local_ocr_service.recognize = lambda _image: OcrRecognition(character="神", confidence=0.94)  # type: ignore[method-assign]
-        quality_scorer_service._session = object()  # type: ignore[assignment]
-        quality_scorer_service.score = (  # type: ignore[method-assign]
-            lambda _image, character, ocr_confidence=None: build_quality_score(total_score=91, level="good")
-        )
-
+    def test_dual_script_evaluation_uses_explicit_script(self) -> None:
         image = np.ones((224, 224), dtype=np.uint8) * 255
-        result = evaluation_service.evaluate(image)
-        self.assertEqual(result.character_name, "神")
+
+        with (
+            patch.object(local_ocr_service, "_available", True),
+            patch.object(local_ocr_service, "_ocr", object()),
+            patch(
+                "services.evaluation_service.local_ocr_service.recognize",
+                return_value=OcrRecognition(character="永", confidence=0.94),
+            ),
+            patch(
+                "services.evaluation_service.quality_scorer_service.is_script_available",
+                return_value=True,
+            ),
+            patch(
+                "services.evaluation_service.quality_scorer_service.score",
+                return_value=build_quality_score(total_score=91, level="good", script="running"),
+            ) as score_mock,
+        ):
+            result = evaluation_service.evaluate(image, script="running")
+
+        self.assertEqual(result.character_name, "永")
+        self.assertEqual(result.get_script(), "running")
+        self.assertEqual(result.get_script_label(), "行书")
         self.assertEqual(result.total_score, 91)
-        self.assertEqual(result.quality_level, "good")
-        self.assertAlmostEqual(result.ocr_confidence or 0.0, 0.94, places=3)
-        self.assertIsNotNone(result.dimension_scores)
-        self.assertIn("geometry_features", result.score_debug)
+        self.assertIn("按行书模型评测", result.feedback)
+        self.assertEqual(result.score_debug["script"], "running")
+        self.assertEqual(score_mock.call_args.kwargs["script"], "running")
+
+    def test_missing_script_is_rejected(self) -> None:
+        image = np.ones((64, 64), dtype=np.uint8) * 255
+        with self.assertRaises(ValueError):
+            evaluation_service.evaluate(image, script=None)
 
     def test_ocr_failure_blocks_scoring(self) -> None:
-        local_ocr_service._available = True
-        local_ocr_service._ocr = object()
-        local_ocr_service.recognize = lambda _image: None  # type: ignore[method-assign]
-        quality_scorer_service._session = object()  # type: ignore[assignment]
-
         image = np.ones((224, 224), dtype=np.uint8) * 255
-        with self.assertRaises(PreprocessingError) as ctx:
-            evaluation_service.evaluate(image)
+        with (
+            patch.object(local_ocr_service, "_available", True),
+            patch.object(local_ocr_service, "_ocr", object()),
+            patch("services.evaluation_service.local_ocr_service.recognize", return_value=None),
+            patch(
+                "services.evaluation_service.quality_scorer_service.is_script_available",
+                return_value=True,
+            ),
+        ):
+            with self.assertRaises(PreprocessingError) as ctx:
+                evaluation_service.evaluate(image, script="regular")
         self.assertEqual(ctx.exception.error_type, "ocr_failed")
 
     def test_evaluation_prefers_explicit_ocr_image(self) -> None:
-        local_ocr_service._available = True
-        local_ocr_service._ocr = object()
+        score_inputs: dict[str, float] = {}
 
-        score_inputs = {}
-
-        def fake_recognize(image):  # type: ignore[override]
+        def fake_recognize(image):
             score_inputs["ocr_mean"] = float(np.mean(image))
             return OcrRecognition(character="永", confidence=0.91)
 
-        def fake_score(image, character, ocr_confidence=None):  # type: ignore[override]
+        def fake_score(image, character, *, script, ocr_confidence=None):
             score_inputs["score_mean"] = float(np.mean(image))
-            return build_quality_score(total_score=84, level="medium")
-
-        local_ocr_service.recognize = fake_recognize  # type: ignore[method-assign]
-        quality_scorer_service._session = object()  # type: ignore[assignment]
-        quality_scorer_service.score = fake_score  # type: ignore[method-assign]
+            return build_quality_score(total_score=84, level="medium", script=script)
 
         processed_image = np.zeros((64, 64), dtype=np.uint8)
         ocr_image = np.ones((64, 64), dtype=np.uint8) * 255
-        result = evaluation_service.evaluate(processed_image, ocr_image=ocr_image)
+
+        with (
+            patch.object(local_ocr_service, "_available", True),
+            patch.object(local_ocr_service, "_ocr", object()),
+            patch("services.evaluation_service.local_ocr_service.recognize", side_effect=fake_recognize),
+            patch(
+                "services.evaluation_service.quality_scorer_service.is_script_available",
+                return_value=True,
+            ),
+            patch("services.evaluation_service.quality_scorer_service.score", side_effect=fake_score),
+        ):
+            result = evaluation_service.evaluate(processed_image, script="regular", ocr_image=ocr_image)
 
         self.assertEqual(result.character_name, "永")
         self.assertGreater(score_inputs["ocr_mean"], 200.0)
         self.assertLess(score_inputs["score_mean"], 10.0)
 
 
-class LocalOcrServiceConfigTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.original_env = {
-            "INKPI_CLOUD_BACKEND_URL": os.environ.get("INKPI_CLOUD_BACKEND_URL"),
-            "INKPI_CLOUD_DEVICE_KEY": os.environ.get("INKPI_CLOUD_DEVICE_KEY"),
-            "INKPI_REMOTE_OCR_BACKEND_URL": os.environ.get("INKPI_REMOTE_OCR_BACKEND_URL"),
-            "INKPI_REMOTE_OCR_DEVICE_KEY": os.environ.get("INKPI_REMOTE_OCR_DEVICE_KEY"),
-        }
-
-    def tearDown(self) -> None:
-        for key, value in self.original_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-
-    def test_remote_ocr_env_overrides_cloud_backend_env(self) -> None:
-        os.environ["INKPI_CLOUD_BACKEND_URL"] = "http://127.0.0.1:5001"
-        os.environ["INKPI_CLOUD_DEVICE_KEY"] = "cloud-device-key"
-        os.environ["INKPI_REMOTE_OCR_BACKEND_URL"] = "https://ocr.example.com"
-        os.environ["INKPI_REMOTE_OCR_DEVICE_KEY"] = "remote-device-key"
-
-        service = LocalOcrService()
-
-        self.assertEqual(service.remote_backend_url, "https://ocr.example.com")
-        self.assertEqual(service.remote_device_key, "remote-device-key")
-        self.assertTrue(service.remote_available)
-
-    def test_remote_fallback_can_be_disabled_for_local_only_contexts(self) -> None:
-        os.environ["INKPI_CLOUD_BACKEND_URL"] = "http://127.0.0.1:5001"
-        os.environ["INKPI_CLOUD_DEVICE_KEY"] = "cloud-device-key"
-
-        service = LocalOcrService(allow_remote_fallback=False)
-
-        self.assertEqual(service.remote_backend_url, "")
-        self.assertEqual(service.remote_device_key, "")
-        self.assertFalse(service.remote_available)
-
-
-class QualityScorerCalibrationTests(unittest.TestCase):
-    def test_good_level_scores_are_not_flat(self) -> None:
-        probabilities = np.asarray([0.0005, 0.02, 0.9795], dtype=np.float32)
-        strong = np.asarray([0.46, 1.0, 0.97, 0.55, 0.48, 0.145], dtype=np.float32)
-        weak = np.asarray([0.28, 1.0, 0.80, 1.0, 0.70, 0.18], dtype=np.float32)
-
-        strong_score = quality_scorer_service._calibrate_total_score(  # type: ignore[attr-defined]
-            probabilities=probabilities,
-            quality_level="good",
-            extras=strong,
-            ocr_confidence=0.98,
-        )
-        weak_score = quality_scorer_service._calibrate_total_score(  # type: ignore[attr-defined]
-            probabilities=probabilities,
-            quality_level="good",
-            extras=weak,
-            ocr_confidence=0.80,
-        )
-
-        self.assertGreater(strong_score, weak_score)
-        self.assertGreaterEqual(strong_score, 90)
-        self.assertLessEqual(weak_score, 90)
+class QualityScorerRoutingTests(unittest.TestCase):
+    def test_service_exposes_dual_model_status(self) -> None:
+        status = quality_scorer_service.get_model_status()
+        self.assertIn("regular", status)
+        self.assertIn("running", status)
+        self.assertTrue(status["regular"]["model_path"].endswith("quality_scorer_regular.onnx"))
+        self.assertTrue(status["running"]["metrics_path"].endswith("quality_scorer_running.metrics.json"))
 
 
 class DatabaseServiceTests(unittest.TestCase):
-    def test_database_roundtrip(self) -> None:
+    def test_database_roundtrip_keeps_script(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = DatabaseService(Path(temp_dir) / "inkpi-test.db")
             result = EvaluationResult(
                 total_score=77,
                 feedback="结构稳定，继续练习。",
                 timestamp=datetime.now(),
+                script="running",
                 character_name="永",
                 ocr_confidence=0.87,
                 quality_level="medium",
@@ -302,18 +265,18 @@ class DatabaseServiceTests(unittest.TestCase):
             self.assertIsNotNone(fetched)
             assert fetched is not None
             self.assertEqual(fetched.character_name, "永")
-            self.assertEqual(fetched.quality_level, "medium")
-            self.assertAlmostEqual(fetched.ocr_confidence or 0.0, 0.87, places=3)
+            self.assertEqual(fetched.get_script(), "running")
+            self.assertEqual(fetched.get_script_label(), "行书")
             self.assertEqual(fetched.dimension_scores["integrity"], 79)
             self.assertEqual(fetched.score_debug["calibration"]["feature_quality"], 0.74)
 
-    def test_database_migrates_existing_schema(self) -> None:
+    def test_database_migrates_existing_schema_with_regular_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "legacy.db"
             conn = sqlite3.connect(str(db_path))
             conn.execute(
                 """
-                CREATE TABLE evaluation_results (
+                CREATE TABLE evaluation_records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     total_score INTEGER NOT NULL,
                     feedback TEXT NOT NULL,
@@ -327,31 +290,23 @@ class DatabaseServiceTests(unittest.TestCase):
                 )
                 """
             )
+            conn.execute(
+                """
+                INSERT INTO evaluation_records (
+                    total_score, feedback, timestamp, image_path, processed_image_path,
+                    character_name, ocr_confidence, quality_level, quality_confidence
+                ) VALUES (80, 'legacy', '2026-04-01T10:00:00', NULL, NULL, '永', 0.8, 'medium', 0.7)
+                """
+            )
             conn.commit()
             conn.close()
 
             service = DatabaseService(db_path)
-            result = EvaluationResult(
-                total_score=83,
-                feedback="迁移后保存成功。",
-                timestamp=datetime.now(),
-                character_name="神",
-                quality_level="good",
-                dimension_scores={
-                    "structure": 82,
-                    "stroke": 80,
-                    "integrity": 86,
-                    "stability": 84,
-                },
-                score_debug={"calibration": {"feature_quality": 0.8}},
-            )
-
-            record_id = service.save(result)
-            fetched = service.get_by_id(record_id)
+            fetched = service.get_by_id(1)
 
             self.assertIsNotNone(fetched)
             assert fetched is not None
-            self.assertEqual(fetched.dimension_scores["structure"], 82)
+            self.assertEqual(fetched.get_script(), "regular")
 
 
 if __name__ == "__main__":

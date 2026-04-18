@@ -1,10 +1,11 @@
-"""Single-image ONNX quality scorer for InkPi."""
+"""Dual-script ONNX quality scorer for InkPi."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -15,7 +16,11 @@ except Exception as exc:  # noqa: BLE001
     ort = None  # type: ignore[assignment]
     _ORT_IMPORT_ERROR = exc
 
-from config import QUALITY_SCORER_CONFIG
+from config import QUALITY_SCORER_CONFIG, SCRIPT_CONFIG
+from models.evaluation_framework import get_script_label, normalize_script
+
+
+DEFAULT_SCRIPT = str(SCRIPT_CONFIG["default"])
 
 
 @dataclass
@@ -31,7 +36,7 @@ class QualityScore:
 
 
 class QualityScorerService:
-    """Load and run the new single-chain ONNX scoring model."""
+    """Load and run dual-script ONNX scoring models."""
 
     QUALITY_FEATURE_NAMES = (
         "fg_ratio",
@@ -42,71 +47,143 @@ class QualityScorerService:
         "texture_std",
     )
 
-    SCORE_RANGES = {
-        "bad": (44.0, 68.0),
-        "medium": (66.0, 84.0),
-        "good": (82.0, 98.0),
+    SCRIPT_SCORE_RANGES = {
+        "regular": {
+            "bad": (44.0, 68.0),
+            "medium": (66.0, 84.0),
+            "good": (82.0, 98.0),
+        },
+        "running": {
+            "bad": (42.0, 68.0),
+            "medium": (64.0, 84.0),
+            "good": (80.0, 97.0),
+        },
+    }
+
+    SCRIPT_DIMENSION_TARGETS = {
+        "regular": {
+            "fg_ratio": (0.46, 0.24),
+            "center_quality": (0.72, 0.99),
+            "component_norm": (0.58, 0.50),
+            "edge_touch": (0.48, 0.30),
+            "texture_std": (0.145, 0.055),
+        },
+        "running": {
+            "fg_ratio": (0.42, 0.26),
+            "center_quality": (0.66, 0.98),
+            "component_norm": (0.48, 0.50),
+            "edge_touch": (0.42, 0.36),
+            "texture_std": (0.162, 0.075),
+        },
     }
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
         self.config = QUALITY_SCORER_CONFIG
-        self.model_path = Path(self.config["onnx_path"])
         self.input_size = int(self.config.get("input_size", 32))
         self.labels = list(self.config.get("labels", ["bad", "medium", "good"]))
         self.score_scale = float(self.config.get("score_scale", 100.0))
         self.default_level = str(self.config.get("default_level", "medium"))
-        self._session = None
-        self._input_names: list[str] = []
-        self._input_shapes: dict[str, list[int | str | None]] = {}
-        self._output_names: list[str] = []
-        self._load_session()
+        self.default_script = normalize_script(self.config.get("default_script", DEFAULT_SCRIPT))
+        self.script_configs = {
+            normalize_script(script): dict(config)
+            for script, config in dict(self.config.get("scripts", {})).items()
+        }
+        self._sessions: dict[str, Any] = {}
+        self._input_names: dict[str, list[str]] = {}
+        self._input_shapes: dict[str, dict[str, list[int | str | None]]] = {}
+        self._output_names: dict[str, list[str]] = {}
+        self._load_sessions()
 
-    def _load_session(self) -> None:
+    def _load_sessions(self) -> None:
         if ort is None:
             self.logger.warning("onnxruntime is unavailable on this device: %s", _ORT_IMPORT_ERROR)
             return
-        if not self.model_path.exists():
-            self.logger.warning("Quality scorer model is missing: %s", self.model_path)
-            return
 
-        options = ort.SessionOptions()
-        options.intra_op_num_threads = int(self.config.get("num_threads", 2))
-        options.inter_op_num_threads = 1
-        try:
-            self._session = ort.InferenceSession(
-                str(self.model_path),
-                sess_options=options,
-                providers=["CPUExecutionProvider"],
-            )
-            self._input_names = [item.name for item in self._session.get_inputs()]
-            self._input_shapes = {item.name: list(item.shape) for item in self._session.get_inputs()}
-            self._output_names = [item.name for item in self._session.get_outputs()]
-        except Exception as exc:  # noqa: BLE001
-            self.logger.warning("Failed to load quality scorer ONNX: %s", exc)
-            self._session = None
-            self._input_names = []
-            self._input_shapes = {}
-            self._output_names = []
+        for script, config in self.script_configs.items():
+            model_path = Path(config["onnx_path"])
+            if not model_path.exists():
+                self.logger.warning("Quality scorer model is missing for %s: %s", script, model_path)
+                continue
+
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = int(self.config.get("num_threads", 2))
+            options.inter_op_num_threads = 1
+            try:
+                session = ort.InferenceSession(
+                    str(model_path),
+                    sess_options=options,
+                    providers=["CPUExecutionProvider"],
+                )
+                self._sessions[script] = session
+                self._input_names[script] = [item.name for item in session.get_inputs()]
+                self._input_shapes[script] = {
+                    item.name: list(item.shape) for item in session.get_inputs()
+                }
+                self._output_names[script] = [item.name for item in session.get_outputs()]
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning("Failed to load quality scorer ONNX for %s: %s", script, exc)
 
     @property
     def available(self) -> bool:
-        return self._session is not None
+        return bool(self._sessions)
 
-    def score(self, image: np.ndarray, character: str, ocr_confidence: float | None = None) -> QualityScore:
+    @property
+    def model_path(self) -> Path:
+        return self.get_model_path(self.default_script)
+
+    def get_model_path(self, script: str | None) -> Path:
+        normalized_script = normalize_script(script)
+        config = self.script_configs.get(normalized_script) or self.script_configs[self.default_script]
+        return Path(config["onnx_path"])
+
+    def get_metrics_path(self, script: str | None) -> Path:
+        normalized_script = normalize_script(script)
+        config = self.script_configs.get(normalized_script) or self.script_configs[self.default_script]
+        return Path(config["metrics_path"])
+
+    def is_script_available(self, script: str | None) -> bool:
+        return normalize_script(script) in self._sessions
+
+    def get_model_status(self) -> dict[str, dict[str, Any]]:
+        status = {}
+        for script, config in self.script_configs.items():
+            status[script] = {
+                "script": script,
+                "script_label": get_script_label(script),
+                "ready": script in self._sessions,
+                "model_path": str(config["onnx_path"]),
+                "metrics_path": str(config["metrics_path"]),
+                "input_size": self.input_size,
+                "labels": list(self.labels),
+            }
+        return status
+
+    def score(
+        self,
+        image: np.ndarray,
+        character: str,
+        *,
+        script: str | None = None,
+        ocr_confidence: float | None = None,
+    ) -> QualityScore:
         """Run the ONNX scorer and return a stable total score and level."""
 
-        if self._session is None:
-            raise RuntimeError(f"Quality scorer ONNX model missing: {self.model_path}")
+        normalized_script = normalize_script(script)
+        session = self._sessions.get(normalized_script)
+        if session is None:
+            raise RuntimeError(
+                f"script_model_unavailable:{normalized_script}:{self.get_model_path(normalized_script)}"
+            )
 
         roi = self._prepare_image(image)
         char_code = np.asarray([[self._encode_character(character)]], dtype=np.float32)
         ocr_conf = np.asarray([[float(ocr_confidence or 0.0)]], dtype=np.float32)
 
-        feed = self._build_feed(image, roi, char_code, ocr_conf)
+        feed = self._build_feed(normalized_script, image, roi, char_code, ocr_conf)
 
-        outputs = self._session.run(None, feed)
-        by_name = dict(zip(self._output_names, outputs))
+        outputs = session.run(None, feed)
+        by_name = dict(zip(self._output_names[normalized_script], outputs))
 
         raw_score = None
         probabilities = None
@@ -140,6 +217,7 @@ class QualityScorerService:
             quality_level=quality_level,
             extras=extras,
             ocr_confidence=float(ocr_confidence or 0.0),
+            script=normalized_script,
         )
 
         if raw_score is None:
@@ -156,7 +234,7 @@ class QualityScorerService:
             calibration["raw_score"] = float(raw_score)
 
         calibration["final_score"] = float(total_score)
-        calibration["score_range_fit"] = self._score_range_fit(total_score, quality_level)
+        calibration["score_range_fit"] = self._score_range_fit(total_score, quality_level, script=normalized_script)
 
         return QualityScore(
             total_score=total_score,
@@ -166,19 +244,25 @@ class QualityScorerService:
                 label: float(probabilities[index]) for index, label in enumerate(self.labels[: len(probabilities)])
             },
             quality_features=quality_features,
-            calibration={key: float(value) if isinstance(value, (int, float, np.floating)) else str(value) for key, value in calibration.items()},
+            calibration={
+                key: float(value) if isinstance(value, (int, float, np.floating)) else str(value)
+                for key, value in calibration.items()
+            },
         )
 
     def _build_feed(
         self,
+        script: str,
         image: np.ndarray,
         roi: np.ndarray,
         char_code: np.ndarray,
         ocr_conf: np.ndarray,
     ) -> dict[str, np.ndarray]:
-        if len(self._input_names) == 1:
-            name = self._input_names[0]
-            shape = self._input_shapes.get(name, [])
+        input_names = self._input_names[script]
+        input_shapes = self._input_shapes[script]
+        if len(input_names) == 1:
+            name = input_names[0]
+            shape = input_shapes.get(name, [])
             if len(shape) == 2:
                 flat = roi.reshape(1, -1)
                 extras = self._extract_quality_features(image)
@@ -196,7 +280,7 @@ class QualityScorerService:
                 return {name: np.concatenate(features, axis=1).astype(np.float32)}
 
         feed = {}
-        for name in self._input_names:
+        for name in input_names:
             lowered = name.lower()
             if lowered in {"roi", "image", "input", "input_image"}:
                 feed[name] = roi
@@ -275,12 +359,15 @@ class QualityScorerService:
         quality_level: str,
         extras: np.ndarray,
         ocr_confidence: float,
+        *,
+        script: str | None = None,
     ) -> int:
         details = self._build_calibration_snapshot(
             probabilities=probabilities,
             quality_level=quality_level,
             extras=extras,
             ocr_confidence=ocr_confidence,
+            script=normalize_script(script),
         )
         return int(details["calibrated_score"])
 
@@ -290,7 +377,11 @@ class QualityScorerService:
         quality_level: str,
         extras: np.ndarray,
         ocr_confidence: float,
-    ) -> dict[str, float]:
+        *,
+        script: str,
+    ) -> dict[str, float | str]:
+        normalized_script = normalize_script(script)
+        targets = self.SCRIPT_DIMENSION_TARGETS[normalized_script]
         extras = np.asarray(extras, dtype=np.float32).reshape(-1)
         fg_ratio, _bbox_ratio, center_quality, component_norm, edge_touch, texture_std = [float(x) for x in extras[:6]]
         prob_values = np.asarray(probabilities, dtype=np.float32).reshape(-1)
@@ -305,11 +396,30 @@ class QualityScorerService:
         margin = max(0.0, best - second)
 
         feature_quality = (
-            0.28 * self._target_band_score(fg_ratio, target=0.46, tolerance=0.24)
-            + 0.24 * self._normalize_band(center_quality, low=0.72, high=0.99)
-            + 0.16 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
-            + 0.16 * self._target_band_score(edge_touch, target=0.48, tolerance=0.30)
-            + 0.16 * self._target_band_score(texture_std, target=0.145, tolerance=0.055)
+            0.28 * self._target_band_score(fg_ratio, target=targets["fg_ratio"][0], tolerance=targets["fg_ratio"][1])
+            + 0.24 * self._normalize_band(
+                center_quality,
+                low=targets["center_quality"][0],
+                high=targets["center_quality"][1],
+            )
+            + 0.16
+            * self._target_band_score(
+                component_norm,
+                target=targets["component_norm"][0],
+                tolerance=targets["component_norm"][1],
+            )
+            + 0.16
+            * self._target_band_score(
+                edge_touch,
+                target=targets["edge_touch"][0],
+                tolerance=targets["edge_touch"][1],
+            )
+            + 0.16
+            * self._target_band_score(
+                texture_std,
+                target=targets["texture_std"][0],
+                tolerance=targets["texture_std"][1],
+            )
         )
         confidence_quality = (
             0.60 * self._normalize_band(best, low=0.55, high=0.995)
@@ -317,9 +427,14 @@ class QualityScorerService:
             + 0.15 * self._normalize_band(ocr_confidence, low=0.45, high=0.99)
         )
         signal = float(np.clip(0.72 * feature_quality + 0.28 * confidence_quality, 0.0, 1.0))
-        low, high = self.SCORE_RANGES.get(quality_level, self.SCORE_RANGES["medium"])
+        low, high = self.SCRIPT_SCORE_RANGES[normalized_script].get(
+            quality_level,
+            self.SCRIPT_SCORE_RANGES[normalized_script]["medium"],
+        )
         score = low + (high - low) * signal
         return {
+            "script": normalized_script,
+            "script_label": get_script_label(normalized_script),
             "best_probability": float(best),
             "second_probability": float(second),
             "probability_margin": float(margin),
@@ -334,8 +449,12 @@ class QualityScorerService:
             "calibrated_score": float(np.clip(round(score), 0, 100)),
         }
 
-    def _score_range_fit(self, total_score: int, quality_level: str) -> float:
-        low, high = self.SCORE_RANGES.get(quality_level, self.SCORE_RANGES["medium"])
+    def _score_range_fit(self, total_score: int, quality_level: str, *, script: str) -> float:
+        normalized_script = normalize_script(script)
+        low, high = self.SCRIPT_SCORE_RANGES[normalized_script].get(
+            quality_level,
+            self.SCRIPT_SCORE_RANGES[normalized_script]["medium"],
+        )
         target = (low + high) / 2.0
         tolerance = max((high - low) / 2.0, 1.0)
         return float(self._target_band_score(float(total_score), target=target, tolerance=tolerance))

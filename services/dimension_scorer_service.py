@@ -9,6 +9,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+from models.evaluation_framework import normalize_script
 from services.character_geometry_service import character_geometry_service
 from services.quality_scorer_service import QualityScorerService
 
@@ -24,6 +25,25 @@ class DimensionScore:
 class DimensionScorerService:
     """Build user-facing structure/stroke/integrity/stability scores."""
 
+    SCRIPT_PROFILES = {
+        "regular": {
+            "structure_bbox_ratio": (0.42, 0.22),
+            "structure_bbox_fill": (0.46, 0.24),
+            "stroke_texture_std": (0.145, 0.055),
+            "stroke_orientation": (0.14, 0.34),
+            "stroke_ink_ratio": (0.46, 0.24),
+            "stroke_component_norm": (0.58, 0.50),
+        },
+        "running": {
+            "structure_bbox_ratio": (0.36, 0.28),
+            "structure_bbox_fill": (0.41, 0.30),
+            "stroke_texture_std": (0.162, 0.075),
+            "stroke_orientation": (0.10, 0.42),
+            "stroke_ink_ratio": (0.42, 0.26),
+            "stroke_component_norm": (0.48, 0.50),
+        },
+    }
+
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
 
@@ -34,6 +54,7 @@ class DimensionScorerService:
         quality_features: dict[str, float],
         calibration: dict[str, Any],
         ocr_confidence: float | None = None,
+        script: str | None = None,
     ) -> DimensionScore:
         geometry_features = self.extract_geometry_features(image)
         dimension_scores = self.compute_dimension_scores(
@@ -42,6 +63,7 @@ class DimensionScorerService:
             geometry_features=geometry_features,
             calibration=calibration,
             ocr_confidence=ocr_confidence,
+            script=script,
         )
         return DimensionScore(
             dimension_scores=dimension_scores,
@@ -55,7 +77,9 @@ class DimensionScorerService:
         geometry_features: dict[str, float],
         calibration: dict[str, Any],
         ocr_confidence: float | None = None,
+        script: str | None = None,
     ) -> dict[str, int]:
+        profile = self.SCRIPT_PROFILES[normalize_script(script)]
         center_quality = float(quality_features.get("center_quality", 0.0))
         bbox_ratio = float(quality_features.get("bbox_ratio", 0.0))
         texture_std = float(quality_features.get("texture_std", 0.0))
@@ -92,15 +116,45 @@ class DimensionScorerService:
 
         structure = (
             0.35 * center_quality
-            + 0.25 * self._target_band_score(bbox_ratio, target=0.42, tolerance=0.22)
+            + 0.25
+            * self._target_band_score(
+                bbox_ratio,
+                target=profile["structure_bbox_ratio"][0],
+                tolerance=profile["structure_bbox_ratio"][1],
+            )
             + 0.20 * projection_balance
-            + 0.20 * self._target_band_score(bbox_fill, target=0.46, tolerance=0.24)
+            + 0.20
+            * self._target_band_score(
+                bbox_fill,
+                target=profile["structure_bbox_fill"][0],
+                tolerance=profile["structure_bbox_fill"][1],
+            )
         )
         stroke = (
-            0.30 * self._target_band_score(texture_std, target=0.145, tolerance=0.055)
-            + 0.25 * self._normalize_band(orientation_concentration, low=0.14, high=0.34)
-            + 0.25 * self._target_band_score(fg_ratio, target=0.46, tolerance=0.24)
-            + 0.20 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
+            0.30
+            * self._target_band_score(
+                texture_std,
+                target=profile["stroke_texture_std"][0],
+                tolerance=profile["stroke_texture_std"][1],
+            )
+            + 0.25
+            * self._normalize_band(
+                orientation_concentration,
+                low=profile["stroke_orientation"][0],
+                high=profile["stroke_orientation"][1],
+            )
+            + 0.25
+            * self._target_band_score(
+                fg_ratio,
+                target=profile["stroke_ink_ratio"][0],
+                tolerance=profile["stroke_ink_ratio"][1],
+            )
+            + 0.20
+            * self._target_band_score(
+                component_norm,
+                target=profile["stroke_component_norm"][0],
+                tolerance=profile["stroke_component_norm"][1],
+            )
         )
         integrity = (
             0.35 * ocr_confidence_norm

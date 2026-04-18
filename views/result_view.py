@@ -16,6 +16,11 @@ from views.ui_theme import app_font, display_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+SCRIPT_LABELS = {
+    "regular": "楷书",
+    "running": "行书",
+}
+
 
 class MetricChip(QFrame):
     """Compact metric chip for the four-dimension summary."""
@@ -54,6 +59,8 @@ class ResultView(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.current_script_key = "regular"
+        self.current_script_label = SCRIPT_LABELS[self.current_script_key]
         self.result: EvaluationResult | None = None
         self.metric_chips: dict[str, MetricChip] = {}
         self._init_ui()
@@ -149,6 +156,11 @@ class ResultView(QWidget):
         self.stage_badge.setObjectName("coachBadge")
         self.stage_badge.setFont(app_font(7, QFont.Weight.Bold))
         coach_header.addWidget(self.stage_badge)
+
+        self.script_badge = QLabel(self.current_script_label)
+        self.script_badge.setObjectName("coachBadge")
+        self.script_badge.setFont(app_font(7, QFont.Weight.Bold))
+        coach_header.addWidget(self.script_badge)
 
         coach_header.addStretch()
 
@@ -278,10 +290,12 @@ class ResultView(QWidget):
         for key, chip in self.metric_chips.items():
             chip.set_score(dimension_items.get(key))
 
+        script_label = self._script_label_for_result(result)
         char_text = result.character_name or "未识别"
         timestamp_text = result.timestamp.strftime("%m-%d %H:%M")
+        self.script_badge.setText(script_label)
         self.character_meta.setText(f"识别字：{char_text}")
-        self.footer_left.setText(f"识别字：{char_text} · {timestamp_text}")
+        self.footer_left.setText(f"{script_label} · {char_text} · {timestamp_text}")
 
         if profile:
             self.stage_badge.setText(profile.get("stage_label", "练习阶段"))
@@ -351,6 +365,23 @@ class ResultView(QWidget):
     def _on_speak(self) -> None:
         if self.result is not None:
             speech_service.speak_score(self.result.total_score, self.result.feedback)
+
+    def set_current_script(self, script_key: str) -> None:
+        if script_key not in SCRIPT_LABELS:
+            return
+        self.current_script_key = script_key
+        self.current_script_label = SCRIPT_LABELS[script_key]
+        if self.result is None:
+            self.script_badge.setText(self.current_script_label)
+
+    def _script_label_for_result(self, result: EvaluationResult) -> str:
+        if hasattr(result, "get_script_label"):
+            return result.get_script_label()
+        for attr_name in ("qt_script_label", "script_label", "script_name"):
+            value = getattr(result, attr_name, None)
+            if isinstance(value, str) and value:
+                return value
+        return SCRIPT_LABELS["regular"]
 
     def set_compact_mode(self, compact: bool) -> None:
         del compact

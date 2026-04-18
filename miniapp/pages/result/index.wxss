@@ -42,6 +42,14 @@
   color: #7e6955;
 }
 
+.detail-support {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 23rpx;
+  line-height: 1.7;
+  color: #8a6450;
+}
+
 .score-plaque {
   width: 178rpx;
   min-height: 178rpx;
@@ -302,6 +310,11 @@
   font-size: 26rpx;
   font-weight: 700;
   line-height: 76rpx;
+}
+
+.detail-warning {
+  background: rgba(252, 227, 221, 0.96);
+  color: #b34b3e;
 }
 
 @media (max-width: 520px) {

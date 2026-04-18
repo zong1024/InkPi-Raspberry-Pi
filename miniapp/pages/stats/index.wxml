@@ -6,39 +6,42 @@
     <view class="section-head">
       <view>
         <text class="eyebrow">InkPi Analytics</text>
-        <text class="stats-title">统计中心</text>
+        <text class="stats-title">缂備胶鍠曢鍛婄▔椤撶偟濡</text>
       </view>
-      <button class="ghost-btn back-btn" bindtap="goHistory">返回记录</button>
+      <button class="ghost-btn back-btn" bindtap="goHistory">閺夆晜鏌ㄥú鏍媼閺夎法绉</button>
     </view>
     <text class="stats-subtitle">
-      这里同时展示学习统计、样本量化、评价依据和验证计划，方便把“能跑”升级为“能解释、能量化、能持续优化”。
-    </text>
+      閺夆晜鐟╅崳鐑藉触鐏炵偓顦ч悘鐐存礈閵囨氨鈧冻缂氱弧鍕磼閻旀椿鍚€闁靛棔鐒﹂悧閬嶅嫉椤掑嫬娅ら柛鏍ㄧ墦閳ь兛娴囬惁搴㈢閾氬倻璐╅柟璇″枛閹风増顨ュ畝鍐閻犱讲鈧啿鐏婇柨娑樿嫰閼荤喖寮版惔锝傗偓妯裤亹閹惧啿顤呮慨婵撶到缁憋繝寮ㄩ娑樼槷婵°倛娓归崝鐔哥▔鎼淬値鏀藉☉鏃撹缁辨繈宕楅張鐢甸搨濞戞棑缂氱紞瀣汲閸屾瑧鐟濋柡鈧娑樼槷闁?    </text>
     <view class="chip-row">
-      <text class="meta-chip">最近刷新 {{lastUpdated || '尚未同步'}}</text>
-      <text class="meta-chip">统计样本 {{summary.total}}</text>
+      <text class="meta-chip">闁哄牃鍋撻弶鈺傚灥閸╂盯寮?{{lastUpdated || '閻忓繑纰嶅﹢顓㈠触鐏炵虎鍔?}}</text>
+      <text class="meta-chip">缂備胶鍠曢鎼佸冀闁垮鎷?{{summary.total}}</text>
+      <text class="meta-chip">濞戞棑缂氱紞?{{activeScriptLabel}}</text>
       <text class="meta-chip">{{methodology.validation.statusLabel}}</text>
     </view>
   </view>
 
   <view class="paper-panel filter-panel">
     <view class="section-head">
-      <text class="section-title">统计范围</text>
-      <text class="section-note">按设备和时间切换分析口径</text>
+      <text class="section-title">缂備胶鍠曢鎼佹嚑閸愩劍绾</text>
+      <text class="section-note">闁圭顦板鍌炴⒒濞ｎ兘鍋撴担宄板濞达絾鎸搁幏鎵媼閹屾У闁告帒娲﹀畷鏌ュ礆閸℃鈧粙宕ｉ敐鍛獮</text>
     </view>
     <view class="picker-grid">
       <picker mode="selector" range="{{dateOptions}}" value="{{filters.dateIndex}}" bindchange="onDateChange">
-        <view class="picker-chip">时间：{{dateOptions[filters.dateIndex]}}</view>
+        <view class="picker-chip">闁哄啫鐖煎Λ鍧楁晬濮濈付dateOptions[filters.dateIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{scriptOptions}}" value="{{filters.scriptIndex}}" bindchange="onScriptChange">
+        <view class="picker-chip">濞戞棑缂氱紞瀣晬濮濈付scriptOptions[filters.scriptIndex]}}</view>
       </picker>
       <picker mode="selector" range="{{deviceOptions}}" value="{{filters.deviceIndex}}" bindchange="onDeviceChange">
-        <view class="picker-chip">设备：{{deviceOptions[filters.deviceIndex]}}</view>
+        <view class="picker-chip">閻犱焦鍎抽ˇ顒勬晬濮濈付deviceOptions[filters.deviceIndex]}}</view>
       </picker>
     </view>
   </view>
 
   <view class="paper-panel growth-panel">
     <view class="section-head">
-      <text class="section-title">留存与成长</text>
-      <button class="ghost-btn practice-btn" bindtap="goPractice">练习中心</button>
+      <text class="section-title">闁伙絾鐟ラ悺銊︾▔鎼淬垹鐏囬梻鈧</text>
+      <button class="ghost-btn practice-btn" bindtap="goPractice">缂備礁鍟╃弧鍕▔椤撶偟濡</button>
     </view>
     <text class="growth-copy">{{growthSummary.message}}</text>
 
@@ -52,12 +55,13 @@
 
     <view class="chip-row">
       <text class="meta-chip">{{growthSummary.lastPracticeText}}</text>
-      <text class="meta-chip">本周上传 {{growthSummary.weekRecords}} 条</text>
-      <text class="meta-chip">最近字 {{growthSummary.latestCharacterText}}</text>
+      <text class="meta-chip">闁哄牜鍓欓幊鍡樼▔婵犱胶鐐?{{growthSummary.weekRecords}} 闁</text>
+      <text class="meta-chip">闁哄牃鍋撻弶鈺傚灥閻?{{growthSummary.latestCharacterText}}</text>
+      <text class="meta-chip">{{supportScopeText}}</text>
     </view>
 
     <view wx:if="{{focusDimension}}" class="growth-focus-card">
-      <text class="growth-focus-title">当前优先补强：{{focusDimension.label}}</text>
+      <text class="growth-focus-title">鐟滅増鎸告晶鐘冲濡搫甯ラ悶娑栧劚瀹搁亶鏁嶅绺秄ocusDimension.label}}</text>
       <text class="growth-focus-copy">{{focusDimension.note}}</text>
     </view>
 
@@ -74,89 +78,89 @@
           <text class="growth-preview-char">{{item.character}}</text>
           <text class="growth-preview-badge">{{item.badgeText}}</text>
         </view>
-        <text class="growth-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+        <text class="growth-preview-meta">闁秆冩搐閸?{{item.averageText}} / 闁哄牃鍋撻弶?{{item.latestScoreText}}</text>
       </view>
     </view>
   </view>
 
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
-  <view wx:if="{{loading}}" class="notice">正在生成统计结果...</view>
+  <view wx:if="{{loading}}" class="notice">婵繐绲藉﹢顏堟偨閻旂鐏囩紓浣哄枙椤撳摜绱掗幘瀵镐函...</view>
 
   <view class="stats-grid">
     <view class="paper-panel metric-card">
-      <text class="metric-label">平均分</text>
+      <text class="metric-label">妤犵偛鍟垮搴ㄥ礆</text>
       <text class="metric-value">{{summary.averageText}}</text>
-      <text class="metric-note">最近 7 天 {{summary.recentAverageText}}</text>
+      <text class="metric-note">闁哄牃鍋撻弶?7 濠?{{summary.recentAverageText}}</text>
     </view>
     <view class="paper-panel metric-card">
-      <text class="metric-label">优秀率</text>
+      <text class="metric-label">濞村吋顭囬～鍛存偝</text>
       <text class="metric-value">{{summary.excellentRateText}}</text>
-      <text class="metric-note">达标率 {{summary.qualifiedRateText}}</text>
+      <text class="metric-note">閺夊牏鍋撻悥锝夋偝?{{summary.qualifiedRateText}}</text>
     </view>
     <view class="paper-panel metric-card">
-      <text class="metric-label">最近变化</text>
+      <text class="metric-label">闁哄牃鍋撻弶鈺傚灥瑜板宕</text>
       <text class="metric-value">{{summary.progressText}}</text>
       <text class="metric-note">{{summary.progressLabel}}</text>
     </view>
     <view class="paper-panel metric-card">
-      <text class="metric-label">最高分</text>
+      <text class="metric-label">闁哄牃鍋撳Δ鍌浢崹</text>
       <text class="metric-value">{{summary.bestScoreText}}</text>
-      <text class="metric-note">累计样本 {{summary.total}}</text>
+      <text class="metric-note">缂侀硸鍨甸鎼佸冀闁垮鎷?{{summary.total}}</text>
     </view>
   </view>
 
   <view class="paper-panel evidence-panel">
     <view class="section-head">
-      <text class="section-title">量化证据</text>
-      <text class="section-note">直接回应样本量、覆盖面和验证进度</text>
+      <text class="section-title">闂佹彃绻愮€佃尙鎷犳担鐟扮ウ</text>
+      <text class="section-note">闁烩晛鐡ㄧ敮鎾炊閻愯尙瀹夐柡宥夋敱濠€浼存煂韫囧鍋撴担绛嬫船闁烩晜鐗犲浼村椽瀹€鍕矗閻犲洣娴囩换妯绘償</text>
     </view>
 
     <view class="evidence-grid">
       <view class="evidence-card">
-        <text class="evidence-label">当前样本</text>
+        <text class="evidence-label">鐟滅増鎸告晶鐘诲冀闁垮鎷</text>
         <text class="evidence-value">{{methodology.validation.currentSampleCount}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">覆盖汉字</text>
+        <text class="evidence-label">閻熸洖妫涘ú濠傂ф径濠勬憻</text>
         <text class="evidence-value">{{methodology.validation.uniqueCharacters}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">设备来源</text>
+        <text class="evidence-label">閻犱焦鍎抽ˇ顒勫级閵夛妇鐖</text>
         <text class="evidence-value">{{methodology.validation.deviceCount}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">目标进度</text>
+        <text class="evidence-label">闁烩晩鍠楅悥锝嗘交濞戞ê顔</text>
         <text class="evidence-value">{{methodology.validation.coverageRatioText}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">已复评结果</text>
+        <text class="evidence-label">鐎瑰憡褰冮ˇ鑼嫚閸曨厾娉㈤柡</text>
         <text class="evidence-value">{{methodology.validation.reviewedResultCount}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">复评覆盖率</text>
+        <text class="evidence-label">濠㈣泛绉烽惁搴ｆ啺閸℃瑦纾伴柣</text>
         <text class="evidence-value">{{methodology.validation.reviewCoverageRateText}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">等级一致率</text>
+        <text class="evidence-label">缂佹稑顦辨鍥ㄧ▔閳ь剟鎳涚€电鑺</text>
         <text class="evidence-value">{{methodology.validation.agreementRateText}}</text>
       </view>
       <view class="evidence-card">
-        <text class="evidence-label">平均分差</text>
+        <text class="evidence-label">妤犵偛鍟垮搴ㄥ礆閸℃鈻</text>
         <text class="evidence-value">{{methodology.validation.averageScoreGapText}}</text>
       </view>
     </view>
 
     <view class="target-row">
-      <text class="meta-chip">标注目标 {{methodology.validation.labelTarget}}</text>
-      <text class="meta-chip">教师校核 {{methodology.validation.expertReviewTarget}}</text>
-      <text class="meta-chip">试用用户 {{methodology.validation.trialUserTarget}}</text>
+      <text class="meta-chip">闁哄秴娲﹂弫鐐烘儎椤旂晫鍨?{{methodology.validation.labelTarget}}</text>
+      <text class="meta-chip">闁轰焦鐟ョ粭鈧柡宥佸墲閻?{{methodology.validation.expertReviewTarget}}</text>
+      <text class="meta-chip">閻犲洦娲滈弫銈夋偨閵婏箑鐓?{{methodology.validation.trialUserTarget}}</text>
     </view>
   </view>
 
   <view class="panel-duo">
     <view class="paper-panel roadmap-panel">
       <view class="section-head">
-        <text class="section-title">验证计划</text>
+        <text class="section-title">濡ょ姴鐭侀惁澶屾媼閳ュ啿鐏</text>
         <text class="section-note">{{methodology.validation.currentStage}}</text>
       </view>
       <text class="roadmap-copy">{{methodology.validation.nextMilestone}}</text>
@@ -170,23 +174,23 @@
 
     <view class="paper-panel roadmap-panel">
       <view class="section-head">
-        <text class="section-title">项目边界</text>
-        <text class="section-note">先把定位说清楚</text>
+        <text class="section-title">濡炪倕婀卞ú鐗堟綇閸︻厽娅</text>
+        <text class="section-note">婵繐绲界槐锟犲绩椤栨稑鐦柤鐓庡暙濞</text>
       </view>
       <text class="roadmap-copy">{{methodology.framework.projectPosition}}</text>
       <text class="roadmap-note">{{methodology.framework.currentScope}}</text>
       <text class="roadmap-note">{{methodology.framework.boundaryNote}}</text>
       <view class="target-row">
-        <text wx:for="{{methodology.framework.currentScripts}}" wx:key="*this" class="meta-chip">当前 {{item}}</text>
-        <text wx:for="{{methodology.framework.roadmapScripts}}" wx:key="*this" class="meta-chip">规划 {{item}}</text>
+        <text wx:for="{{methodology.framework.currentScripts}}" wx:key="*this" class="meta-chip">婵繐绲界槐锟犲绩椤栨稑鐦?{{item}}</text>
+        <text class="meta-chip">{{methodology.framework.unsupportedNote}}</text>
       </view>
     </view>
   </view>
 
   <view class="paper-panel chart-panel">
     <view class="section-head">
-      <text class="section-title">最近 10 天趋势</text>
-      <text class="section-note">柱高表示平均分，顶部数字表示样本数</text>
+      <text class="section-title">闁哄牃鍋撻弶?10 濠㈠灈鏅炵粔濂稿礉</text>
+      <text class="section-note">闁哄矂浜堕悵顔炬偘閵娧佷粵妤犵偛鍟垮搴ㄥ礆閸☆厾绀夊銈呯埣閸庢挳寮弶璺ㄦ憻閻炴稏鍔庨妵姘跺冀闁垮鎷遍柡</text>
     </view>
     <view class="trend-chart">
       <view wx:for="{{summary.trendPoints}}" wx:key="date" class="trend-item">
@@ -202,8 +206,8 @@
 
   <view class="paper-panel chart-panel">
     <view class="section-head">
-      <text class="section-title">分数分布</text>
-      <text class="section-note">快速看当前成绩集中在哪个区间</text>
+      <text class="section-title">闁告帒妫欓弳鐔煎礆閸℃顏</text>
+      <text class="section-note">闊浂鍋婇埀顒傚枔濠€鍛般亹閹惧啿顤呴柟瀛樺姉閸濇姊块崱鏇″幀闁革负鍔岄幗銏＄▔椤忓嫬闅橀梻</text>
     </view>
     <view wx:for="{{summary.scoreBands}}" wx:key="key" class="distribution-row">
       <view class="distribution-top">
@@ -218,8 +222,8 @@
 
   <view class="paper-panel chart-panel">
     <view class="section-head">
-      <text class="section-title">四维均值</text>
-      <text class="section-note">用于观察整体训练趋势，而不是替代老师定级</text>
+      <text class="section-title">闁搞儲绋撳ǎ顕€宕搁崶褉鍋</text>
+      <text class="section-note">闁活潿鍔嬬花顒傛喆閸屾氨妾柡浣虹節缂嶅鎷嬮鐘电煀閻℃帒顑呮繛宥夋晬瀹€鍐ｅ亾鐏炶偐鐟濋柡鍕靛灡濞存稒绂掗敐鍫氬亾娴ｅ摜鐟庨悗瑙勬皑妤</text>
     </view>
     <view wx:for="{{summary.dimensions}}" wx:key="key" class="distribution-row">
       <view class="distribution-top">
@@ -235,43 +239,43 @@
   <view class="leaderboard-grid">
     <view class="paper-panel leaderboard-panel">
       <view class="section-head">
-        <text class="section-title">高频练习字</text>
-        <text class="section-note">按出现次数排序</text>
+        <text class="section-title">濡ゅ倹锕㈤。鍓佺磼閸愌呯槑閻</text>
+        <text class="section-note">闁圭顦崵顓㈡偝閻楀牜鍋ч柡浣哄鐢挻鎯</text>
       </view>
       <view wx:if="{{summary.topCharacters.length}}">
         <view wx:for="{{summary.topCharacters}}" wx:key="character_name" class="leaderboard-row">
           <view>
             <text class="leaderboard-main">{{item.character_name}}</text>
-            <text class="leaderboard-sub">{{item.count}} 次</text>
+            <text class="leaderboard-sub">{{item.count}} 婵</text>
           </view>
           <text class="leaderboard-score">{{item.average_score}}</text>
         </view>
       </view>
-      <text wx:else class="panel-subtitle">当前还没有足够的数据生成排行。</text>
+      <text wx:else class="panel-subtitle">鐟滅増鎸告晶鐘虫交濡崵姊鹃柡鍫濐槼閸愮粯寰勯悢鐑樼暠闁轰胶澧楀畵渚€鎮介悢绋跨亣闁圭儤甯熼、鎴﹀Υ</text>
     </view>
 
     <view class="paper-panel leaderboard-panel">
       <view class="section-head">
-        <text class="section-title">设备来源</text>
-        <text class="section-note">按样本量排序</text>
+        <text class="section-title">閻犱焦鍎抽ˇ顒勫级閵夛妇鐖</text>
+        <text class="section-note">闁圭顦伴悧閬嶅嫉椤掑嫬娅ら柟鐑樺笒缁</text>
       </view>
       <view wx:if="{{summary.topDevices.length}}">
         <view wx:for="{{summary.topDevices}}" wx:key="device_name" class="leaderboard-row">
           <view>
             <text class="leaderboard-main">{{item.device_name}}</text>
-            <text class="leaderboard-sub">{{item.count}} 条</text>
+            <text class="leaderboard-sub">{{item.count}} 闁</text>
           </view>
           <text class="leaderboard-score">{{item.average_score}}</text>
         </view>
       </view>
-      <text wx:else class="panel-subtitle">当前还没有设备侧上传数据。</text>
+      <text wx:else class="panel-subtitle">鐟滅増鎸告晶鐘虫交濡崵姊鹃柡鍫濐槼椤旀洘寰勯崶锔芥珷濞戞挸锕ｇ槐鍫曞极閻楀牆绁﹂柕</text>
     </view>
   </view>
 
   <view class="paper-panel reference-panel">
     <view class="section-head">
-      <text class="section-title">评价依据来源</text>
-      <text class="section-note">把“为什么这样评”讲清楚</text>
+      <text class="section-title">閻犲洤瀚悳顖涚瑹濠靛洤绁﹂柡澶堝劜缁</text>
+      <text class="section-note">闁硅泛艌閳ь剚绮堢拹鐔哥閳ь剚绋婇崼锝囩闁哄秶鏌夐惁搴ㄥ灳濠靛鍞规繛鎾虫噺椤</text>
     </view>
     <view wx:for="{{methodology.references}}" wx:key="title" class="reference-card">
       <view class="reference-top">
@@ -283,7 +287,7 @@
   </view>
 
   <view class="paper-panel insight-panel">
-    <text class="panel-title">自动总结</text>
+    <text class="panel-title">闁煎浜滄慨鈺呭箑閼姐倗娉</text>
     <text class="insight-copy">{{summary.insight}}</text>
   </view>
 </view>
