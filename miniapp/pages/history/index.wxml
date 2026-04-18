@@ -13,6 +13,7 @@
       </view>
 
       <view class="hero-actions">
+        <button class="ghost-btn practice-cta-btn" bindtap="goPractice">练习中心</button>
         <button class="ghost-btn stats-btn" bindtap="goStats">统计中心</button>
         <button class="ghost-btn logout-btn" bindtap="logout">退出</button>
       </view>
@@ -30,20 +31,60 @@
 
   <view class="summary-grid">
     <view class="summary-item">
-      <text class="summary-label">总记录</text>
-      <text class="summary-value">{{summary.total}}</text>
+      <text class="summary-label">连续练习</text>
+      <text class="summary-value">{{growthSummary.streakText}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">平均分</text>
-      <text class="summary-value">{{summary.averageText}}</text>
+      <text class="summary-label">本周目标</text>
+      <text class="summary-value">{{growthSummary.weekGoalText}}</text>
     </view>
     <view class="summary-item">
       <text class="summary-label">近 7 天均分</text>
       <text class="summary-value">{{summary.recentAverageText}}</text>
     </view>
     <view class="summary-item">
-      <text class="summary-label">最高分</text>
-      <text class="summary-value">{{summary.bestScoreText}}</text>
+      <text class="summary-label">累计记录</text>
+      <text class="summary-value">{{summary.total}}</text>
+    </view>
+  </view>
+
+  <view class="paper-panel growth-panel">
+    <view class="section-head">
+      <text class="section-title">成长计划</text>
+      <button class="ghost-btn practice-btn" bindtap="goPractice">去安排下一轮</button>
+    </view>
+    <text class="growth-copy">{{growthSummary.message}}</text>
+
+    <view class="goal-track">
+      <view class="goal-fill" style="width: {{growthSummary.weekGoalPercent}}%;"></view>
+    </view>
+
+    <view class="growth-chips">
+      <text class="meta-chip">{{growthSummary.lastPracticeText}}</text>
+      <text class="meta-chip">本周上传 {{growthSummary.weekRecords}} 条</text>
+      <text class="meta-chip">稳定 80+ {{growthSummary.stableProgressText}}</text>
+    </view>
+
+    <view wx:if="{{focusDimension}}" class="growth-focus-card">
+      <text class="growth-focus-title">当前优先补强：{{focusDimension.label}}</text>
+      <text class="growth-focus-copy">{{focusDimension.note}}</text>
+    </view>
+
+    <view class="growth-step-list">
+      <view wx:for="{{practiceSteps}}" wx:key="*this" class="growth-step-item">
+        <text class="growth-step-dot"></text>
+        <text class="growth-step-text">{{item}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{practicePreview.length}}" class="practice-preview-grid">
+      <view wx:for="{{practicePreview}}" wx:key="character" class="practice-preview-card">
+        <view class="practice-preview-top">
+          <text class="practice-preview-char">{{item.character}}</text>
+          <text class="practice-preview-badge">{{item.badgeText}}</text>
+        </view>
+        <text class="practice-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+      </view>
     </view>
   </view>
 

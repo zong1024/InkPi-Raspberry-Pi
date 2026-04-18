@@ -1,9 +1,11 @@
 const api = require('../../utils/api');
 const auth = require('../../utils/auth');
-const { POLL_INTERVAL } = require('../../config');
+const { POLL_INTERVAL, RECENT_PRACTICE_LIMIT } = require('../../config');
+const { buildGrowthInsights } = require('../../utils/practice');
 
 const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天'];
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
+const EMPTY_GROWTH = buildGrowthInsights([]);
 
 function formatNumber(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -81,6 +83,13 @@ function normalizeSummary(summary = {}) {
     trendPoints,
     topCharacters: summary.top_characters || [],
     topDevices: summary.top_devices || [],
+    reviewedResultCount: summary.reviewed_result_count || 0,
+    reviewRecordCount: summary.review_record_count || 0,
+    pendingReviewCount: summary.pending_review_count || 0,
+    reviewCoverageRateText: formatPercent(summary.review_coverage_rate),
+    agreementRateText: formatPercent(summary.agreement_rate),
+    averageManualScoreText: formatNumber(summary.average_manual_score),
+    averageScoreGapText: formatNumber(summary.average_score_gap),
     insight: summary.insight || '完成评测后，这里会自动生成量化总结。',
   };
 }
@@ -109,7 +118,12 @@ function normalizeMethodology(payload = {}) {
       uniqueCharacters: snapshot.unique_characters || 0,
       deviceCount: snapshot.device_count || 0,
       recentSampleCount: snapshot.recent_sample_count || 0,
+      reviewedResultCount: snapshot.reviewed_result_count || 0,
+      reviewRecordCount: snapshot.review_record_count || 0,
       coverageRatioText: formatPercent(snapshot.coverage_ratio),
+      reviewCoverageRateText: formatPercent(snapshot.review_coverage_rate),
+      agreementRateText: formatPercent(snapshot.agreement_rate),
+      averageScoreGapText: formatNumber(snapshot.average_score_gap),
       labelTarget: snapshot.label_target || plan.label_target || 0,
       expertReviewTarget: snapshot.expert_review_target || plan.expert_review_target || 0,
       trialUserTarget: snapshot.trial_user_target || plan.trial_user_target || 0,
@@ -128,6 +142,12 @@ Page({
     error: '',
     lastUpdated: '',
     summary: normalizeSummary(),
+    growthSummary: EMPTY_GROWTH.growthSummary,
+    milestoneCards: EMPTY_GROWTH.milestoneCards,
+    focusDimension: null,
+    strongDimension: null,
+    practicePreview: [],
+    practiceSteps: EMPTY_GROWTH.sessionPlan.actions.slice(0, 2),
     methodology: normalizeMethodology(),
     dateOptions: DATE_OPTIONS,
     deviceOptions: ['全部设备'],
@@ -188,13 +208,15 @@ Page({
 
     try {
       const params = this.buildParams();
-      const [summaryPayload, methodologyPayload] = await Promise.all([
+      const [summaryPayload, methodologyPayload, historyPayload] = await Promise.all([
         api.getHistorySummary(params),
-        api.getMethodology(),
+        api.getMethodology(params),
+        api.getHistory({ ...params, sort: 'latest', limit: RECENT_PRACTICE_LIMIT }),
       ]);
 
       const summary = normalizeSummary(summaryPayload.summary || {});
       const methodology = normalizeMethodology(methodologyPayload);
+      const growthInsights = buildGrowthInsights(historyPayload.items || []);
       const availableDevices = (summaryPayload.summary && summaryPayload.summary.available_devices) || [];
       const deviceOptions = ['全部设备', ...availableDevices];
       const deviceValues = ['all', ...availableDevices];
@@ -203,6 +225,12 @@ Page({
 
       this.setData({
         summary,
+        growthSummary: growthInsights.growthSummary,
+        milestoneCards: growthInsights.milestoneCards,
+        focusDimension: growthInsights.dimensionInsights.focusDimension,
+        strongDimension: growthInsights.dimensionInsights.strongDimension,
+        practicePreview: growthInsights.recommendations.slice(0, 2),
+        practiceSteps: growthInsights.sessionPlan.actions.slice(0, 2),
         methodology,
         lastUpdated: this.formatTime(new Date()),
         deviceOptions,
@@ -248,10 +276,16 @@ Page({
   },
 
   goHistory() {
-    if (getCurrentPages().length > 1) {
+    const pages = getCurrentPages();
+    const previousPage = pages[pages.length - 2];
+    if (previousPage && previousPage.route === 'pages/history/index') {
       wx.navigateBack();
       return;
     }
     wx.reLaunch({ url: '/pages/history/index' });
+  },
+
+  goPractice() {
+    wx.navigateTo({ url: '/pages/practice/index' });
   },
 });

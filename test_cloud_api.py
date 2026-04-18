@@ -104,13 +104,15 @@ class CloudApiTests(unittest.TestCase):
 
         detail = self.client.get(f"/api/results/{result_id}", headers=headers)
         self.assertEqual(detail.status_code, 200)
-        detail_payload = detail.get_json()
-        self.assertEqual(detail_payload["result"]["ocr_confidence"], 0.97)
-        self.assertEqual(detail_payload["result"]["quality_confidence"], 0.91)
-        self.assertEqual(detail_payload["result"]["dimension_scores"]["structure"], 84)
-        self.assertEqual(detail_payload["result"]["dimension_basis"][0]["label"], "结构")
-        self.assertEqual(detail_payload["result"]["practice_profile"]["focus_dimension"]["key"], "stroke")
-        self.assertEqual(detail_payload["result"]["score_debug"]["calibration"]["feature_quality"], 0.84)
+        detail_payload = detail.get_json()["result"]
+        self.assertEqual(detail_payload["ocr_confidence"], 0.97)
+        self.assertEqual(detail_payload["quality_confidence"], 0.91)
+        self.assertEqual(detail_payload["dimension_scores"]["structure"], 84)
+        self.assertEqual(detail_payload["dimension_basis"][0]["label"], "结构")
+        self.assertEqual(detail_payload["practice_profile"]["focus_dimension"]["key"], "stroke")
+        self.assertEqual(detail_payload["scope_boundary"]["current_scope"], "当前阶段聚焦楷书单字、初学者练习、设备端即时反馈。")
+        self.assertEqual(detail_payload["score_debug"]["calibration"]["feature_quality"], 0.84)
+        self.assertEqual(detail_payload["expert_review_summary"]["validation_status"], "pending_review")
 
     def test_history_summary_quantitative_fields_and_delete(self) -> None:
         headers = self.login_headers()
@@ -174,6 +176,10 @@ class CloudApiTests(unittest.TestCase):
         self.assertEqual(methodology_payload["validation_snapshot"]["current_sample_count"], 3)
         self.assertEqual(methodology_payload["validation_plan"]["label_target"], 500)
 
+        filtered_methodology = self.client.get("/api/system/methodology?quality_level=good", headers=headers)
+        self.assertEqual(filtered_methodology.status_code, 200)
+        self.assertEqual(filtered_methodology.get_json()["validation_snapshot"]["current_sample_count"], 1)
+
         filtered = self.client.get("/api/results?keyword=永&quality_level=good", headers=headers)
         self.assertEqual(filtered.status_code, 200)
         filtered_payload = filtered.get_json()
@@ -196,6 +202,71 @@ class CloudApiTests(unittest.TestCase):
         )
         self.assertEqual(batch_deleted.status_code, 200)
         self.assertEqual(batch_deleted.get_json()["deleted_count"], 2)
+
+    def test_expert_review_roundtrip_and_validation_metrics(self) -> None:
+        headers = self.login_headers()
+
+        upload = self.upload_result(
+            build_upload_payload(
+                local_record_id=99,
+                total_score=88,
+                quality_level="good",
+                character_name="永",
+                dimension_scores={"structure": 84, "stroke": 80, "integrity": 88, "stability": 82},
+            )
+        )
+        result_id = upload["result"]["id"]
+
+        review_response = self.client.post(
+            f"/api/results/{result_id}/reviews",
+            headers=headers,
+            json={
+                "reviewer_name": "王老师",
+                "reviewer_role": "书法教师",
+                "review_score": 89,
+                "dimension_scores": {
+                    "structure": 86,
+                    "stroke": 81,
+                    "integrity": 90,
+                    "stability": 84,
+                },
+                "notes": "结构较稳，收笔还可以更干净。",
+            },
+        )
+        self.assertEqual(review_response.status_code, 200)
+        review_payload = review_response.get_json()
+        self.assertEqual(review_payload["review"]["reviewer_name"], "王老师")
+        self.assertEqual(review_payload["summary"]["review_count"], 1)
+        self.assertTrue(review_payload["summary"]["agreement"])
+        self.assertEqual(review_payload["summary"]["average_review_score"], 89.0)
+        self.assertEqual(review_payload["summary"]["score_gap"], 1.0)
+
+        review_listing = self.client.get(f"/api/results/{result_id}/reviews", headers=headers)
+        self.assertEqual(review_listing.status_code, 200)
+        review_listing_payload = review_listing.get_json()
+        self.assertEqual(len(review_listing_payload["items"]), 1)
+        self.assertEqual(review_listing_payload["items"][0]["dimension_scores"]["structure"], 86.0)
+        self.assertEqual(review_listing_payload["summary"]["validation_status"], "reviewed")
+
+        detail = self.client.get(f"/api/results/{result_id}", headers=headers)
+        self.assertEqual(detail.status_code, 200)
+        detail_payload = detail.get_json()["result"]
+        self.assertEqual(detail_payload["expert_review_summary"]["review_count"], 1)
+        self.assertEqual(detail_payload["expert_reviews"][0]["reviewer_role"], "书法教师")
+
+        validation = self.client.get("/api/validation/overview", headers=headers)
+        self.assertEqual(validation.status_code, 200)
+        validation_payload = validation.get_json()
+        self.assertEqual(validation_payload["overview"]["reviewed_result_count"], 1)
+        self.assertEqual(validation_payload["overview"]["review_record_count"], 1)
+        self.assertEqual(validation_payload["overview"]["pending_review_count"], 0)
+        self.assertEqual(validation_payload["overview"]["review_coverage_rate"], 100.0)
+        self.assertEqual(validation_payload["overview"]["agreement_rate"], 100.0)
+        self.assertEqual(validation_payload["overview"]["average_manual_score"], 89.0)
+        self.assertEqual(validation_payload["overview"]["average_score_gap"], 1.0)
+        self.assertAlmostEqual(validation_payload["overview"]["dimension_gap_averages"]["structure"], 2.0)
+        self.assertEqual(validation_payload["validation_snapshot"]["reviewed_result_count"], 1)
+        self.assertEqual(validation_payload["validation_plan"]["expert_review_target"], 3)
 
 
 if __name__ == "__main__":

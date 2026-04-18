@@ -136,6 +136,18 @@ def get_dimension_basis(scores: dict[str, int] | None = None) -> list[dict[str, 
     return ordered_items
 
 
+def build_scope_boundary() -> dict[str, Any]:
+    """Return a runtime-friendly boundary card for UI and reviewers."""
+
+    return {
+        "project_position": FRAMEWORK_OVERVIEW["project_position"],
+        "current_scope": FRAMEWORK_OVERVIEW["current_scope"],
+        "boundary_note": FRAMEWORK_OVERVIEW["boundary_note"],
+        "current_scripts": list(FRAMEWORK_OVERVIEW["current_scripts"]),
+        "roadmap_scripts": list(FRAMEWORK_OVERVIEW["roadmap_scripts"]),
+    }
+
+
 def build_practice_profile(
     dimension_scores: dict[str, int] | None,
     *,
@@ -187,8 +199,8 @@ def build_practice_profile(
     weak_meta = DIMENSION_FRAMEWORK[weak_key]
     char_label = f"“{character_name}”" if character_name else "当前单字"
     coach_prompt = (
-        f"{char_label}本次最需要优先提升的是{weak_meta['label']}，"
-        f"同时保留已经较稳的{best_meta['label']}表现。"
+        f"{char_label}本次最需要优先提升的是 {weak_meta['label']}，"
+        f"同时保留已经较稳的 {best_meta['label']} 表现。"
     )
 
     return {
@@ -210,9 +222,9 @@ def build_practice_profile(
             "tip": weak_meta["practice_tip"],
         },
         "next_actions": [
-            f"先围绕{weak_meta['label']}做 3 到 5 次连续练习，观察波动是否缩小。",
+            f"先围绕 {weak_meta['label']} 做 3 到 5 次连续练习，观察波动是否缩小。",
             weak_meta["practice_tip"],
-            f"保留{best_meta['label']}当前的书写方式，避免同时大幅改变所有笔画。",
+            f"保留 {best_meta['label']} 当前的书写方式，避免同时大幅改变所有笔画。",
         ],
     }
 
@@ -225,10 +237,13 @@ def build_validation_snapshot(summary: dict[str, Any] | None) -> dict[str, Any]:
     unique_characters = int(summary.get("unique_characters") or 0)
     device_count = int(summary.get("device_count") or 0)
     recent_total = int(summary.get("recent_total") or 0)
+    reviewed_result_count = int(summary.get("reviewed_result_count") or 0)
+    review_record_count = int(summary.get("review_record_count") or 0)
     label_target = int(VALIDATION_PLAN["label_target"])
     coverage_ratio = round((total / label_target) * 100, 1) if label_target else 0.0
+    review_coverage_rate = round((reviewed_result_count / total) * 100, 1) if total else 0.0
 
-    if total >= 200:
+    if total >= 200 and reviewed_result_count >= 30:
         status_key = "growing"
         status_label = "已进入可量化分析阶段"
     elif total >= 50:
@@ -245,7 +260,12 @@ def build_validation_snapshot(summary: dict[str, Any] | None) -> dict[str, Any]:
         "unique_characters": unique_characters,
         "device_count": device_count,
         "recent_sample_count": recent_total,
+        "reviewed_result_count": reviewed_result_count,
+        "review_record_count": review_record_count,
         "coverage_ratio": coverage_ratio,
+        "review_coverage_rate": review_coverage_rate,
+        "agreement_rate": summary.get("agreement_rate"),
+        "average_score_gap": summary.get("average_score_gap"),
         "label_target": label_target,
         "expert_review_target": int(VALIDATION_PLAN["expert_review_target"]),
         "trial_user_target": int(VALIDATION_PLAN["trial_user_target"]),
@@ -259,6 +279,7 @@ def build_methodology_payload(summary: dict[str, Any] | None = None) -> dict[str
     return {
         "framework_overview": deepcopy(FRAMEWORK_OVERVIEW),
         "dimension_basis": get_dimension_basis(),
+        "scope_boundary": build_scope_boundary(),
         "authority_references": deepcopy(AUTHORITY_REFERENCES),
         "validation_plan": deepcopy(VALIDATION_PLAN),
         "validation_snapshot": build_validation_snapshot(summary),

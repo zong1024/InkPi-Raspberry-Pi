@@ -35,6 +35,50 @@
     </view>
   </view>
 
+  <view class="paper-panel growth-panel">
+    <view class="section-head">
+      <text class="section-title">留存与成长</text>
+      <button class="ghost-btn practice-btn" bindtap="goPractice">练习中心</button>
+    </view>
+    <text class="growth-copy">{{growthSummary.message}}</text>
+
+    <view class="growth-grid">
+      <view wx:for="{{milestoneCards}}" wx:key="key" class="growth-metric-card">
+        <text class="growth-metric-label">{{item.label}}</text>
+        <text class="growth-metric-value">{{item.value}}</text>
+        <text class="growth-metric-note">{{item.note}}</text>
+      </view>
+    </view>
+
+    <view class="chip-row">
+      <text class="meta-chip">{{growthSummary.lastPracticeText}}</text>
+      <text class="meta-chip">本周上传 {{growthSummary.weekRecords}} 条</text>
+      <text class="meta-chip">最近字 {{growthSummary.latestCharacterText}}</text>
+    </view>
+
+    <view wx:if="{{focusDimension}}" class="growth-focus-card">
+      <text class="growth-focus-title">当前优先补强：{{focusDimension.label}}</text>
+      <text class="growth-focus-copy">{{focusDimension.note}}</text>
+    </view>
+
+    <view class="policy-list growth-steps">
+      <view wx:for="{{practiceSteps}}" wx:key="*this" class="policy-item">
+        <text class="policy-dot"></text>
+        <text class="policy-text">{{item}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{practicePreview.length}}" class="growth-preview-grid">
+      <view wx:for="{{practicePreview}}" wx:key="character" class="growth-preview-card">
+        <view class="growth-preview-top">
+          <text class="growth-preview-char">{{item.character}}</text>
+          <text class="growth-preview-badge">{{item.badgeText}}</text>
+        </view>
+        <text class="growth-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+      </view>
+    </view>
+  </view>
+
   <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
   <view wx:if="{{loading}}" class="notice">正在生成统计结果...</view>
 
@@ -83,6 +127,22 @@
       <view class="evidence-card">
         <text class="evidence-label">目标进度</text>
         <text class="evidence-value">{{methodology.validation.coverageRatioText}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">已复评结果</text>
+        <text class="evidence-value">{{methodology.validation.reviewedResultCount}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">复评覆盖率</text>
+        <text class="evidence-value">{{methodology.validation.reviewCoverageRateText}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">等级一致率</text>
+        <text class="evidence-value">{{methodology.validation.agreementRateText}}</text>
+      </view>
+      <view class="evidence-card">
+        <text class="evidence-label">平均分差</text>
+        <text class="evidence-value">{{methodology.validation.averageScoreGapText}}</text>
       </view>
     </view>
 

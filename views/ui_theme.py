@@ -238,6 +238,7 @@ def build_stylesheet() -> str:
     QFrame#actionCard,
     QFrame#resultSummaryCard,
     QFrame#feedbackCard,
+    QFrame#metricChip,
     QLabel#previewLabel {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line"]};
@@ -247,9 +248,37 @@ def build_stylesheet() -> str:
     QFrame#metricPanel,
     QFrame#historyGlyphCard,
     QFrame#softCard,
-    QFrame#actionCard {{
+    QFrame#actionCard,
+    QFrame#metricChip {{
         background-color: {THEME["surface_alt"]};
         border-color: {THEME["line_soft"]};
+    }}
+
+    QFrame#heroCard {{
+        background: qlineargradient(
+            x1: 0,
+            y1: 0,
+            x2: 1,
+            y2: 1,
+            stop: 0 #FFF7EE,
+            stop: 1 #F6E8DD
+        );
+        border-color: #E9DACB;
+    }}
+
+    QFrame#scoreCard,
+    QFrame#feedbackCard,
+    QFrame#resultSummaryCard,
+    QFrame#softCard,
+    QFrame#historyItemCard {{
+        background-color: #FFF7EE;
+        border-color: #D9C8B7;
+    }}
+
+    QFrame#metricChip {{
+        background-color: #F7EDE0;
+        border-color: #DDCCBC;
+        border-radius: 18px;
     }}
 
     QFrame#bottomNav {{
@@ -302,15 +331,36 @@ def build_stylesheet() -> str:
         font-weight: 700;
     }}
 
+    QLabel#bodyStrong {{
+        color: {THEME["ink"]};
+        font-size: 11px;
+        font-weight: 700;
+    }}
+
     QLabel#sectionSubtitle,
     QLabel#miniLabel {{
         color: {THEME["muted"]};
+    }}
+
+    QLabel#hintText {{
+        color: {THEME["ink_soft"]};
+        font-size: 10px;
+        font-weight: 600;
     }}
 
     QLabel#miniLabel {{
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 1px;
+    }}
+
+    QLabel#coachBadge {{
+        color: {THEME["accent"]};
+        background-color: {THEME["accent_soft"]};
+        border-radius: 11px;
+        padding: 3px 10px;
+        font-size: 10px;
+        font-weight: 800;
     }}
 
     QLabel#scoreNumber {{
@@ -338,6 +388,26 @@ def build_stylesheet() -> str:
         color: {THEME["accent"]};
         font-size: 16px;
         font-weight: 900;
+    }}
+
+    QLabel#statValue {{
+        color: {THEME["accent"]};
+        font-size: 18px;
+        font-weight: 800;
+        font-family: {heading_stack};
+    }}
+
+    QLabel#statCaption {{
+        color: {THEME["muted"]};
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }}
+
+    QLabel#actionLine {{
+        color: {THEME["ink"]};
+        font-size: 10px;
+        font-weight: 700;
     }}
 
     QLabel#glyphLabel {{

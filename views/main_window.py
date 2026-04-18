@@ -82,22 +82,17 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 4, 14, 4)
         layout.setSpacing(8)
 
-        self.btn_home = QPushButton("HOME")
+        self.btn_home = QPushButton("首页")
         self.btn_home.setObjectName("navButton")
         layout.addWidget(self.btn_home)
 
-        self.btn_camera = QPushButton("STUDIO")
+        self.btn_camera = QPushButton("练习")
         self.btn_camera.setObjectName("navButton")
         layout.addWidget(self.btn_camera)
 
-        self.btn_history = QPushButton("HISTORY")
+        self.btn_history = QPushButton("记录")
         self.btn_history.setObjectName("navButton")
         layout.addWidget(self.btn_history)
-
-        self.btn_profile = QPushButton("ME")
-        self.btn_profile.setObjectName("navButton")
-        self.btn_profile.setEnabled(False)
-        layout.addWidget(self.btn_profile)
 
         return bar
 
@@ -121,7 +116,7 @@ class MainWindow(QMainWindow):
         self.history_view.result_selected.connect(self._open_result)
 
     def _set_nav_state(self, active_index: int | None) -> None:
-        nav_buttons = [self.btn_home, self.btn_camera, self.btn_history, self.btn_profile]
+        nav_buttons = [self.btn_home, self.btn_camera, self.btn_history]
         for index, button in enumerate(nav_buttons):
             button.setProperty("active", active_index is not None and index == active_index)
             button.style().unpolish(button)

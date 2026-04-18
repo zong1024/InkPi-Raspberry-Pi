@@ -42,6 +42,7 @@
   gap: 12rpx;
 }
 
+.practice-cta-btn,
 .stats-btn,
 .logout-btn {
   margin: 0;
@@ -101,7 +102,8 @@
 }
 
 .digest-panel,
-.filter-panel {
+.filter-panel,
+.growth-panel {
   padding: 28rpx 26rpx;
 }
 
@@ -206,6 +208,105 @@
   line-height: 1.6;
   color: #4f4031;
   font-weight: 700;
+}
+
+.growth-copy,
+.growth-focus-copy,
+.practice-preview-meta {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #7d6651;
+}
+
+.practice-btn {
+  margin: 0;
+  min-width: 210rpx;
+}
+
+.goal-track {
+  margin-top: 18rpx;
+  height: 18rpx;
+  border-radius: 999rpx;
+  background: rgba(207, 185, 160, 0.32);
+  overflow: hidden;
+}
+
+.goal-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b11828 0%, #c66f3f 100%);
+}
+
+.growth-chips {
+  margin-top: 18rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.growth-focus-card,
+.practice-preview-card {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 24rpx;
+  background: rgba(252, 247, 239, 0.92);
+  border: 1rpx solid rgba(214, 193, 167, 0.72);
+}
+
+.growth-focus-title,
+.practice-preview-char {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #3f3125;
+}
+
+.growth-step-list {
+  margin-top: 18rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.growth-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.growth-step-dot {
+  margin-top: 10rpx;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 999rpx;
+  background: #b11828;
+}
+
+.growth-step-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #4f4031;
+}
+
+.practice-preview-grid {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.practice-preview-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.practice-preview-badge {
+  font-size: 22rpx;
+  color: #8a7560;
 }
 
 .digest-tags {
@@ -466,4 +567,13 @@
   background: rgba(239, 227, 212, 0.9);
   color: #7a5a41;
   font-size: 22rpx;
+}
+
+@media (max-width: 520px) {
+  .summary-grid,
+  .picker-grid,
+  .metrics-duo,
+  .practice-preview-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -82,8 +82,22 @@
     </view>
   </view>
 
+  <view wx:if="{{reviewSummary}}" class="paper-panel review-panel">
+    <text class="panel-title">教师复评</text>
+    <text class="panel-subtitle">{{reviewSummary.latestReviewer}} / {{reviewSummary.latestRole}}</text>
+
+    <view class="chip-row">
+      <text class="meta-chip">复评次数 {{reviewSummary.reviewCount}}</text>
+      <text class="meta-chip">人工均分 {{reviewSummary.averageReviewScoreText}}</text>
+      <text class="meta-chip">分差 {{reviewSummary.scoreGapText}}</text>
+      <text class="meta-chip">{{reviewSummary.agreementText}}</text>
+    </view>
+
+    <text class="practice-copy">{{reviewSummary.latestNote}}</text>
+  </view>
+
   <view wx:if="{{practiceProfile}}" class="paper-panel practice-panel">
-    <text class="panel-title">练习建议</text>
+    <text class="panel-title">模型练习建议</text>
     <text class="panel-subtitle">{{practiceProfile.stage_label}} / {{practiceProfile.stage_goal}}</text>
     <text class="practice-copy">{{practiceProfile.coach_prompt}}</text>
 
@@ -107,6 +121,48 @@
         <text class="action-text">{{action}}</text>
       </view>
     </view>
+  </view>
+
+  <view wx:if="{{result}}" class="paper-panel follow-panel">
+    <text class="panel-title">继续练下去</text>
+    <text class="panel-subtitle">{{resultFollowUp.note}}</text>
+
+    <view class="chip-row follow-chip-row">
+      <text wx:for="{{resultFollowUp.progressChips}}" wx:key="*this" class="meta-chip">{{item}}</text>
+    </view>
+
+    <view class="practice-grid">
+      <view wx:if="{{resultFollowUp.focusDimension}}" class="practice-card practice-card-focus">
+        <text class="practice-card-label">下一次先练</text>
+        <text class="practice-card-value">{{resultFollowUp.focusDimension.label}} {{resultFollowUp.focusDimension.score}}</text>
+        <text class="practice-card-note">{{resultFollowUp.focusDimension.tip || resultFollowUp.note}}</text>
+      </view>
+
+      <view wx:if="{{resultFollowUp.strongDimension}}" class="practice-card practice-card-good">
+        <text class="practice-card-label">这次别丢掉</text>
+        <text class="practice-card-value">{{resultFollowUp.strongDimension.label}} {{resultFollowUp.strongDimension.score}}</text>
+        <text class="practice-card-note">{{resultFollowUp.strongDimension.tip || '下一轮练习时，尽量把这项稳定表现继续保住。'}}</text>
+      </view>
+    </view>
+
+    <view class="action-list">
+      <view wx:for="{{resultFollowUp.nextActions}}" wx:for-item="action" wx:key="*this" class="action-item">
+        <text class="action-dot"></text>
+        <text class="action-text">{{action}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{practicePreview.length}}" class="follow-preview-grid">
+      <view wx:for="{{practicePreview}}" wx:key="character" class="follow-preview-card">
+        <view class="follow-preview-top">
+          <text class="follow-preview-char">{{item.character}}</text>
+          <text class="follow-preview-badge">{{item.badgeText}}</text>
+        </view>
+        <text class="follow-preview-meta">均分 {{item.averageText}} / 最近 {{item.latestScoreText}}</text>
+      </view>
+    </view>
+
+    <button class="secondary-btn follow-cta" bindtap="goPractice">去练习中心安排下一轮</button>
   </view>
 
   <view wx:if="{{result}}" class="paper-panel feedback-panel">

@@ -97,6 +97,26 @@ class CloudDatabase:
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS expert_reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    result_id INTEGER NOT NULL,
+                    reviewer_name TEXT NOT NULL,
+                    reviewer_role TEXT,
+                    rubric_version TEXT,
+                    review_score REAL,
+                    review_level TEXT,
+                    structure_score REAL,
+                    stroke_score REAL,
+                    integrity_score REAL,
+                    stability_score REAL,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(result_id) REFERENCES results(id) ON DELETE CASCADE
+                )
+                """
+            )
             cursor.execute("PRAGMA table_info(results)")
             existing_columns = {row[1] for row in cursor.fetchall()}
             for column_name, column_type in (
@@ -110,6 +130,12 @@ class CloudDatabase:
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_expert_reviews_result_created
+                ON expert_reviews(result_id, created_at DESC)
+                """
+            )
             conn.commit()
 
     def ensure_default_user(self, username: str, password: str, display_name: str) -> None:
@@ -371,10 +397,24 @@ class CloudDatabase:
                 ORDER BY MAX(timestamp) DESC, device_name ASC
                 """
             ).fetchall()
+            result_ids = [int(row["id"]) for row in rows]
+            review_rows = []
+            if result_ids:
+                placeholders = ",".join("?" for _ in result_ids)
+                review_rows = conn.execute(
+                    f"""
+                    SELECT *
+                    FROM expert_reviews
+                    WHERE result_id IN ({placeholders})
+                    ORDER BY created_at DESC, id DESC
+                    """,
+                    result_ids,
+                ).fetchall()
 
         available_devices = [row["device_name"] for row in device_rows]
         empty_trend_points = self._build_empty_trend_points(now=now, days=trend_window_days)
         quality_counts = {"good": 0, "medium": 0, "bad": 0}
+        review_groups = self._group_reviews_by_result(review_rows)
 
         if not rows:
             return {
@@ -402,6 +442,14 @@ class CloudDatabase:
                 "top_devices": [],
                 "available_devices": available_devices,
                 "trend_points": empty_trend_points,
+                "reviewed_result_count": 0,
+                "review_record_count": 0,
+                "pending_review_count": 0,
+                "review_coverage_rate": 0.0,
+                "agreement_rate": None,
+                "average_manual_score": None,
+                "average_score_gap": None,
+                "dimension_gap_averages": {},
                 "insight": self._build_summary_insight(
                     total=0,
                     average_score=None,
@@ -528,6 +576,7 @@ class CloudDatabase:
 
         top_character = top_characters[0]["character_name"] if top_characters else None
         top_device = top_devices[0]["device_name"] if top_devices else None
+        review_summary = self._build_review_summary(rows, review_groups)
 
         return {
             "total": total,
@@ -554,6 +603,14 @@ class CloudDatabase:
             "top_devices": top_devices,
             "available_devices": available_devices,
             "trend_points": trend_points,
+            "reviewed_result_count": review_summary["reviewed_result_count"],
+            "review_record_count": review_summary["review_record_count"],
+            "pending_review_count": review_summary["pending_review_count"],
+            "review_coverage_rate": review_summary["review_coverage_rate"],
+            "agreement_rate": review_summary["agreement_rate"],
+            "average_manual_score": review_summary["average_manual_score"],
+            "average_score_gap": review_summary["average_score_gap"],
+            "dimension_gap_averages": review_summary["dimension_gap_averages"],
             "insight": self._build_summary_insight(
                 total=total,
                 average_score=average_score,
@@ -569,6 +626,122 @@ class CloudDatabase:
         with self._managed_connection() as conn:
             row = conn.execute("SELECT * FROM results WHERE id = ?", (result_id,)).fetchone()
         return self._result_row_to_dict(row, include_debug=True) if row else None
+
+    def add_expert_review(self, result_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._managed_connection() as conn:
+            result_row = conn.execute(
+                "SELECT id, total_score, quality_level FROM results WHERE id = ?",
+                (result_id,),
+            ).fetchone()
+            if result_row is None:
+                raise ValueError("result_not_found")
+
+            dimension_scores = payload.get("dimension_scores") or {}
+            review_score = self._coerce_optional_float(payload.get("review_score"))
+            review_level = str(payload.get("review_level", "")).strip() or self._level_from_score(review_score)
+            reviewer_name = str(payload.get("reviewer_name", "")).strip()
+            if not reviewer_name:
+                raise ValueError("reviewer_name_required")
+
+            created_at = utcnow_iso()
+            cursor = conn.execute(
+                """
+                INSERT INTO expert_reviews (
+                    result_id,
+                    reviewer_name,
+                    reviewer_role,
+                    rubric_version,
+                    review_score,
+                    review_level,
+                    structure_score,
+                    stroke_score,
+                    integrity_score,
+                    stability_score,
+                    notes,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    result_id,
+                    reviewer_name,
+                    str(payload.get("reviewer_role", "")).strip() or None,
+                    str(payload.get("rubric_version", "")).strip() or "inkpi-rubric-v1",
+                    review_score,
+                    review_level,
+                    self._coerce_optional_float(dimension_scores.get("structure")),
+                    self._coerce_optional_float(dimension_scores.get("stroke")),
+                    self._coerce_optional_float(dimension_scores.get("integrity")),
+                    self._coerce_optional_float(dimension_scores.get("stability")),
+                    str(payload.get("notes", "")).strip() or None,
+                    created_at,
+                ),
+            )
+            review_id = int(cursor.lastrowid)
+            conn.commit()
+
+        review = self.get_expert_review(review_id)
+        if review is None:
+            raise ValueError("review_not_found")
+        return review
+
+    def get_expert_review(self, review_id: int) -> dict[str, Any] | None:
+        with self._managed_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM expert_reviews WHERE id = ?",
+                (review_id,),
+            ).fetchone()
+        return self._review_row_to_dict(row) if row else None
+
+    def list_expert_reviews(self, result_id: int) -> list[dict[str, Any]]:
+        with self._managed_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM expert_reviews
+                WHERE result_id = ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (result_id,),
+            ).fetchall()
+        return [self._review_row_to_dict(row) for row in rows]
+
+    def get_result_review_summary(self, result_id: int) -> dict[str, Any]:
+        result = self.get_result(result_id)
+        if result is None:
+            raise ValueError("result_not_found")
+
+        reviews = self.list_expert_reviews(result_id)
+        review_count = len(reviews)
+        if not review_count:
+            return {
+                "review_count": 0,
+                "validation_status": "pending_review",
+                "agreement": None,
+                "average_review_score": None,
+                "score_gap": None,
+                "latest_review": None,
+            }
+
+        review_scores = [float(item["review_score"]) for item in reviews if item.get("review_score") is not None]
+        average_review_score = round(sum(review_scores) / len(review_scores), 1) if review_scores else None
+        review_levels: dict[str, int] = defaultdict(int)
+        for item in reviews:
+            level = str(item.get("review_level") or "").strip()
+            if level:
+                review_levels[level] += 1
+        dominant_level = max(review_levels.items(), key=lambda entry: (entry[1], entry[0]))[0] if review_levels else None
+
+        return {
+            "review_count": review_count,
+            "validation_status": "reviewed",
+            "agreement": dominant_level == result.get("quality_level") if dominant_level else None,
+            "average_review_score": average_review_score,
+            "score_gap": round(abs((average_review_score or 0.0) - float(result["total_score"])), 1)
+            if average_review_score is not None
+            else None,
+            "latest_review": reviews[0],
+        }
 
     def delete_result(self, result_id: int) -> bool:
         with self._managed_connection() as conn:
@@ -589,6 +762,90 @@ class CloudDatabase:
             )
             conn.commit()
         return int(cursor.rowcount or 0)
+
+    def _build_review_summary(
+        self,
+        result_rows: list[sqlite3.Row],
+        review_groups: dict[int, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        if not result_rows:
+            return {
+                "reviewed_result_count": 0,
+                "review_record_count": 0,
+                "pending_review_count": 0,
+                "review_coverage_rate": 0.0,
+                "agreement_rate": None,
+                "average_manual_score": None,
+                "average_score_gap": None,
+                "dimension_gap_averages": {},
+            }
+
+        reviewed_result_count = 0
+        review_record_count = 0
+        agreement_count = 0
+        manual_score_values: list[float] = []
+        score_gap_values: list[float] = []
+        dimension_gap_totals: dict[str, float] = defaultdict(float)
+        dimension_gap_counts: dict[str, int] = defaultdict(int)
+
+        for row in result_rows:
+            row_reviews = review_groups.get(int(row["id"]), [])
+            if not row_reviews:
+                continue
+
+            reviewed_result_count += 1
+            review_record_count += len(row_reviews)
+
+            review_scores = [float(item["review_score"]) for item in row_reviews if item.get("review_score") is not None]
+            if review_scores:
+                manual_average = sum(review_scores) / len(review_scores)
+                manual_score_values.append(manual_average)
+                score_gap_values.append(abs(manual_average - float(row["total_score"])))
+
+            level_counter: dict[str, int] = defaultdict(int)
+            for item in row_reviews:
+                level = str(item.get("review_level") or "").strip()
+                if level:
+                    level_counter[level] += 1
+            if level_counter:
+                majority_level = max(level_counter.items(), key=lambda entry: (entry[1], entry[0]))[0]
+                if majority_level == (row["quality_level"] or "medium"):
+                    agreement_count += 1
+
+            ai_dimensions = self._load_json_blob(row["dimension_scores_json"]) or {}
+            for item in row_reviews:
+                review_dimensions = item.get("dimension_scores") or {}
+                for key in DIMENSION_KEYS:
+                    review_value = review_dimensions.get(key)
+                    ai_value = ai_dimensions.get(key)
+                    if review_value is None or ai_value is None:
+                        continue
+                    dimension_gap_totals[key] += abs(float(review_value) - float(ai_value))
+                    dimension_gap_counts[key] += 1
+
+        total_results = len(result_rows)
+        return {
+            "reviewed_result_count": reviewed_result_count,
+            "review_record_count": review_record_count,
+            "pending_review_count": total_results - reviewed_result_count,
+            "review_coverage_rate": round((reviewed_result_count / total_results) * 100, 1) if total_results else 0.0,
+            "agreement_rate": round((agreement_count / reviewed_result_count) * 100, 1) if reviewed_result_count else None,
+            "average_manual_score": round(sum(manual_score_values) / len(manual_score_values), 1)
+            if manual_score_values
+            else None,
+            "average_score_gap": round(sum(score_gap_values) / len(score_gap_values), 1) if score_gap_values else None,
+            "dimension_gap_averages": {
+                key: round(dimension_gap_totals[key] / dimension_gap_counts[key], 1)
+                for key in DIMENSION_KEYS
+                if dimension_gap_counts[key]
+            },
+        }
+
+    def _group_reviews_by_result(self, rows: list[sqlite3.Row]) -> dict[int, list[dict[str, Any]]]:
+        grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            grouped[int(row["result_id"])].append(self._review_row_to_dict(row))
+        return grouped
 
     def _build_filter_clause(
         self,
@@ -718,6 +975,46 @@ class CloudDatabase:
         if include_debug:
             payload["score_debug"] = self._load_json_blob(row["score_debug_json"])
         return payload
+
+    def _review_row_to_dict(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if row is None:
+            return None
+        return {
+            "id": int(row["id"]),
+            "result_id": int(row["result_id"]),
+            "reviewer_name": row["reviewer_name"],
+            "reviewer_role": row["reviewer_role"],
+            "rubric_version": row["rubric_version"],
+            "review_score": row["review_score"],
+            "review_level": row["review_level"],
+            "dimension_scores": {
+                "structure": row["structure_score"],
+                "stroke": row["stroke_score"],
+                "integrity": row["integrity_score"],
+                "stability": row["stability_score"],
+            },
+            "notes": row["notes"],
+            "created_at": row["created_at"],
+        }
+
+    @staticmethod
+    def _coerce_optional_float(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _level_from_score(score: float | None) -> str:
+        if score is None:
+            return "medium"
+        if score >= 85:
+            return "good"
+        if score >= 70:
+            return "medium"
+        return "bad"
 
     def _coerce_json_text(self, raw_text: Any, raw_value: Any) -> str | None:
         if isinstance(raw_text, str) and raw_text.strip():

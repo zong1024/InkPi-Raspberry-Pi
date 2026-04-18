@@ -49,7 +49,7 @@ class PreviewThread(QThread):
 
 
 class CameraView(QWidget):
-    """Capture page designed for 480x320 landscape."""
+    """Capture page designed around a clear score-to-retry loop."""
 
     capture_completed = pyqtSignal(EvaluationResult)
     cancelled = pyqtSignal()
@@ -59,12 +59,13 @@ class CameraView(QWidget):
         self.logger = logging.getLogger(__name__)
         self.preview_thread: PreviewThread | None = None
         self.current_frame: np.ndarray | None = None
+        self._idle_hint = "拍前确认：单字完整入框，纸面摆正，光线尽量均匀。"
         self._init_ui()
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(6)
 
         header = QFrame()
         header.setObjectName("pageHeader")
@@ -95,36 +96,54 @@ class CameraView(QWidget):
         header_layout.addWidget(self.camera_state)
         root.addWidget(header)
 
+        guide_card = QFrame()
+        guide_card.setObjectName("actionCard")
+        guide_card.setFixedHeight(32)
+        guide_layout = QHBoxLayout(guide_card)
+        guide_layout.setContentsMargins(10, 6, 10, 6)
+        guide_layout.setSpacing(6)
+
+        guide_title = QLabel("拍前确认")
+        guide_title.setObjectName("miniLabel")
+        guide_title.setFont(app_font(8, QFont.Weight.Bold))
+        guide_layout.addWidget(guide_title)
+
+        self.capture_hint = QLabel(self._idle_hint)
+        self.capture_hint.setObjectName("hintText")
+        self.capture_hint.setFont(app_font(8, QFont.Weight.Bold))
+        guide_layout.addWidget(self.capture_hint, stretch=1)
+        root.addWidget(guide_card)
+
         self.preview_label = QLabel("正在连接摄像头…")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setFixedHeight(194)
+        self.preview_label.setFixedHeight(172)
         self.preview_label.setFont(app_font(11))
         root.addWidget(self.preview_label)
 
         bottom_row = QHBoxLayout()
         bottom_row.setContentsMargins(0, 0, 0, 0)
-        bottom_row.setSpacing(12)
+        bottom_row.setSpacing(10)
 
         self.btn_load = QPushButton("上传图片")
         self.btn_load.setObjectName("buttonCard")
-        self.btn_load.setFixedSize(86, 56)
+        self.btn_load.setFixedSize(92, 52)
         self.btn_load.setFont(app_font(10, QFont.Weight.Bold))
         self.btn_load.clicked.connect(self._on_load_image)
         bottom_row.addWidget(self.btn_load)
 
         self.btn_capture = QPushButton("拍")
         self.btn_capture.setObjectName("floatingButton")
-        self.btn_capture.setFixedSize(60, 60)
-        self.btn_capture.setFont(display_font(15, QFont.Weight.Bold))
+        self.btn_capture.setFixedSize(56, 56)
+        self.btn_capture.setFont(display_font(14, QFont.Weight.Bold))
         self.btn_capture.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_capture, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        self.btn_eval = QPushButton("开始评测")
+        self.btn_eval = QPushButton("生成评分与建议")
         self.btn_eval.setObjectName("primaryButton")
-        self.btn_eval.setFixedSize(174, 56)
-        self.btn_eval.setFont(display_font(11, QFont.Weight.Bold))
+        self.btn_eval.setFixedSize(168, 52)
+        self.btn_eval.setFont(display_font(10, QFont.Weight.Bold))
         self.btn_eval.clicked.connect(self._on_capture)
         bottom_row.addWidget(self.btn_eval)
         root.addLayout(bottom_row)
@@ -143,12 +162,17 @@ class CameraView(QWidget):
         self.camera_state.style().unpolish(self.camera_state)
         self.camera_state.style().polish(self.camera_state)
 
+    def _set_capture_hint(self, text: str) -> None:
+        self.capture_hint.setText(text)
+
     def _start_camera(self) -> None:
         self._set_camera_state("连接中", "working")
+        self._set_capture_hint(self._idle_hint)
         if not camera_service.open():
             self.preview_label.setText("摄像头暂不可用。\n你仍然可以直接上传图片完成评测。")
             self.btn_capture.setEnabled(False)
             self.btn_eval.setEnabled(False)
+            self._set_capture_hint("摄像头离线，可改用上传图片继续生成本轮建议。")
             self._set_camera_state("离线", "error")
             return
 
@@ -203,7 +227,7 @@ class CameraView(QWidget):
 
         cv2.putText(
             overlay,
-            "Place single character in frame",
+            "Center one character",
             (max(18, x1 - 8), min(height - 14, y2 + 24)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,
@@ -229,6 +253,7 @@ class CameraView(QWidget):
     def _handle_preprocessing_failure(self, exc: PreprocessingError, dialog_title: str) -> None:
         retry_guidance = self._build_retry_guidance(exc)
         self._set_camera_state("重试", "error")
+        self._set_capture_hint(f"请重拍：{retry_guidance}")
         speech_service.speak_error(str(exc))
         QMessageBox.warning(self, dialog_title, f"{exc}\n\n建议：{retry_guidance}")
 
@@ -252,6 +277,7 @@ class CameraView(QWidget):
 
         self.btn_capture.setEnabled(False)
         self.btn_eval.setEnabled(False)
+        self._set_capture_hint("正在评分，并生成下一轮练习建议…")
         self._set_camera_state("评测中", "working")
 
         timestamp = int(time.time() * 1000)
@@ -260,6 +286,7 @@ class CameraView(QWidget):
 
         try:
             result = self._run_evaluation(self.current_frame, original_path)
+            self._set_capture_hint("评测完成，正在打开结果建议。")
             self._set_camera_state("完成", "ready")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
@@ -268,6 +295,7 @@ class CameraView(QWidget):
             self.btn_eval.setEnabled(True)
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
+            self._set_capture_hint("评测失败，请稍后重试或改用上传图片。")
             QMessageBox.critical(self, "评测失败", str(exc))
             self.btn_capture.setEnabled(True)
             self.btn_eval.setEnabled(True)
@@ -288,6 +316,7 @@ class CameraView(QWidget):
             return
 
         self.current_frame = image.copy()
+        self._set_capture_hint("正在解析图片，并生成本轮评分与建议…")
         self._set_camera_state("图片模式", "working")
         self._evaluate_image(image, Path(file_path))
 
@@ -296,12 +325,14 @@ class CameraView(QWidget):
         self.btn_load.setText("评测中")
         try:
             result = self._run_evaluation(image, original_path)
+            self._set_capture_hint("评测完成，正在打开结果建议。")
             self._set_camera_state("完成", "ready")
             self.capture_completed.emit(result)
         except PreprocessingError as exc:
             self._handle_preprocessing_failure(exc, "图片内容不符合评测条件")
         except Exception as exc:  # noqa: BLE001
             self._set_camera_state("异常", "error")
+            self._set_capture_hint("图片评测失败，请更换图片后重试。")
             QMessageBox.critical(self, "评测失败", str(exc))
         finally:
             self.btn_load.setEnabled(True)

@@ -1,0 +1,138 @@
+<view class="page-shell practice-page">
+  <view class="page-orb page-orb-a"></view>
+  <view class="page-orb page-orb-b"></view>
+
+  <view class="paper-panel practice-hero">
+    <view class="section-head">
+      <view>
+        <text class="eyebrow">InkPi Practice</text>
+        <text class="practice-title">练习中心</text>
+      </view>
+      <button class="ghost-btn hero-back" bindtap="goHistory">返回记录</button>
+    </view>
+    <text class="practice-subtitle">
+      把周目标、连续练习和下一轮动作排清楚，让“看完结果”自然进入“继续练习”。
+    </text>
+    <text wx:if="{{sourceText}}" class="practice-source">{{sourceText}}</text>
+    <view class="chip-row">
+      <text class="meta-chip">最近刷新 {{lastUpdated || '尚未同步'}}</text>
+      <text class="meta-chip">最近 30 天 {{summary.total}} 条</text>
+      <text class="meta-chip">近 7 天均分 {{summary.recentAverageText}}</text>
+    </view>
+  </view>
+
+  <view wx:if="{{error}}" class="notice notice-error">{{error}}</view>
+  <view wx:if="{{loading}}" class="notice">正在生成练习计划...</view>
+
+  <view class="goal-shell">
+    <view class="paper-panel goal-panel">
+      <view class="section-head">
+        <text class="section-title">本周目标</text>
+        <text class="section-note">{{growthSummary.weekGoalText}}</text>
+      </view>
+      <text class="goal-copy">{{growthSummary.message}}</text>
+      <view class="goal-track">
+        <view class="goal-fill" style="width: {{growthSummary.weekGoalPercent}}%;"></view>
+      </view>
+      <view class="goal-meta">
+        <text class="goal-meta-item">连续练习 {{growthSummary.streakText}}</text>
+        <text class="goal-meta-item">本周上传 {{growthSummary.weekRecords}} 条</text>
+        <text class="goal-meta-item">稳定 80+ {{growthSummary.stableProgressText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="milestone-grid">
+    <view wx:for="{{milestoneCards}}" wx:key="key" class="paper-panel milestone-card">
+      <text class="milestone-label">{{item.label}}</text>
+      <text class="milestone-value">{{item.value}}</text>
+      <text class="milestone-note">{{item.note}}</text>
+    </view>
+  </view>
+
+  <view class="focus-grid">
+    <view wx:if="{{focusDimension}}" class="paper-panel focus-panel focus-panel-main">
+      <text class="panel-title">当前补强项</text>
+      <text class="panel-subtitle">{{focusDimension.note}}</text>
+      <view class="focus-score-row">
+        <text class="focus-name">{{focusDimension.label}}</text>
+        <text class="focus-score">{{focusDimension.averageText}}</text>
+      </view>
+      <text class="focus-gap">距离 85 分目标还差 {{focusDimension.gapText}}</text>
+    </view>
+
+    <view wx:if="{{strongDimension}}" class="paper-panel focus-panel">
+      <text class="panel-title">当前保留项</text>
+      <text class="panel-subtitle">{{strongDimension.note}}</text>
+      <view class="focus-score-row">
+        <text class="focus-name">{{strongDimension.label}}</text>
+        <text class="focus-score">{{strongDimension.averageText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="paper-panel plan-panel">
+    <view class="section-head">
+      <text class="section-title">{{sessionPlan.title}}</text>
+      <text class="section-note">10 分钟轻练版</text>
+    </view>
+    <text class="plan-subtitle">{{sessionPlan.subtitle}}</text>
+    <view class="plan-list">
+      <view wx:for="{{sessionPlan.actions}}" wx:key="*this" class="plan-item">
+        <text class="plan-dot"></text>
+        <text class="plan-text">{{item}}</text>
+      </view>
+    </view>
+    <text class="plan-footer">{{sessionPlan.footer}}</text>
+  </view>
+
+  <view class="paper-panel recommend-panel">
+    <view class="section-head">
+      <text class="section-title">推荐复练字</text>
+      <text class="section-note">优先把“已经写过、但还没写稳”的字练熟</text>
+    </view>
+
+    <view wx:if="{{recommendations.length}}" class="recommend-list">
+      <view wx:for="{{recommendations}}" wx:key="character" class="recommend-card">
+        <view class="recommend-top">
+          <view>
+            <text class="recommend-character">{{item.character}}</text>
+            <text class="recommend-badge">{{item.badgeText}}</text>
+          </view>
+          <text class="recommend-average">均分 {{item.averageText}}</text>
+        </view>
+        <text class="recommend-meta">最近 {{item.latestScoreText}} / 最好 {{item.bestScoreText}}</text>
+        <text class="recommend-reason">{{item.reason}}</text>
+      </view>
+    </view>
+
+    <text wx:else class="panel-subtitle">先完成几条练习记录，这里就会开始给你推荐复练字。</text>
+  </view>
+
+  <view class="paper-panel summary-panel">
+    <text class="panel-title">量化结果</text>
+    <view class="summary-grid">
+      <view class="summary-item">
+        <text class="summary-label">最近 30 天记录</text>
+        <text class="summary-value">{{summary.total}}</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-label">近 7 天均分</text>
+        <text class="summary-value">{{summary.recentAverageText}}</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-label">最高分</text>
+        <text class="summary-value">{{summary.bestScoreText}}</text>
+      </view>
+      <view class="summary-item">
+        <text class="summary-label">达标率</text>
+        <text class="summary-value">{{summary.qualifiedRateText}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="quick-actions">
+    <button class="ghost-btn quick-btn" bindtap="goHistory">回到记录页</button>
+    <button class="ghost-btn quick-btn" bindtap="goStats">查看统计中心</button>
+  </view>
+</view>

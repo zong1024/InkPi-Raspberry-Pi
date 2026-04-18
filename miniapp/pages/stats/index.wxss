@@ -6,6 +6,7 @@
 
 .stats-hero,
 .filter-panel,
+.growth-panel,
 .chart-panel,
 .leaderboard-panel,
 .insight-panel,
@@ -38,9 +39,15 @@
   padding: 0 24rpx;
 }
 
+.practice-btn {
+  margin: 0;
+  min-width: 190rpx;
+}
+
 .picker-grid,
 .stats-grid,
 .evidence-grid,
+.growth-grid,
 .leaderboard-grid,
 .panel-duo {
   display: grid;
@@ -68,6 +75,7 @@
 
 .stats-grid,
 .evidence-grid,
+.growth-grid,
 .leaderboard-grid,
 .panel-duo {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -102,6 +110,16 @@
   color: #7d6651;
 }
 
+.growth-copy,
+.growth-focus-copy,
+.growth-preview-meta {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #7d6651;
+}
+
 .section-head {
   display: flex;
   align-items: flex-end;
@@ -128,11 +146,74 @@
 }
 
 .evidence-card,
+.growth-metric-card,
 .reference-card {
   padding: 20rpx;
   border-radius: 24rpx;
   background: rgba(252, 247, 239, 0.92);
   border: 1rpx solid rgba(214, 193, 167, 0.72);
+}
+
+.growth-metric-label {
+  display: block;
+  font-size: 22rpx;
+  color: #8a7560;
+}
+
+.growth-metric-value {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 40rpx;
+  line-height: 1;
+  font-weight: 800;
+  color: #31261c;
+}
+
+.growth-metric-note {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: #7d6651;
+}
+
+.growth-focus-card,
+.growth-preview-card {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 24rpx;
+  background: rgba(252, 247, 239, 0.92);
+  border: 1rpx solid rgba(214, 193, 167, 0.72);
+}
+
+.growth-focus-title,
+.growth-preview-char {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #3f3125;
+}
+
+.growth-steps {
+  margin-top: 18rpx;
+}
+
+.growth-preview-grid {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.growth-preview-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.growth-preview-badge {
+  font-size: 22rpx;
+  color: #8a7560;
 }
 
 .roadmap-copy,
@@ -282,9 +363,11 @@
 @media (max-width: 520px) {
   .leaderboard-grid,
   .stats-grid,
+  .growth-grid,
   .picker-grid,
   .evidence-grid,
-  .panel-duo {
+  .panel-duo,
+  .growth-preview-grid {
     grid-template-columns: 1fr;
   }
 }

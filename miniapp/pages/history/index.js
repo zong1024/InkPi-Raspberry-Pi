@@ -1,6 +1,7 @@
 const api = require('../../utils/api');
 const auth = require('../../utils/auth');
-const { POLL_INTERVAL } = require('../../config');
+const { POLL_INTERVAL, RECENT_PRACTICE_LIMIT } = require('../../config');
+const { buildGrowthInsights } = require('../../utils/practice');
 
 const QUALITY_OPTIONS = ['全部等级', '甲', '乙', '丙'];
 const QUALITY_VALUES = ['all', 'good', 'medium', 'bad'];
@@ -8,6 +9,7 @@ const DATE_OPTIONS = ['全部时间', '今天', '最近 7 天', '最近 30 天']
 const DATE_VALUES = ['all', '1d', '7d', '30d'];
 const SORT_OPTIONS = ['按最新', '按最高分', '按最低分'];
 const SORT_VALUES = ['latest', 'highest', 'lowest'];
+const EMPTY_GROWTH = buildGrowthInsights([]);
 
 function getScorePalette(score) {
   if (score >= 85) {
@@ -151,6 +153,11 @@ Page({
     lastUpdated: '',
     deletingId: null,
     summary: normalizeSummary(),
+    growthSummary: EMPTY_GROWTH.growthSummary,
+    milestoneCards: EMPTY_GROWTH.milestoneCards,
+    focusDimension: null,
+    practicePreview: [],
+    practiceSteps: EMPTY_GROWTH.sessionPlan.actions.slice(0, 2),
     managing: false,
     selectedIds: [],
     qualityOptions: QUALITY_OPTIONS,
@@ -246,9 +253,10 @@ Page({
 
     try {
       const params = this.buildFilterParams();
-      const [summaryPayload, historyPayload] = await Promise.all([
+      const [summaryPayload, historyPayload, growthPayload] = await Promise.all([
         api.getHistorySummary(params),
         api.getHistory({ ...params, limit: 80 }),
+        api.getHistory({ sort: 'latest', limit: RECENT_PRACTICE_LIMIT }),
       ]);
 
       const normalizedSummary = normalizeSummary(summaryPayload.summary || {});
@@ -277,10 +285,16 @@ Page({
         (deviceValues[nextFilters.deviceIndex] || 'all') !== 'all';
 
       const results = (historyPayload.items || []).map(normalizeResult);
+      const growthInsights = buildGrowthInsights((growthPayload && growthPayload.items) || []);
 
       this.setData({
         results,
         summary: normalizedSummary,
+        growthSummary: growthInsights.growthSummary,
+        milestoneCards: growthInsights.milestoneCards,
+        focusDimension: growthInsights.dimensionInsights.focusDimension,
+        practicePreview: growthInsights.recommendations.slice(0, 2),
+        practiceSteps: growthInsights.sessionPlan.actions.slice(0, 2),
         error: '',
         lastUpdated: this.formatTime(new Date()),
         deviceOptions,
@@ -357,6 +371,10 @@ Page({
 
   goStats() {
     wx.navigateTo({ url: '/pages/stats/index' });
+  },
+
+  goPractice() {
+    wx.navigateTo({ url: '/pages/practice/index' });
   },
 
   toggleManageMode() {

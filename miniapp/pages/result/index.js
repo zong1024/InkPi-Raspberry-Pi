@@ -1,5 +1,7 @@
 const api = require('../../utils/api');
 const auth = require('../../utils/auth');
+const { RECENT_PRACTICE_LIMIT } = require('../../config');
+const { buildGrowthInsights, buildResultFollowUp } = require('../../utils/practice');
 
 const DIMENSION_LABELS = {
   structure: '结构',
@@ -93,6 +95,37 @@ function buildMetrics(result) {
   ];
 }
 
+function normalizeReviewSummary(summary = null, reviews = []) {
+  const payload = summary || {};
+  const latestReview = payload.latest_review || (reviews && reviews[0]) || null;
+  const reviewCount = Number(payload.review_count || 0);
+
+  return {
+    reviewCount,
+    validationStatus: payload.validation_status || 'pending_review',
+    agreementText:
+      payload.agreement === null || payload.agreement === undefined
+        ? '待人工对照'
+        : payload.agreement
+          ? '与人工等级一致'
+          : '与人工等级存在差异',
+    averageReviewScoreText:
+      payload.average_review_score === null || payload.average_review_score === undefined
+        ? '--'
+        : `${Math.round(Number(payload.average_review_score) * 10) / 10}`,
+    scoreGapText:
+      payload.score_gap === null || payload.score_gap === undefined
+        ? '--'
+        : `${Math.round(Number(payload.score_gap) * 10) / 10}`,
+    latestReviewer: latestReview ? latestReview.reviewer_name || '教师复评' : '待教师复评',
+    latestRole: latestReview ? latestReview.reviewer_role || '人工校核' : '等待复评',
+    latestNote: latestReview ? latestReview.notes || '本次复评未填写附加说明。' : '当前结果还没有进入教师/专家复评。',
+  };
+}
+
+const EMPTY_GROWTH = buildGrowthInsights([]);
+const EMPTY_FOLLOW_UP = buildResultFollowUp({}, EMPTY_GROWTH);
+
 Page({
   data: {
     loading: true,
@@ -102,6 +135,10 @@ Page({
     dimensionSummary: '',
     basisCards: [],
     practiceProfile: null,
+    reviewSummary: null,
+    growthSummary: EMPTY_GROWTH.growthSummary,
+    resultFollowUp: EMPTY_FOLLOW_UP,
+    practicePreview: [],
     error: '',
     deleting: false,
   },
@@ -122,11 +159,16 @@ Page({
   async loadDetail() {
     this.setData({ loading: true, error: '' });
     try {
-      const data = await api.getResultDetail(this.resultId);
+      const [data, historyPayload] = await Promise.all([
+        api.getResultDetail(this.resultId),
+        api.getHistory({ sort: 'latest', limit: RECENT_PRACTICE_LIMIT }).catch(() => ({ items: [] })),
+      ]);
       const rawResult = data.result || {};
       const palette = getScorePalette(rawResult.total_score || 0);
       const dimensionCards = buildDimensionCards(rawResult.dimension_scores);
       const practiceProfile = rawResult.practice_profile || null;
+      const growthInsights = buildGrowthInsights((historyPayload && historyPayload.items) || []);
+      const reviewSummary = normalizeReviewSummary(rawResult.expert_review_summary, rawResult.expert_reviews);
 
       const result = {
         ...rawResult,
@@ -146,6 +188,10 @@ Page({
         dimensionSummary: buildDimensionSummary(dimensionCards),
         basisCards: normalizeBasisCards(rawResult.dimension_basis || []),
         practiceProfile,
+        reviewSummary,
+        growthSummary: growthInsights.growthSummary,
+        resultFollowUp: buildResultFollowUp(rawResult, growthInsights),
+        practicePreview: growthInsights.recommendations.slice(0, 2),
       });
     } catch (error) {
       this.setData({ error: '加载详情失败，请返回历史页后重试。' });
@@ -201,5 +247,9 @@ Page({
 
   goStats() {
     wx.navigateTo({ url: '/pages/stats/index' });
+  },
+
+  goPractice() {
+    wx.navigateTo({ url: '/pages/practice/index?source=result' });
   },
 });

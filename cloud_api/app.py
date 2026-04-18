@@ -18,6 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - direct script execution fallba
 from models.evaluation_framework import (
     build_methodology_payload,
     build_practice_profile,
+    build_scope_boundary,
     get_dimension_basis,
 )
 
@@ -51,6 +52,14 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     def device_key_valid() -> bool:
         device_key = request.headers.get("X-Device-Key", "").strip()
         return bool(device_key) and device_key == app.config["DEVICE_KEY"]
+
+    def summary_filters_from_request() -> dict[str, str]:
+        return {
+            "keyword": str(request.args.get("keyword", "")).strip(),
+            "quality_level": str(request.args.get("quality_level", "all")).strip() or "all",
+            "device_name": str(request.args.get("device_name", "all")).strip() or "all",
+            "date_range": str(request.args.get("date_range", "all")).strip() or "all",
+        }
 
     def auth_required(fn: Callable):
         @wraps(fn)
@@ -136,30 +145,45 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @app.get("/api/results/summary")
     @auth_required
     def results_summary():
-        keyword = str(request.args.get("keyword", "")).strip()
-        quality_level = str(request.args.get("quality_level", "all")).strip() or "all"
-        device_name = str(request.args.get("device_name", "all")).strip() or "all"
-        date_range = str(request.args.get("date_range", "all")).strip() or "all"
+        filters = summary_filters_from_request()
         return jsonify(
             {
                 "ok": True,
-                "summary": db.get_summary(
-                    keyword=keyword,
-                    quality_level=quality_level,
-                    device_name=device_name,
-                    date_range=date_range,
-                ),
+                "summary": db.get_summary(**filters),
             }
         )
 
     @app.get("/api/system/methodology")
     @auth_required
     def methodology():
-        summary = db.get_summary()
+        summary = db.get_summary(**summary_filters_from_request())
         return jsonify(
             {
                 "ok": True,
                 **build_methodology_payload(summary),
+            }
+        )
+
+    @app.get("/api/validation/overview")
+    @auth_required
+    def validation_overview():
+        summary = db.get_summary(**summary_filters_from_request())
+        methodology_payload = build_methodology_payload(summary)
+        return jsonify(
+            {
+                "ok": True,
+                "overview": {
+                    "reviewed_result_count": summary.get("reviewed_result_count"),
+                    "review_record_count": summary.get("review_record_count"),
+                    "pending_review_count": summary.get("pending_review_count"),
+                    "review_coverage_rate": summary.get("review_coverage_rate"),
+                    "agreement_rate": summary.get("agreement_rate"),
+                    "average_manual_score": summary.get("average_manual_score"),
+                    "average_score_gap": summary.get("average_score_gap"),
+                    "dimension_gap_averages": summary.get("dimension_gap_averages"),
+                },
+                "validation_snapshot": methodology_payload["validation_snapshot"],
+                "validation_plan": methodology_payload["validation_plan"],
             }
         )
 
@@ -176,7 +200,37 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             quality_level=str(result.get("quality_level") or "medium"),
             character_name=result.get("character_name"),
         )
+        result["scope_boundary"] = build_scope_boundary()
+        result["expert_review_summary"] = db.get_result_review_summary(result_id)
+        result["expert_reviews"] = db.list_expert_reviews(result_id)
         return jsonify({"ok": True, "result": result})
+
+    @app.get("/api/results/<int:result_id>/reviews")
+    @auth_required
+    def result_reviews(result_id: int):
+        result = db.get_result(result_id)
+        if not result:
+            return json_error("result_not_found", 404)
+        return jsonify(
+            {
+                "ok": True,
+                "items": db.list_expert_reviews(result_id),
+                "summary": db.get_result_review_summary(result_id),
+            }
+        )
+
+    @app.post("/api/results/<int:result_id>/reviews")
+    @auth_required
+    def add_result_review(result_id: int):
+        payload = request.get_json(silent=True) or {}
+        try:
+            review = db.add_expert_review(result_id, payload)
+        except ValueError as exc:
+            error_code = str(exc)
+            if error_code == "result_not_found":
+                return json_error(error_code, 404)
+            return json_error(error_code, 400)
+        return jsonify({"ok": True, "review": review, "summary": db.get_result_review_summary(result_id)})
 
     @app.delete("/api/results/<int:result_id>")
     @auth_required

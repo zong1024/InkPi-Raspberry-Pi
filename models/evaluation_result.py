@@ -7,7 +7,11 @@ from datetime import datetime
 import json
 from typing import Any
 
-from models.evaluation_framework import build_practice_profile, get_dimension_basis
+from models.evaluation_framework import (
+    build_practice_profile,
+    build_scope_boundary,
+    get_dimension_basis,
+)
 
 
 QUALITY_LABELS = {
@@ -95,6 +99,7 @@ class EvaluationResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a serializable dictionary."""
+
         dimension_scores = self.get_dimension_scores()
         return {
             "id": self.id,
@@ -112,16 +117,19 @@ class EvaluationResult:
             "dimension_summary": summarize_dimension_scores(dimension_scores),
             "dimension_basis": get_dimension_basis(dimension_scores),
             "practice_profile": self.get_practice_profile(),
+            "scope_boundary": build_scope_boundary(),
             "score_debug": self.score_debug,
         }
 
     def to_json(self) -> str:
         """Convert to formatted JSON."""
+
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EvaluationResult":
         """Rebuild from a dictionary."""
+
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
             timestamp = datetime.fromisoformat(timestamp)
@@ -162,14 +170,17 @@ class EvaluationResult:
 
     def get_grade(self) -> str:
         """Human-readable quality label."""
+
         return QUALITY_LABELS.get(self.quality_level, QUALITY_LABELS["medium"])
 
     def get_color(self) -> str:
         """UI color helper."""
+
         return QUALITY_COLORS.get(self.quality_level, QUALITY_COLORS["medium"])
 
     def get_dimension_scores(self) -> dict[str, int] | None:
         """Return normalized dimension scores in a stable order."""
+
         if not self.dimension_scores:
             return None
         normalized = {
@@ -181,10 +192,12 @@ class EvaluationResult:
 
     def get_dimension_summary(self) -> dict[str, dict[str, Any]] | None:
         """Return strongest and weakest dimension metadata."""
+
         return summarize_dimension_scores(self.get_dimension_scores())
 
     def get_dimension_items(self) -> list[dict[str, Any]]:
         """Return ordered dimension items for UI rendering."""
+
         scores = self.get_dimension_scores() or {}
         return [
             {
@@ -198,6 +211,7 @@ class EvaluationResult:
 
     def get_practice_profile(self) -> dict[str, Any]:
         """Return coach-style practice guidance based on current result."""
+
         return build_practice_profile(
             self.get_dimension_scores(),
             total_score=int(self.total_score),

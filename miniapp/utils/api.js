@@ -55,8 +55,12 @@ function getHistorySummary(options = {}) {
   return request(`/api/results/summary${toQuery(options)}`);
 }
 
-function getMethodology() {
-  return request('/api/system/methodology');
+function getMethodology(options = {}) {
+  return request(`/api/system/methodology${toQuery(options)}`);
+}
+
+function getValidationOverview(options = {}) {
+  return request(`/api/validation/overview${toQuery(options)}`);
 }
 
 function getResultDetail(id) {
@@ -82,6 +86,7 @@ module.exports = {
   getHistory,
   getHistorySummary,
   getMethodology,
+  getValidationOverview,
   getResultDetail,
   deleteHistory,
   batchDeleteHistory,
