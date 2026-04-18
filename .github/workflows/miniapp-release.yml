@@ -1,0 +1,66 @@
+name: Miniapp Release Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git ref to package
+        required: true
+        default: master
+      release_version:
+        description: Optional release label
+        required: false
+      api_base_url:
+        description: Optional HTTPS API base URL override for the packaged config
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Validate miniapp source
+        env:
+          MINIAPP_API_BASE_URL: ${{ inputs.api_base_url }}
+          INKPI_MINIAPP_RELEASE_MODE: "1"
+        run: bash scripts/ci_miniapp_checks.sh
+
+      - name: Build miniapp release package
+        env:
+          INPUT_RELEASE_VERSION: ${{ inputs.release_version }}
+          MINIAPP_API_BASE_URL: ${{ inputs.api_base_url }}
+          INKPI_MINIAPP_RELEASE_MODE: "1"
+        shell: bash
+        run: |
+          if [ -n "${INPUT_RELEASE_VERSION}" ]; then
+            export INKPI_RELEASE_VERSION="${INPUT_RELEASE_VERSION}"
+          else
+            export INKPI_RELEASE_VERSION="${GITHUB_SHA}"
+          fi
+          bash scripts/package_miniapp_release.sh
+
+      - name: Upload miniapp release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkpi-miniapp-release
+          path: |
+            dist/releases/inkpi-miniapp-*.zip
+            miniapp/dist/ci-package

@@ -1,0 +1,89 @@
+name: Raspberry Pi Device CD Example
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master"]
+
+jobs:
+  validate-and-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Run Raspberry Pi checks
+        run: bash scripts/rpi_lint_test.sh
+
+      - name: Build Raspberry Pi release artifact
+        run: bash scripts/package_rpi_release.sh
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inkpi-rpi-release
+          path: |
+            dist/releases/*.tar.gz
+            dist/releases/*.manifest.txt
+            dist/releases/*.sha256
+
+  deploy-to-rpi:
+    runs-on: ubuntu-latest
+    needs: validate-and-package
+    if: github.ref == 'refs/heads/master'
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: inkpi-rpi-release
+          path: dist/releases
+
+      - name: Configure SSH
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_PORT: ${{ secrets.RPI_PORT }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+          RPI_SSH_KEY: ${{ secrets.RPI_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$RPI_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${RPI_PORT:-22}" "$RPI_HOST" >> ~/.ssh/known_hosts
+          ssh -p "${RPI_PORT:-22}" "$RPI_USER@$RPI_HOST" 'mkdir -p ~/inkpi-bootstrap'
+
+      - name: Copy artifact and deploy helpers to Raspberry Pi
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_PORT: ${{ secrets.RPI_PORT }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+        run: |
+          ARTIFACT="$(find dist/releases -maxdepth 1 -name 'inkpi-rpi-release-*.tar.gz' | head -n 1)"
+          test -n "$ARTIFACT"
+          scp -P "${RPI_PORT:-22}" \
+            "$ARTIFACT" \
+            scripts/install_rpi_release.sh \
+            scripts/health_check_stack.sh \
+            "$RPI_USER@$RPI_HOST:~/inkpi-bootstrap/"
+
+      - name: Deploy to Raspberry Pi
+        env:
+          RPI_HOST: ${{ secrets.RPI_HOST }}
+          RPI_PORT: ${{ secrets.RPI_PORT }}
+          RPI_USER: ${{ secrets.RPI_USER }}
+        run: |
+          ARTIFACT_NAME="$(find dist/releases -maxdepth 1 -name 'inkpi-rpi-release-*.tar.gz' -printf '%f\n' | head -n 1)"
+          ssh -p "${RPI_PORT:-22}" "$RPI_USER@$RPI_HOST" \
+            "INKPI_DEPLOY_ROOT=\$HOME/inkpi-device \
+             INKPI_DEPLOY_MODE=server \
+             bash \$HOME/inkpi-bootstrap/install_rpi_release.sh \$HOME/inkpi-bootstrap/${ARTIFACT_NAME}"

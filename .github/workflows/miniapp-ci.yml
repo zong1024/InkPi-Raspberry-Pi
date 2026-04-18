@@ -1,0 +1,64 @@
+name: MiniApp CI
+
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - "miniapp/**"
+      - "README.md"
+      - ".github/workflows/miniapp-ci.yml"
+  push:
+    branches: ["master"]
+    paths:
+      - "miniapp/**"
+      - "README.md"
+      - ".github/workflows/miniapp-ci.yml"
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: "Run strict release preflight"
+        required: false
+        type: boolean
+        default: false
+      api_base_url:
+        description: "Optional API base URL override for dist/config.js"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: miniapp-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  miniapp-ci:
+    runs-on: ubuntu-latest
+    env:
+      MINIAPP_API_BASE_URL: ${{ github.event.inputs.api_base_url || vars.MINIAPP_API_BASE_URL || '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run miniapp pipeline
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.release_mode }}" = "true" ]; then
+            npm --prefix miniapp run ci:release
+          else
+            npm --prefix miniapp run ci
+          fi
+
+      - name: Upload miniapp artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: miniapp-ci-package
+          path: miniapp/dist/ci-package
+          if-no-files-found: ignore

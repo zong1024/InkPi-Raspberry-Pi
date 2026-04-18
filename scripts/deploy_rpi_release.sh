@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <bundle.tar.gz>" >&2
+    exit 1
+fi
+
+BUNDLE_PATH="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+: "${INKPI_DEPLOY_HOST:?Missing INKPI_DEPLOY_HOST}"
+: "${INKPI_DEPLOY_USER:?Missing INKPI_DEPLOY_USER}"
+
+INKPI_DEPLOY_PORT="${INKPI_DEPLOY_PORT:-22}"
+INKPI_DEPLOY_TARGET_DIR="${INKPI_DEPLOY_TARGET_DIR:-/home/${INKPI_DEPLOY_USER}/InkPi}"
+INKPI_DEPLOY_MODE="${INKPI_DEPLOY_MODE:-server}"
+INKPI_RELEASE_ID="${INKPI_RELEASE_ID:-$(date -u +%Y%m%d%H%M%S)}"
+INKPI_REMOTE_WEB_PORT="${INKPI_REMOTE_WEB_PORT:-5000}"
+INKPI_REMOTE_CLOUD_PORT="${INKPI_REMOTE_CLOUD_PORT:-5001}"
+INKPI_KEEP_RELEASES="${INKPI_KEEP_RELEASES:-3}"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REMOTE_BOOTSTRAP_DIR="${INKPI_DEPLOY_TARGET_DIR}/bootstrap"
+REMOTE_BUNDLE_PATH="${REMOTE_BOOTSTRAP_DIR}/$(basename "${BUNDLE_PATH}")"
+REMOTE_INSTALLER_PATH="${REMOTE_BOOTSTRAP_DIR}/install_rpi_release.sh"
+SSH_OPTS=(-p "${INKPI_DEPLOY_PORT}" -o StrictHostKeyChecking=accept-new)
+
+ssh "${SSH_OPTS[@]}" "${INKPI_DEPLOY_USER}@${INKPI_DEPLOY_HOST}" \
+    "mkdir -p '${REMOTE_BOOTSTRAP_DIR}'"
+
+scp "${SSH_OPTS[@]}" \
+    "${BUNDLE_PATH}" \
+    "${SCRIPT_DIR}/install_rpi_release.sh" \
+    "${INKPI_DEPLOY_USER}@${INKPI_DEPLOY_HOST}:${REMOTE_BOOTSTRAP_DIR}/"
+
+ssh "${SSH_OPTS[@]}" "${INKPI_DEPLOY_USER}@${INKPI_DEPLOY_HOST}" \
+    "chmod +x '${REMOTE_INSTALLER_PATH}' && \
+    INKPI_DEPLOY_ROOT='${INKPI_DEPLOY_TARGET_DIR}' \
+    INKPI_DEPLOY_MODE='${INKPI_DEPLOY_MODE}' \
+    INKPI_KEEP_RELEASES='${INKPI_KEEP_RELEASES}' \
+    INKPI_RELEASE_NAME='inkpi-rpi-release-${INKPI_RELEASE_ID}' \
+    INKPI_WEB_PORT='${INKPI_REMOTE_WEB_PORT}' \
+    INKPI_CLOUD_PORT='${INKPI_REMOTE_CLOUD_PORT}' \
+    bash '${REMOTE_INSTALLER_PATH}' '${REMOTE_BUNDLE_PATH}'"
+
+echo "PASS raspberry-pi stack deployed to ${INKPI_DEPLOY_HOST}:${INKPI_DEPLOY_TARGET_DIR}"
