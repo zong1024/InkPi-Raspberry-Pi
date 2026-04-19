@@ -10,7 +10,6 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{amsmath}
-\usepackage{amssymb}
 \usepackage{float}
 \usepackage{subcaption}
 \usepackage{hyperref}
@@ -26,12 +25,14 @@
   \setmonofont{Consolas}
   \setCJKmainfont{SimSun}
   \setCJKsansfont{Microsoft YaHei}
+  \setCJKmonofont{SimSun}
 \else
   \setmainfont{TeX Gyre Termes}
   \setsansfont{TeX Gyre Heros}
   \setmonofont{TeX Gyre Cursor}
   \setCJKmainfont{Noto Serif CJK SC}
   \setCJKsansfont{Noto Sans CJK SC}
+  \setCJKmonofont{Noto Sans CJK SC}
 \fi
 
 \geometry{left=2.4cm,right=2.4cm,top=2.6cm,bottom=2.6cm}
@@ -45,7 +46,7 @@
   urlcolor=blue!60!black
 }
 
-\title{InkPi：基于树莓派的单字书法智能评测系统设计与实现}
+\title{InkPi：面向楷书与行书单字练习的树莓派书法辅助评测系统设计与实现}
 \author{Zongrui}
 \date{2026年4月}
 
@@ -54,230 +55,277 @@
 \maketitle
 
 \begin{abstract}
-针对书法练习过程中“反馈滞后、评价主观、设备形态分散”的问题，本文设计并实现了一套面向单字书法场景的智能评测系统 InkPi。系统以树莓派为设备端核心，采用 PyQt6 构建 3.5 寸小屏交互界面，使用图像预处理、OCR 识别、ONNX 质量评分与四维解释评分构成主评测链路，并通过 Cloud API、运维后台与微信小程序实现结果同步、运行监控与移动端查看。项目在工程上强调“产品化端侧界面 + 可解释评分 + 云端协同 + 实时运维”四个方向：主分保留为稳定的总分输出，同时引入“结构、笔画、完整、稳定”四维解释层用于教学反馈；Web 端不再承担重复评测操作，而转为设备运行中心，用于监控模型加载、评测流程、硬件健康与后台日志。本文重点介绍系统架构、评测方法、关键实现与部署验证过程。结果表明，该系统已经能够完成单字图像的本地评测、结果存储、云端同步以及多端展示，并具备进一步扩展为实际教学产品的基础。
-此外，针对“评价依据不足”和“样本量化不足”的评审意见，当前版本已经把四维评价依据、量化证据快照、验证目标与练习建议整合到云端接口和小程序中，使系统不仅能给出结果，还能说明“为什么这样评”“当前数据到哪一步”“下一步该怎么练”。
+针对书法学习中“反馈周期长、评价口径不稳定、设备端与云端脱节”的问题，本文设计并实现了一套面向楷书与行书单字练习的书法辅助评测系统 InkPi。系统以树莓派为设备端核心，采用 PyQt6 构建 3.5 寸小屏正式界面，在保持统一图像预处理与 OCR 入口不变的前提下，引入显式书体字段 \texttt{script}，将评测范围收敛为楷书与行书两种正式支持书体，并在 OCR 之后按书体路由到对应 ONNX 主评分模型。系统输出统一主分 \texttt{total\_score}，同时生成结构、笔画、完整、稳定四维解释分，用于教学反馈与结果说明。为支持真实部署，本文进一步实现了 Cloud API、运维后台、小程序和本地/云端数据库协同链路，使系统能够完成本地评测、结果同步、状态监控、移动端查看和复评数据沉淀。相比仅强调模型准确率的单模块原型，InkPi 更强调边缘设备可部署性、支持边界清晰性、解释层产品化以及验证数据的持续积累。本文还结合公开研究与项目，对系统定位、方法边界和验证路线进行了重构，使其更适合课堂辅助、答辩展示和后续产品化扩展。
 \end{abstract}
 
-\noindent\textbf{关键词：} 书法评测；树莓派；OCR；ONNX；可解释评分；多端协同
+\noindent\textbf{关键词：} 书法评测；树莓派；OCR；ONNX；可解释反馈；边缘云协同
 
 \section*{Abstract}
-InkPi is a dual-script single-character calligraphy evaluation system that integrates Raspberry Pi edge hardware, a PyQt6 small-screen interface, OCR recognition, script-specific ONNX quality scoring, four-dimension explanation scoring, cloud synchronization, and an operations console. The current release formally supports only two scripts: regular script and running script. OCR and preprocessing remain shared across the whole runtime, while the user manually selects the script and the system routes the sample to the corresponding ONNX scorer after OCR. The paper presents the architecture, evaluation pipeline, explanation layer, UI implementation, deployment workflow, and the dual-script rebuild of the current system. The implemented stack supports local evaluation, cloud result synchronization, a mobile miniapp with quantitative statistics and record management, and a monitoring-oriented web console that tracks host status, model readiness, hardware availability, and runtime logs. The project also includes a GitHub Actions based CI/CD chain with four dedicated tracks: pull-request regression validation, public backend deployment, Raspberry Pi full-stack deployment, and miniapp release-candidate packaging. The latest version exposes evaluation-basis cards, validation snapshots, expert-review endpoints, agreement-rate statistics, score-gap summaries, and coaching-oriented follow-up suggestions so that the system can respond to reviewer concerns about authority, evidence, and product completeness. Model training and export are performed on a local V100 workstation, while Raspberry Pi devices and public backend nodes only consume exported ONNX artifacts for inference.
+InkPi is a Raspberry-Pi-centered calligraphy assistance system for single-character practice in regular script and running script. The system keeps image preprocessing and OCR shared across the whole runtime, while explicitly introducing a user-selected \texttt{script} field to route each sample to the corresponding ONNX scorer after OCR. The runtime produces a unified primary score together with four explanation dimensions, namely structure, stroke, integrity, and stability. Around this evaluation pipeline, the project further integrates a PyQt6 device-side interface for a 3.5-inch screen, a Flask-based Cloud API, a monitoring-oriented web operations console, and a miniapp for history browsing, statistics, and coaching-oriented result inspection. In contrast to score-only prototypes, InkPi emphasizes clear support boundaries, productized explanation outputs, cloud-synchronized evidence accumulation, and deployability on edge devices. This paper presents the system architecture, the dual-script evaluation workflow, related online projects and papers that informed the redesign, and the current validation strategy for deploying and evolving the system.
 
-\noindent\textbf{Keywords:} calligraphy evaluation; Raspberry Pi; OCR; ONNX; interpretable scoring; edge-cloud collaboration
+\noindent\textbf{Keywords:} calligraphy assessment; Raspberry Pi; OCR; ONNX; explainable feedback; edge-cloud system
 
 \section{引言}
-书法练习具有明显的视觉反馈依赖与教师经验依赖。传统教学通常依赖教师面对面点评，反馈周期长且难以量化；而通用 OCR 或图像分类系统又难以直接回答“这个字写得怎么样”和“问题主要出在哪里”这两个教学场景中的核心问题。因此，单字书法智能评测系统需要同时满足以下要求：一是能在边缘设备上完成拍摄、评测与结果展示；二是输出稳定的主分与可理解的解释分；三是支持云端同步与移动端查看；四是具备运维与状态可视化能力，方便在真实设备环境中调试和维护。
+书法学习长期依赖教师面对面示范和点评，这种教学方式在专业训练中不可替代，但在初学者练习、课堂展示和设备端即时反馈场景中存在两个突出问题：其一，反馈周期长，学生难以在单次练习后立即获得结构性建议；其二，评价口径常停留在“写得好/不好”的经验描述，缺乏可记录、可传输、可复盘的数据出口。随着 OCR、边缘推理和移动端同步能力的成熟，书法辅助评测系统开始具备工程实现基础，但很多公开工作仍集中于单一模型或单一评测实验，较少把设备交互、部署、监控和移动端反馈纳入统一系统叙述。
 
-基于上述需求，本文围绕当前项目 InkPi 的工程实现展开。该项目不是单纯的算法验证脚本，而是一套由设备端、后端与移动端共同组成的完整系统。设备端使用树莓派与小尺寸触摸屏作为正式交互入口，运维后台则承担运行状态监控与后台输出观察，云端接口负责结果汇聚与远程 OCR 回退，小程序用于移动端查看历史与详情。项目的目标是将书法图像评测从“单模块演示”推进为“能够部署、能够维护、能够解释”的完整产品链路。
+InkPi 的目标并不是构建一个“自动给书法考级结论”的系统，而是构建一条更稳健的产品链路：树莓派设备端负责正式交互，统一预处理和 OCR 保持输入稳定；ONNX 模型负责输出统一主分；四维解释层负责将结果转化为更易理解的教学反馈；云端 API 负责结果沉淀与移动端分发；运维后台负责设备、模型和流程监控；小程序负责历史记录、统计指标和练习建议查看。换句话说，本项目优先回答的是“如何把评测能力组织成一个可部署、可解释、可持续验证的系统”，而不是单纯追求算法指标最大化。
 
-\section{系统总体架构}
-InkPi 当前系统由四个主要层次构成：设备评测层、解释评分层、云端协同层与运维监控层。设备评测层负责采集或上传书法单字图像，并在本地完成预处理、OCR 与 ONNX 评分；解释评分层负责从主评分链路中提取可解释特征，生成四维解释分；云端协同层负责结果同步、历史查询与移动端展示；运维监控层则通过 Web 运维后台实时观察设备、模型与服务状态。
+在前期版本中，系统主要围绕楷书单字展开。随着评审意见逐步明确，我们将项目正式支持范围重构为“楷书 + 行书单字”，并显式去掉对其他书体的模糊承诺。这样做的原因有两点：一是楷书和行书在教学与练习场景中覆盖面更广；二是相比隶书、草书、篆书，多数结构与可识别性特征在这两类书体上更适合当前的工程路线。于是，InkPi 采用“用户手动选择书体，系统在 OCR 后按 \texttt{script} 路由评分模型”的策略，以保证支持边界清晰、实现成本可控、解释口径稳定。
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/system-flow.png}
-  \caption{InkPi 当前项目全流程与多端协同结构}
-  \label{fig:system-flow}
-\end{figure}
-
-从模块职责看，系统核心由以下部分组成：
+\section{相关工作与在线参考}
+本次文档和论文重写并非凭空组织，而是参考了公开论文、项目和官方文档中较成熟的写法与定位。表~\ref{tab:related-work} 总结了几类对 InkPi 有直接启发的公开工作。
 
 \begin{table}[H]
   \centering
-  \caption{系统模块与职责划分}
-  \label{tab:modules}
-  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3cm}X}
+  \caption{对 InkPi 重写最有启发的公开工作}
+  \label{tab:related-work}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{2.3cm} X}
     \toprule
-    模块 & 主要职责 \\
+    参考工作 & 类型 & 对 InkPi 的启发 \\
     \midrule
-    PyQt6 小屏端 & 设备侧正式界面，完成拍摄、上传、评测结果展示与历史浏览 \\
-    预处理服务 & 图像缩放、HSV 红色网格去除、二值化、主体提取、OCR 裁剪 \\
-    OCR 服务 & 本地 PaddleOCR 识别，必要时回退到云端 OCR 接口 \\
-    ONNX 评分服务 & 输出主分 \texttt{total\_score}、等级与主置信度 \\
-    四维解释服务 & 输出结构、笔画、完整、稳定四个解释分与调试特征 \\
-    本地数据库 & 保存评测记录、图像路径、四维分与调试 JSON \\
-    Cloud API & 接收设备上传结果，提供登录、列表、详情与设备 OCR 接口 \\
-    运维后台 WebUI & 监控主机状态、模型加载、硬件健康、评测流程与后台日志 \\
-    微信小程序 & 面向移动端展示历史记录与评测详情 \\
+    Hui 等 \cite{hui2007calligraphy} & 集成系统论文 & 将分解、评价、生成统一写成“完整智能系统”，提醒我们不要只写模型而忽略整体链路。 \\
+    Huda \cite{huda2020rpi} & 树莓派应用论文 & 证明 Raspberry Pi 可以承载书法学习辅助系统，并应在论文中交代硬件、部署与真实使用场景。 \\
+    Yan 等 \cite{yan2024siamese} & 评测型论文 & 把数据采集、标准样本、检测识别与评价流程写成完整实验链路，对 InkPi 的流程图与方法章节组织有直接帮助。 \\
+    Xu 等 \cite{xu2024penmanship} & 书写质量评测论文 & 强调人工评分对照、样本规模和移动端应用出口，提醒我们必须正视数据支撑与评价一致性问题。 \\
+    Zheng 等 \cite{zheng2025vlm} & 反馈生成论文 & 明确指出 score-only 反馈不足以支持学习改进，这与我们引入四维解释层与练习建议的方向一致。 \\
+    PaddleOCR \cite{paddleocr} / ONNX Runtime \cite{onnxruntime} & 官方工程文档 & 为共享 OCR 入口与“训练-导出-边缘推理”分层部署提供稳定技术基础。 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-在当前实现中，树莓派端侧偏重“产品体验”，Web 端偏重“状态感知”，二者不再重复承担同一类交互功能。这种分工使得正式界面保持简洁，而运维后台则可承载更多实时监控与调试信息。
+从这些工作中，InkPi 形成了三条清晰判断。第一，书法评测不应只写成一个单模型任务，而应被组织为设备端、评分层、解释层、云端和移动端协同的系统。第二，评价问题天然带有主观性，因此“人工评分对照、样本量、验证指标、边界声明”必须进入正文，而不能只在答辩时口头补充。第三，仅给分数不足以支持学习改进，系统还需要提供面向用户的解释与建议。
 
-\section{单字评测方法设计}
-\subsection{图像预处理与前置质量校验}
-为了提高 OCR 与评分模型的稳定性，InkPi 在图像进入识别链路前执行统一的预处理与前置校验。该阶段主要包括五类操作：
+相较于这些公开工作，InkPi 的差异化点在于：它把支持范围主动收敛为楷书与行书单字，把树莓派小屏、Cloud API、运维后台和小程序纳入统一仓库与统一部署链路，并将“评价依据”和“验证快照”做成了正式接口能力，而不是只存在于论文描述中。
 
-\begin{itemize}
-  \item 亮度、对比度与内容有效性预检，用于快速拦截过暗、过亮、对比度不足或明显无主体的输入；
-  \item 可选透视矫正，用于处理拍摄角度偏斜导致的纸面变形；
-  \item 缩放与灰度化，将不同来源图像转换到统一分析尺度；
-  \item HSV 红色网格去除，用于滤除米字格等红色辅助背景；
-  \item 自适应二值化、去噪与主体提取，为 OCR 与质量评分生成更稳定的前景区域。
-\end{itemize}
-
-其中，前置质量校验并不仅仅判断“能不能识别”，还会检测墨迹比例、连通域分布、边缘复杂度和主体集中度，以避免杂乱背景、遮挡或非单字内容误入主链路。该策略的意义在于：如果在预处理前就发现画面不具备基本可评测性，就应尽早给出用户提示，而不是让后续 OCR 和评分模型输出低质量或不可解释的结果。
-
-\subsection{OCR 识别与云端回退}
-InkPi 使用 PaddleOCR 作为本地 OCR 主体\cite{paddleocr}。系统优先尝试在设备或公网后端本地运行 OCR；若设备端无法加载本地 OCR，或运行环境为资源较弱的平台，则可以通过 \texttt{INKPI\_CLOUD\_BACKEND\_URL} 与设备密钥将 OCR 请求回退到 Cloud API。这样设计有两个优势：
+\section{系统目标与支持边界}
+当前版本的 InkPi 明确遵守以下边界：
 
 \begin{itemize}
-  \item 在 x86\_64 环境下可直接利用本地 PaddleOCR，提高独立运行能力；
-  \item 在 ARM 或依赖不齐全的场景中仍能通过远端 OCR 保持链路完整。
+  \item 正式支持对象仅为楷书与行书单字；
+  \item OCR 与预处理链路在两种书体之间共享；
+  \item 新评测请求必须显式给出 \texttt{script}；
+  \item \texttt{regular} 只路由到楷书模型，\texttt{running} 只路由到行书模型；
+  \item 四维分用于解释，不作为正式考级结论；
+  \item 隶书、草书、篆书以及多字作品不在当前正式范围内。
 \end{itemize}
 
-OCR 输出不仅包括识别字符本身，还包括识别置信度与候选框信息。其中置信度被后续评分与解释层重复利用，用于衡量当前样本的“可识别性”和“完成稳定度”。
+这种边界收缩并非能力退化，而是工程理性选择。CalliFormer 在讨论其结构先验时指出，规则性更强的楷书更适合依赖显式结构约束，而更流动的行书与草书会带来更大的建模难度 \cite{calliformer2025}。对于 InkPi 这样的边缘部署系统而言，只有在支持边界清晰时，解释逻辑、模型路由和验证口径才能同时保持稳定。
 
-\subsection{主评分模型}
-主评分链路使用 ONNX Runtime 加载质量评分模型\cite{onnxruntime}。模型输入包括预处理后的 ROI、字符编码与 OCR 置信度，输出三档质量概率 \texttt{bad / medium / good}，并进一步融合为 \texttt{total\_score}、\texttt{quality\_level} 和 \texttt{quality\_confidence}。项目中保留主分作为唯一的官方评分出口，其作用是保证不同端侧界面、历史记录与云端同步都围绕同一套主分口径展开。
+\section{系统架构}
+InkPi 当前系统由设备评测层、解释与存储层、云端协同层和运维监控层构成。整体流程如图~\ref{fig:system-flow} 所示。
 
-在实现上，主评分服务并不只依赖模型原始 logits，还结合了一组质量特征进行分段校准。这些特征包括前景比例、包围盒比例、中心质量、连通域归一化、边缘接触率和纹理标准差。通过引入校准层，系统可以在模型输出和工程稳定性之间取得平衡，避免主分被单一概率值直接决定。
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{figures/system-flow.png}
+  \caption{InkPi 当前项目主链路与多端协同结构}
+  \label{fig:system-flow}
+\end{figure}
 
-\subsection{四维解释评分}
-为了回答“为什么是这个分数”这一问题，InkPi 在主分之外新增了四维解释层。四维分并不反推主分，而是服务于教学反馈、界面展示与调试分析。四个维度定义如下：
+从模块职责看，系统可以拆分为以下部分：
 
 \begin{itemize}
-  \item \textbf{结构}：反映重心、布局和主体在画面中的组织稳定性；
-  \item \textbf{笔画}：反映笔画粗细、方向与局部纹理是否平稳；
-  \item \textbf{完整}：反映主体是否清晰、完整、易于识别；
-  \item \textbf{稳定}：反映主模型置信度、概率间隔与特征信号的一致性。
+  \item \textbf{Qt 设备端}：面向 480x320 小屏的正式交互入口，负责拍摄、上传、书体选择、结果展示和历史浏览；
+  \item \textbf{预处理与 OCR}：统一执行图像质量校验、去网格、二值化、主体提取和单字识别；
+  \item \textbf{双书体 ONNX 主评分}：在 OCR 之后按 \texttt{script} 路由至楷书或行书评分模型；
+  \item \textbf{四维解释层}：基于质量特征、几何特征和主评分中间量生成解释分；
+  \item \textbf{本地 SQLite}：保存结果、图像路径、四维分与调试字段；
+  \item \textbf{Cloud API}：提供登录、结果上传、列表、详情、删除、方法论与验证相关接口；
+  \item \textbf{运维后台}：监控主机、服务、双模型 readiness、硬件状态和后台输出；
+  \item \textbf{小程序}：面向移动端查看历史、统计、建议、复评与验证快照。
 \end{itemize}
 
-四维解释分采用归一化特征的线性组合。若将所有参与项归一化到 $[0,1]$，则当前实现可概括为：
+与很多“设备端和 Web 端重复做同样的事”的系统不同，InkPi 在这一轮重构后明确区分了正式端与运维端的职责：Qt 只承担用户侧操作，Web 只承担监控与观察。这样既减轻了小屏交互负担，也使运维信息不再混入正式展示界面。
 
-\begin{align}
-S_{\text{structure}} &= 100 \times (0.35 c_{\text{center}} + 0.25 b_{\text{ratio}} + 0.20 p_{\text{balance}} + 0.20 b_{\text{fill}}), \\
-S_{\text{stroke}} &= 100 \times (0.30 t_{\text{texture}} + 0.25 o_{\text{orientation}} + 0.25 i_{\text{ink}} + 0.20 c_{\text{component}}), \\
-S_{\text{integrity}} &= 100 \times (0.35 o_{\text{ocr}} + 0.25 d_{\text{dominant}} + 0.20 (1-e_{\text{edge}}) + 0.20 s_{\text{subject}}), \\
-S_{\text{stability}} &= 100 \times (0.40 q_{\text{conf}} + 0.25 p_{\text{margin}} + 0.20 f_{\text{quality}} + 0.15 r_{\text{fit}}).
-\end{align}
+\section{双书体评测方法}
+\subsection{共享预处理与 OCR}
+图像预处理和 OCR 保持为项目共享入口。预处理阶段负责亮度与对比度校验、红色网格去除、二值化、主体提取和 OCR 裁剪。OCR 侧优先使用 PaddleOCR \cite{paddleocr}，在依赖不可用或设备资源不足时，通过 Cloud API 提供远程回退。InkPi 在这一层故意不做自动书体判定，因为书体判断错误会直接污染后续评分模型选择。
 
-式中，$c_{\text{center}}$ 表示中心质量，$b_{\text{ratio}}$ 表示包围盒带状得分，$p_{\text{balance}}$ 表示投影平衡度，$b_{\text{fill}}$ 表示主体填充度；$t_{\text{texture}}$、$o_{\text{orientation}}$、$i_{\text{ink}}$ 和 $c_{\text{component}}$ 分别描述纹理、方向、墨迹比例与连通域质量；$o_{\text{ocr}}$ 与 $q_{\text{conf}}$ 分别来自 OCR 置信度和主模型概率；$p_{\text{margin}}$、$f_{\text{quality}}$ 和 $r_{\text{fit}}$ 则来自主评分校准过程中的中间量。
+\subsection{显式书体选择与模型路由}
+InkPi 采用显式书体输入策略。用户在 Qt 端或上传入口中明确选择 `regular` 或 `running`，系统在 OCR 之后执行如下路由：
 
-这种设计的关键在于：主分维持统一口径，解释层提供教学说明。实际界面中，Qt 和小程序只展示四维分及其“最强项 / 待提升项”，而 Web 运维后台和本地详情接口则保留 \texttt{score\_debug}，用于查看概率、几何特征与校准中间值。
+\begin{equation}
+\text{score\_model} =
+\begin{cases}
+f_{\text{regular}}, & \text{if } script = \texttt{regular} \\
+f_{\text{running}}, & \text{if } script = \texttt{running}
+\end{cases}
+\end{equation}
 
-\subsection{评价依据与验证边界}
-为了避免四维解释分被误解为“AI 自行定义的权威等级”，InkPi 在当前版本中明确加入了评价依据层。该层并不改变主分计算，而是对每个维度补充三个信息：其一，维度到底在观察什么书写问题；其二，该维度当前对应哪些可计算特征；其三，用户可以如何围绕该维度继续练习。换句话说，系统不再只输出“结构 82 分”，而是同步给出“结构关注重心、比例和空间分布”“该分值主要来自 \texttt{center\_quality}、\texttt{bbox\_ratio}、\texttt{projection\_balance} 等特征”“下一步建议先用米字格检查重心”等解释信息。
+其中，$f_{\text{regular}}$ 和 $f_{\text{running}}$ 分别对应楷书与行书的 ONNX 主评分模型。若请求未显式提供书体，或目标模型文件不存在，系统会直接拒绝评测并返回明确错误，而不是隐式退回到某个默认模型。这样做的意义在于：系统不假装“什么都支持”，而是在支持范围内保证行为确定。
 
-与此同时，系统也明确给出当前项目边界：第一，主分 \texttt{total\_score} 仍是唯一统一口径；第二，四维分属于解释层，不直接替代教师终评；第三，当前阶段正式支持楷书单字与行书单字，并继续面向初学者训练；第四，隶书、草书、篆书及多字作品当前不在正式支持范围内。这样的边界声明有助于把项目定位在“辅助评测系统”而不是“自动考级系统”，从而使方法论表述更稳健。
+\subsection{主分与四维解释层}
+InkPi 保留统一主分 \texttt{total\_score} 作为唯一主口径，同时输出四维解释分：
 
-\section{系统实现}
-\subsection{设备端正式界面}
-设备端使用 PyQt6 构建正式交互界面，重点适配树莓派 3.5 寸 $480 \times 320$ 横屏。界面采用深色背景与 Windows 10 深蓝风格的产品化设计，强调大字号、清晰层级与触控友好布局。首页突出“开始评测”，拍摄页聚焦取景与上传，结果页则采用“主分大卡片 + 四维评分卡 + 历史入口”的结构，以保证在小尺寸屏幕上仍具备良好的可读性和操作性。针对 2026-04-19 的真机联调结果，当前版本进一步压缩了拍摄页头部控件、结果页指标区与底部操作区的垂直占用，避免主按钮、四维分值和关键反馈在真实 3.5 寸屏幕上发生裁切。
+\begin{itemize}
+  \item \textbf{结构（structure）}：字形重心、比例与空间分布是否稳定；
+  \item \textbf{笔画（stroke）}：笔画粗细、方向、转折与连带控制是否稳定；
+  \item \textbf{完整（integrity）}：主体是否完整、清晰、可识别；
+  \item \textbf{稳定（stability）}：当前结果是否集中、可信、可复现。
+\end{itemize}
+
+四维层复用主评分中的质量特征和校准中间量，但解释文本按书体分别生成。楷书更强调结构规范、重心和边界；行书则更强调流动性下的结构完整与识别稳定。因此，四维名称相同，但维度说明、最弱项建议和练习提示会随着 \texttt{script} 改变。
+
+\subsection{评价依据与验证快照}
+为了回应“评价标准依据不足”的问题，InkPi 在结果结构中引入了方法论载荷，包括：
+
+\begin{itemize}
+  \item 支持边界说明；
+  \item 书体对应的练习画像；
+  \item 四维依据卡；
+  \item 验证快照，如样本量、覆盖汉字数、设备来源数、复评覆盖率和目标进度。
+\end{itemize}
+
+这意味着“为什么这样评”和“当前验证做到哪一步”都已经进入产品接口，不再只是论文或答辩话术。
+
+\section{产品实现与部署}
+\subsection{Qt 小屏正式端}
+Qt 设备端面向树莓派 3.5 寸屏幕设计。经过真机联调，界面保留了三个核心原则：触控优先、信息密度受控、结果页重于参数页。图~\ref{fig:qt-ui} 展示了当前首页与结果页。
 
 \begin{figure}[H]
   \centering
   \begin{subfigure}[b]{0.46\textwidth}
     \centering
     \includegraphics[width=\textwidth]{figures/qt-home.png}
-    \caption{设备端首页}
+    \caption{Qt 首页}
   \end{subfigure}
   \hfill
   \begin{subfigure}[b]{0.46\textwidth}
     \centering
     \includegraphics[width=\textwidth]{figures/qt-result.png}
-    \caption{设备端结果页}
+    \caption{Qt 结果页}
   \end{subfigure}
-  \caption{InkPi 设备端正式界面示例}
+  \caption{InkPi 树莓派正式界面}
   \label{fig:qt-ui}
 \end{figure}
 
-\subsection{运维后台与实时监控}
-随着系统从“单端评测”扩展为“设备 + 云端 + 小程序”的完整工程，仅靠结果页已经无法满足维护需求。因此，项目将 WebUI 改造为运维后台：前端采用 React 编写，并引入 Three.js 背景氛围层；后端则通过 Flask 对外暴露主机状态、模型加载、硬件健康、服务栈状态、评测流水与日志缓冲接口。运维后台通过 SSE 持续拉取快照更新，其主要监控内容包括：
+在双书体重构后，Qt 端新增了简洁的书体选择控件，只保留“楷书 / 行书”两个明确选项，以避免在 480x320 空间中引入多余层级。
+
+\subsection{运维后台}
+Web 端已经从早期的“重复评测页”重构为运维后台。前端使用 React 构建，后端通过 Flask 暴露状态快照与日志接口。当前后台重点监控：
 
 \begin{itemize}
-  \item 主机层：温度、内存、磁盘、负载、IP 地址；
-  \item 服务层：Cloud API、Web 运维后台、Qt 正式端的运行与健康状态；
-  \item 模型层：本地 OCR、远端 OCR、ONNX 评分模型与四维解释层的就绪情况；
-  \item 硬件层：摄像头、音频、LED、GPIO、SPI 与 I2C 的可用性；
-  \item 流程层：图像进入、预处理、OCR、主评分、解释评分与存储阶段的事件记录；
-  \item 输出层：应用日志缓冲与运行日志尾部内容。
+  \item 主机状态：CPU、内存、磁盘、网络与温度；
+  \item 服务状态：Qt、WebUI、Cloud API；
+  \item 模型状态：本地 OCR、远程 OCR、楷书模型、行书模型、四维解释层；
+  \item 硬件状态：摄像头、GPIO、LED、I2C、SPI、音频；
+  \item 流程状态：最近评测结果、书体分布、日志输出。
 \end{itemize}
 
-这种设计使 Web 端从“重复操作页面”转变为“真实运维中心”，更适合面向多设备部署和后期维护。
+这使得 Web 端真正承担起“设备运行中心”的角色，而不是继续与 Qt 重复交互功能。
 
-\subsection{云端接口与移动端展示}
-Cloud API 采用 Flask 构建，提供登录、结果上传、结果列表、结果详情、设备 OCR 与批量删除等接口。设备端完成本地评测后，会将结果写入本地 SQLite，并通过设备密钥上传到云端。云端数据库统一存储主分、等级、四维解释分与详情字段，从而使小程序可以只承担结果查看，不必重复执行评测。
-
-在当前项目中，小程序承担两类任务：一是按时间查看历史评测结果，二是在详情页展示总分、等级、四维分与反馈信息。相比设备端，小程序更强调轻量浏览与异步访问；相比运维后台，小程序不展示调试字段与底层日志。
-
-在本轮改进中，小程序不再只是“看结果”的轻量壳层，而是开始承担产品化闭环：历史页支持筛选、单条删除与批量删除；统计页新增样本量、覆盖汉字数、设备来源数、分数分布、四维均值、评价依据来源与验证目标；详情页新增四维依据卡、阶段判断、优先提升项与练习动作建议。这样一来，移动端既能给用户看成绩，也能回答评审最关心的三个问题：当前数据有多少、评价依据是什么、系统准备如何继续验证。
-
-\section{部署与验证}
-InkPi 当前已经具备跨设备部署能力。设备侧采用树莓派 + 小屏完成正式评测与展示；公网后端部署在 Debian 12 服务器，用于承载 Cloud API 与运维后台；移动端通过小程序连接云端接口完成结果读取。部署后，项目的验证工作主要围绕三个方面展开。
-
-\subsection{功能回归验证}
-项目当前保留了多组回归测试脚本，包括 Web 接口、Cloud API、云同步和综合链路验证。典型检查项包括：
+\subsection{云端与小程序}
+Cloud API 负责登录、结果上传、历史列表、详情查询、删除、方法论读取和验证总览。小程序则围绕云端数据完成三类工作：
 
 \begin{itemize}
-  \item \texttt{test\_web\_ui.py}：验证 Web 后端接口与结果读取；
-  \item \texttt{test\_all.py}：验证评测核心服务与数据结构；
-  \item \texttt{test\_cloud\_api.py}：验证云端接口认证、列表与详情；
-  \item \texttt{test\_cloud\_ocr\_api.py}：验证设备 OCR 接口；
-  \item \texttt{test\_cloud\_sync\_integration.py}：验证本地结果同步到云端的完整流程。
+  \item 历史记录与详情查看；
+  \item 按书体查看分布、趋势、四维均值和高频练习字；
+  \item 查看依据卡、优先提升项与练习建议。
 \end{itemize}
 
-\subsection{量化证据与验证计划}
-除了功能是否打通之外，InkPi 当前还把“可量化证据”直接做成系统输出。云端汇总接口会自动返回总样本数、覆盖汉字数、设备来源数、最近 7 天样本数、分数分布、四维均值、高频练习字和设备贡献度；小程序统计页则把这些指标与验证目标放在同一页面中展示。这样做的价值在于，项目在答辩或汇报时不需要再手工整理零散数据，而可以直接给出“目前有多少样本、离目标还差多少、主要样本来自哪些设备”的量化说明。
+相比只展示一张成绩卡，这一设计使小程序能够承担“学习闭环”中的记录、对比和跟练建议功能。
 
-从验证策略上看，当前版本并没有把四维分包装成官方等级标准，而是保留了“人工对照优先”的原则。系统规划的下一阶段目标包括：积累不少于 500 份带标签样本，引入不少于 3 名教师或专家参与校核，并组织不少于 20 名试用用户形成连续练习记录。该计划的核心思想是先验证主分与人工判断的一致性，再逐步校准四维解释层，从而让项目从“可演示”迈向“可验证”。
+\subsection{训练与部署分离}
+当前训练策略明确为：模型训练在本机 V100 工作站上完成，树莓派与公网后端只消费导出的 ONNX 文件。这种设计来自 ONNX Runtime 的部署优势 \cite{onnxruntime}，也符合边缘设备算力受限的现实约束。GitHub Actions 只负责校验双模型产物是否存在、接口结构是否一致，而不在默认 CI 中直接训练模型。
 
-\subsection{部署状态验证}
-截至当前版本，公网后端已完成部署并通过健康检查。Cloud API 对外开放统一接口，运维后台能够从外网访问设备状态快照；本地与远端 OCR 的就绪状态均可在运维后台中直接观察。与此同时，项目将部署流程显式拆为四条 GitHub Actions 工作流：统一 PR 回归链负责 Python、运维后台与小程序制品校验；公网后端工作流负责打包并重启 \texttt{Cloud API + WebUI}；树莓派工作流负责通过安装脚本切换 \texttt{Qt + WebUI + Cloud API} 全栈 release；小程序工作流则生成可导入微信开发者工具的候选包。2026-04-19 的树莓派回归还在真实 \texttt{DISPLAY=:0} 全屏会话下验证了 Qt 主界面、运维后台健康接口、Cloud API 健康接口以及结果页/历史页/拍摄页在 480x320 面板上的显示完整性。需要说明的是，公网后端所在服务器不具备摄像头、GPIO、I2C 或 LED 等实体外设，因此这些硬件项在运维页面中会正确显示为不可用，这一结果符合系统预期。
+\section{验证与讨论}
+\subsection{当前验证方式}
+InkPi 当前的验证并不把重点放在“单个模型指标的极限值”上，而是放在“完整链路是否可运行、边界是否清晰、结果是否可追踪”上。当前版本已完成以下类型验证：
 
-\begin{table}[H]
-  \centering
-  \caption{当前工程验证矩阵}
-  \label{tab:verification}
-  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{2cm} X}
-    \toprule
-    验证项 & 状态 & 说明 \\
-    \midrule
-    本地评测主链 & 已验证 & 预处理、OCR、ONNX 主评分与四维解释层已打通 \\
-    本地结果存储 & 已验证 & 结果可写入 SQLite，并保留维度分与调试字段 \\
-    云端同步 & 已验证 & 设备端结果可上传到 Cloud API，云端可查询详情 \\
-    运维后台 & 已验证 & 可实时查看主机状态、模型状态、流程事件与日志输出 \\
-    小程序读取 & 已验证 & 可通过云端接口查看历史记录与详情 \\
-    公网后端部署 & 已验证 & Debian 12 服务器已持续运行 Cloud API 与运维后台 \\
-    树莓派硬件采集 & 条件相关 & 依赖摄像头、GPIO、LED 等外设是否接入 \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
+\begin{itemize}
+  \item Python 单元测试：本地数据库、Cloud API、WebUI 和云同步链路；
+  \item 小程序脚本检查：历史页、详情页、统计页；
+  \item 论文工程编译：XeLaTeX 成功输出 PDF；
+  \item 树莓派实机联调：Qt 全屏、Cloud API、运维后台和 480x320 布局检查。
+\end{itemize}
 
-\section{结论与展望}
-本文围绕 InkPi 当前项目给出了一套完整的系统设计与实现方案。与只验证模型效果的原型不同，InkPi 已经形成由设备端、解释评分层、云端接口、运维后台与移动端组成的完整工程链路。系统在方法上保留了稳定的主分，同时通过四维解释层增强可读性；在实现上完成了小屏设备端产品化、Web 运维后台转型、云端同步与公网部署；在工程上具备继续扩展为真实教学产品的基础。
+\subsection{量化验证的当前状态}
+评审意见表明，项目不能只说“以后会继续收集数据”，而必须把可量化验证纳入当前系统。因此，InkPi 已将以下指标写入正式统计链路：
 
-同时，项目已经开始把“评价依据”“量化证据”和“练习建议”纳入正式产品流程，这使得 InkPi 不再只是输出分数，而是逐步形成一套能够面向评审、教师和学习者同时解释的系统表达。
+\begin{itemize}
+  \item 总样本数与按书体样本分布；
+  \item 覆盖汉字数；
+  \item 设备来源数；
+  \item 最近时段样本增长趋势；
+  \item 分数分布与四维均值；
+  \item 专家复评覆盖率、一致率与平均分差。
+\end{itemize}
 
-后续工作可以从三个方向展开：第一，继续补充真实书法样本，完善主评分模型与四维解释分的标注体系；第二，引入 HTTPS、域名与更完善的账号体系，进一步提升公网服务的可用性；第三，在树莓派端增加更稳定的硬件检测、自启动与离线容错能力，使系统更适合长期部署在课堂或展示场景中。
+这些指标的意义不在于当前已经拥有大规模权威数据，而在于系统已经具备持续沉淀证据和对外展示验证状态的能力。
+
+\subsection{局限性}
+InkPi 当前仍有明显局限：
+
+\begin{itemize}
+  \item 正式支持范围只覆盖楷书与行书单字；
+  \item 四维解释层仍属于工程化解释，不等同于标准化考级体系；
+  \item 真实专家复评规模仍需继续扩大；
+  \item 树莓派端的摄像头、GPIO 与外设能力仍依赖具体硬件环境。
+\end{itemize}
+
+不过，这些局限已经通过支持边界、方法论说明与验证快照被显式暴露出来，而不是被隐去。
+
+\section{结论}
+本文围绕 InkPi 项目给出了一套完整的系统设计与实现方案。相较于单纯强调模型的书法评测原型，InkPi 更关注从边缘设备到云端再到移动端的完整工程闭环。系统在保持统一 OCR 与预处理入口不变的前提下，将正式支持范围重构为楷书与行书单字，并通过显式书体选择和双模型路由保证了行为边界清晰。与此同时，项目通过四维解释层、方法论载荷、运维后台和小程序统计链路，把“分数、依据、建议、验证状态”组合成一个更适合教学与展示的产品形态。
+
+后续工作可以从三个方向继续展开：第一，继续扩大双书体样本和专家复评规模，提升评价可信度；第二，引入更规范的 HTTPS、域名与账户体系，提升公网部署成熟度；第三，针对树莓派场景进一步增强离线容错、硬件探测和课堂使用体验。总体来看，InkPi 已经不再只是一个“能打分”的演示系统，而是一套边界清晰、可解释、可部署、可继续积累证据的书法辅助评测平台。
 
 \begin{thebibliography}{99}
 
-\bibitem{bradski2000opencv}
-Gary Bradski.
-\newblock The OpenCV Library.
-\newblock \emph{Dr. Dobb's Journal of Software Tools}, 2000.
+\bibitem{hui2007calligraphy}
+Kaiyu Hui, Yue Gao, Yong Hu, and Songhua Xu.
+\newblock An Intelligent System for Chinese Calligraphy.
+\newblock In \emph{Proceedings of the Twenty-Second AAAI Conference on Artificial Intelligence}, 2007.
+\newblock Available: \url{https://cdn.aaai.org/AAAI/2007/AAAI07-250.pdf}.
+
+\bibitem{huda2020rpi}
+Samsul Huda.
+\newblock \emph{A Study of Raspberry Pi Applications to Calligraphy Learning and Air-Conditioning Guidance Systems}.
+\newblock Okayama University, 2020.
+\newblock Available: \url{https://ousar.lib.okayama-u.ac.jp/files/public/6/60936/20201203155610533257/K0006259_fulltext.pdf}.
+
+\bibitem{yan2024siamese}
+Fei Yan, Xueping Lan, Hua Zhang, and Linjing Li.
+\newblock Intelligent Evaluation of Chinese Hard-Pen Calligraphy Using a Siamese Transformer Network.
+\newblock \emph{Applied Sciences}, 14(5):2051, 2024.
+\newblock Available: \url{https://www.mdpi.com/2076-3417/14/5/2051}.
+
+\bibitem{xu2024penmanship}
+Zebo Xu, Prerit S. Mittal, Mohd. Mohsin Ahmed, Chandranath Adak, and Zhenguang G. Cai.
+\newblock Assessing penmanship of Chinese handwriting: a deep learning-based approach.
+\newblock \emph{Reading and Writing}, 2024.
+\newblock Available: \url{https://doi.org/10.1007/s11145-024-10531-w}.
+
+\bibitem{zheng2025vlm}
+Chen Zheng, Yuxuan Lai, Haoyang Lu, Wentao Ma, Jitao Yang, and Jian Wang.
+\newblock System Report for CCL25-Eval Task 11: Aesthetic Assessment of Chinese Handwritings Based on Vision Language Models.
+\newblock In \emph{Proceedings of the 24th China National Conference on Computational Linguistics}, 2025.
+\newblock Available: \url{https://aclanthology.org/2025.ccl-2.53/}.
+
+\bibitem{calliformer2025}
+CalliFormer authors.
+\newblock CalliFormer: a structure-aware transformer for Chinese calligraphy generation.
+\newblock \emph{Scientific Reports}, 2025.
+\newblock Available: \url{https://www.nature.com/articles/s41598-025-29262-1}.
 
 \bibitem{paddleocr}
 PaddlePaddle Authors.
 \newblock PaddleOCR.
-\newblock Available: \url{https://github.com/PaddlePaddle/PaddleOCR}. Accessed: 2026-04-08.
+\newblock Available: \url{https://github.com/PaddlePaddle/PaddleOCR}. Accessed: 2026-04-19.
 
 \bibitem{onnxruntime}
 Microsoft.
 \newblock ONNX Runtime.
-\newblock Available: \url{https://onnxruntime.ai/}. Accessed: 2026-04-08.
+\newblock Available: \url{https://onnxruntime.ai/}. Accessed: 2026-04-19.
 
-\bibitem{sqlite}
-SQLite Consortium.
-\newblock SQLite Documentation.
-\newblock Available: \url{https://www.sqlite.org/docs.html}. Accessed: 2026-04-08.
+\bibitem{opencv}
+Gary Bradski.
+\newblock The OpenCV Library.
+\newblock \emph{Dr. Dobb's Journal of Software Tools}, 2000.
 
 \bibitem{qtforpython}
 Qt Company.
 \newblock Qt for Python Documentation.
-\newblock Available: \url{https://doc.qt.io/qtforpython/}. Accessed: 2026-04-08.
+\newblock Available: \url{https://doc.qt.io/qtforpython/}. Accessed: 2026-04-19.
 
 \end{thebibliography}
 
