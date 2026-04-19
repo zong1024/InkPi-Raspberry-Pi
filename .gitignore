@@ -39,3 +39,9 @@ Thumbs.db
 
 # Frontend tooling
 web_console/node_modules/
+
+# Temporary screenshots
+screenshots/ci_review/
+screenshots/ci_review_real/
+screenshots/rpi-qt-seq/
+screenshots/rpi-screen-full.png
