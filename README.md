@@ -1,353 +1,224 @@
 # InkPi
 
-InkPi is a dual-script single-character calligraphy evaluation project that combines:
+InkPi 是一套面向 **楷书 / 行书单字练习** 的书法辅助评测系统。项目把树莓派设备端、Qt 小屏正式界面、云端 API、运维后台和微信小程序串成一条完整链路，用于完成：
 
-- `PyQt6` desktop UI
-- local `WebUI` for debugging and result inspection
-- `Cloud API` for shared history and remote OCR fallback
-- `MiniApp` result browsing, statistics, and cloud record management
-- script-specific ONNX scoring and four-dimension explanation scores
+- 单字拍摄或上传
+- 图像预处理与 OCR 识别
+- 按书体路由的 ONNX 主评分
+- 四维解释分与练习建议
+- 本地存储、云同步、移动端查看
+- 设备状态与模型状态监控
 
-Current main pipeline:
+项目当前定位是：
 
-`capture/upload -> preprocessing -> OCR -> user-selected script -> script-specific ONNX quality scoring -> four-dimension explanation -> local SQLite -> cloud sync`
+- 面向初学者和课堂练习的 **辅助评测系统**
+- 正式支持 **楷书** 与 **行书** 单字
+- 主分 `total_score` 作为统一口径
+- 四维分 `structure / stroke / integrity / stability` 作为解释层
 
-## Formal Support Scope
+它不是自动书法考级系统，也不替代教师终评。
 
-The current release formally supports:
+## 1. 正式支持范围
+
+当前正式支持：
 
 - `regular` / `楷书`
 - `running` / `行书`
 
-The project does **not** currently support:
+当前不支持：
 
 - 隶书
 - 草书
 - 篆书
 - 多字作品
+- 自动书体识别
 
-OCR and preprocessing remain shared across the whole pipeline. The runtime only switches model routing and explanation methodology after OCR, based on the user-selected `script`.
+OCR 与预处理逻辑在两种书体之间共享；系统在 OCR 之后根据用户手动选择的 `script` 路由到对应评分模型。
 
-## Main Entry Points
+## 2. 核心链路
 
-- Qt desktop UI: `python main.py`
-- Local WebUI: `python -m web_ui.app`
-- Cloud API: `python cloud_api/app.py`
+当前主链路如下：
 
-Default ports:
+`capture/upload -> preprocessing -> OCR -> user-selected script -> script-specific ONNX scorer -> four-dimension explanation -> local SQLite -> cloud sync -> miniapp / ops console`
 
-- WebUI: `http://127.0.0.1:5000`
-- Cloud API: `http://127.0.0.1:5001`
+其中：
 
-## Four-Dimension Scoring
+- OCR 与预处理保持统一入口
+- 用户必须显式选择书体
+- `regular` 只走楷书模型
+- `running` 只走行书模型
+- 历史旧数据迁移时统一补为 `regular`
 
-The primary score remains `total_score`.  
-The explanation layer adds four dimension scores:
+## 3. 系统组成
+
+### 3.1 Qt 正式端
+
+树莓派设备端使用 `PyQt6`，面向 `480x320` 的 3.5 寸小屏。它负责：
+
+- 拍照 / 上传
+- 书体选择
+- 结果展示
+- 历史记录浏览
+
+Qt 只展示面向用户的正式结果，不暴露调试字段。
+
+### 3.2 Cloud API
+
+Cloud API 使用 Flask 构建，负责：
+
+- 登录与设备认证
+- 设备结果上传
+- 历史列表 / 详情 / 删除
+- 方法论说明与验证快照
+- 远程 OCR 回退
+
+### 3.3 运维后台
+
+Web 端已经从“重复评测页”重构为 **运维后台**。它负责：
+
+- 监控主机温度、内存、磁盘、网络
+- 监控 OCR / 双书体模型 readiness
+- 监控评测流程事件与日志输出
+- 区分最近结果中的楷书 / 行书记录
+
+### 3.4 微信小程序
+
+小程序现在承担：
+
+- 历史查看
+- 详情查看
+- 按书体统计
+- 删除管理
+- 练习建议与依据卡片查看
+
+## 4. 评测方法
+
+### 4.1 主分
+
+主分由 ONNX 评分模型输出：
+
+- `total_score`
+- `quality_level`
+- `quality_confidence`
+
+这仍是系统唯一统一口径的“官方分”。
+
+### 4.2 四维解释层
+
+为了回答“为什么是这个分”，项目引入四维解释分：
 
 - `structure` / 结构
 - `stroke` / 笔画
 - `integrity` / 完整
 - `stability` / 稳定
 
-Implementation notes:
+四维分不反推主分，而是服务于：
 
-- `services/quality_scorer_service.py` keeps the main ONNX scoring pipeline
-- `services/dimension_scorer_service.py` builds four explanation scores
-- `models/evaluation_result.py` stores `dimension_scores` and `score_debug`
-- `models/evaluation_framework.py` defines basis cards, practice guidance, and validation targets
-- Qt shows user-facing scores only
-- WebUI shows debug data for evaluation inspection
-- Cloud API returns `dimension_scores` in list/detail payloads
-- Cloud API now also exposes reviewer-facing methodology data at `/api/system/methodology`
+- 结果解释
+- 教学反馈
+- 小程序练习建议
+- 运维与调试分析
 
-## Dual-Script Runtime
+### 4.3 双书体方法论
 
-The runtime now treats `script` as a first-class field across the full stack:
+两种正式支持书体采用不同解释口径：
 
-- `regular` routes to `models/quality_scorer_regular.onnx`
-- `running` routes to `models/quality_scorer_running.onnx`
-- new evaluations must pass an explicit `script`
-- legacy history records are migrated as `regular`
-- list/detail/sync payloads all return `script` and `script_label`
+- 楷书：强调结构规范、重心、比例和起收笔稳定
+- 行书：强调连带、节奏、流动性下的结构完整与识别稳定
 
-The training chain on the local V100 host exports:
+这意味着四维名称不变，但说明文本、练习建议和边界声明都按 `script` 输出。
+
+## 5. 在线参考项目与论文
+
+这次文档和论文重写，重点参考了几类公开项目和论文的写法：
+
+- **集成式书法智能系统**：Hui 等人在 AAAI 2007 的工作把“分解、评价、生成”组合成一个完整系统，给了我们“不要只写模型，要写完整系统链路”的结构参考。
+- **树莓派书法学习辅助系统**：Huda 在 2020 年的博士论文中，把 Raspberry Pi 用在 calligraphy learning assistant system（CLAS）上，验证了边缘设备承载书法学习产品的可行性。
+- **中文书写质量自动评测**：Yan 等人 2024 年使用检测+标准样本+Siamese Transformer 做硬笔书法评价，给了我们“数据采集、标准样本、整体流程图”的写法参考。
+- **中文书写分数回归与移动端应用**：Xu 等人 2024 年做了基于 CNN 的中文书写工整度评测，并做成移动应用，给了我们“人类评分对照、量化指标、产品出口”的写法参考。
+- **从 score-only 到可解释反馈**：Zheng 等人 2025 年在 CCL 任务中强调，仅给分数不足以支撑学习反馈，这和我们把四维解释层、小程序建议页纳入正式链路的方向一致。
+
+详细索引见：
+
+- [参考项目与论文](./docs/reference-projects-and-papers.md)
+
+## 6. 目录结构
+
+- `views/`: PyQt6 页面
+- `services/`: 预处理、OCR、评分、数据库、云同步、监控等服务
+- `models/`: 结果结构、方法论结构与 ONNX 模型资产
+- `cloud_api/`: 云端 Flask API
+- `web_ui/`: 本地 Web 路由与运维后台静态资源
+- `web_console/`: React 运维后台前端源码
+- `miniapp/`: 微信小程序
+- `training/`: 双书体训练与导出脚本
+- `docs/`: 流程图、方法论、参考资料与补充文档
+- `paper/overleaf/`: Overleaf 论文工程
+
+## 7. 快速启动
+
+安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
+
+运行 Qt 正式端：
+
+```bash
+python main.py
+```
+
+运行本地运维后台：
+
+```bash
+python -m web_ui.app
+```
+
+运行 Cloud API：
+
+```bash
+python cloud_api/app.py
+```
+
+默认端口：
+
+- WebUI：`http://127.0.0.1:5000`
+- Cloud API：`http://127.0.0.1:5001`
+
+## 8. 训练与导出
+
+双书体训练在本机 V100 上完成，运行时只消费导出的 ONNX 文件，不在树莓派或公网后端训练。
+
+当前导出目标固定为：
 
 - `models/quality_scorer_regular.onnx`
 - `models/quality_scorer_regular.metrics.json`
 - `models/quality_scorer_running.onnx`
 - `models/quality_scorer_running.metrics.json`
 
-## Reviewer-Oriented Positioning
+训练说明见：
 
-To avoid overstating the system, the current project should be presented as:
+- [training/README.md](./training/README.md)
 
-- a `single-character`, `regular + running script`, `beginner-friendly` assistant
-- a system that keeps `total_score` as the primary score and uses four dimensions for explanation
-- a product that supports `teacher-assisted review`, not an automated replacement for expert grading
+## 9. 文档索引
 
-The mobile miniapp now exposes:
+- [文档索引](./docs/README.md)
+- [评价依据与验证计划](./docs/evaluation-basis-and-validation.md)
+- [参考项目与论文](./docs/reference-projects-and-papers.md)
+- [项目流程图（draw.io）](./docs/inkpi-project-flow.drawio)
+- [项目流程图预览](./docs/inkpi-project-flow.png)
 
-- quantitative statistics and progress trends
-- record deletion and batch management
-- explanation-basis cards for each dimension
-- practice guidance derived from the weakest dimension
-- validation snapshot fields such as sample count, character coverage, device count, and target progress
+## 10. 论文与展示材料
 
-The operations console now exposes:
+论文 Overleaf 工程位于：
 
-- dual-model readiness for `regular` and `running`
-- recent results with script labels
-- host / stack / hardware / runtime logs
-- current cloud sync and output status
+- [paper/overleaf/main.tex](./paper/overleaf/main.tex)
 
-For a detailed reviewer-facing write-up, see:
+打包上传文件位于：
 
-- `docs/evaluation-basis-and-validation.md`
+- [paper/inkpi-overleaf.zip](./paper/inkpi-overleaf.zip)
 
-## Runtime Layout
+本地编译后的 PDF 会同步输出到桌面：
 
-- `views/`: PyQt6 UI pages
-- `services/`: camera, preprocessing, OCR, scoring, database, cloud sync
-- `models/`: runtime models and ONNX assets
-- `web_ui/`: local browser UI and Flask routes
-- `cloud_api/`: shared cloud-facing Flask API
-- `miniapp/`: mobile viewer with history, quantitative statistics, and delete management
-- `training/`: scoring model training pipeline
-- `docs/`: flow chart, project documentation, PPT assets
-
-## Linux / XFCE Deployment
-
-The project now targets Linux/XFCE for graphical Qt deployment.  
-The old Windows desktop simulator scripts have been removed.
-
-Server setup:
-
-```bash
-bash scripts/setup_server_runtime.sh
-```
-
-Public backend only:
-
-```bash
-bash scripts/setup_backend_runtime.sh
-INKPI_WEB_PORT=5000 INKPI_CLOUD_PORT=23333 bash scripts/start_backend_stack.sh
-```
-
-Start the full stack:
-
-```bash
-bash scripts/start_server_stack.sh
-```
-
-Install tty1 kiosk autostart for the full stack:
-
-```bash
-INKPI_KIOSK_MODE=stack bash scripts/install_kiosk.sh
-```
-
-Stop the full stack:
-
-```bash
-bash scripts/stop_server_stack.sh
-```
-
-Stop the public backend only:
-
-```bash
-bash scripts/stop_backend_stack.sh
-```
-
-Restart the public backend only:
-
-```bash
-bash scripts/restart_backend_stack.sh
-```
-
-Run backend health checks:
-
-```bash
-bash scripts/health_check_stack.sh backend
-```
-
-What the stack script starts:
-
-- `Cloud API` on `INKPI_CLOUD_PORT` (default `5001`)
-- `WebUI` on `INKPI_WEB_PORT` (default `5000`)
-- `Qt UI` inside the current XFCE session
-
-What the backend-only script starts:
-
-- `Cloud API` on `INKPI_CLOUD_PORT` (recommended public port `23333`)
-- `WebUI` on `INKPI_WEB_PORT` (default `5000`)
-
-Useful environment overrides:
-
-```bash
-export INKPI_WEB_HOST=0.0.0.0
-export INKPI_WEB_PORT=5000
-export INKPI_CLOUD_PORT=5001
-export INKPI_WINDOW_WIDTH=480
-export INKPI_WINDOW_HEIGHT=320
-export INKPI_FULLSCREEN=0
-```
-
-Optional runtime env files:
-
-- `.inkpi/cloud.env`
-- `.inkpi/server.env`
-
-Example cloud sync configuration:
-
-```env
-INKPI_CLOUD_BACKEND_URL=http://202.60.232.93:23333
-INKPI_CLOUD_DEVICE_KEY=your-device-key
-INKPI_CLOUD_DEVICE_NAME=InkPi-XFCE
-```
-
-Raspberry Pi note:
-
-- `paddlepaddle` / `paddleocr` are installed only on supported `x86_64` / `AMD64` environments
-- ARM devices can still evaluate through the built-in remote OCR fallback when `INKPI_CLOUD_BACKEND_URL` and `INKPI_CLOUD_DEVICE_KEY` are configured
-
-## Local Development
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Run Qt:
-
-```bash
-python main.py
-```
-
-Run WebUI:
-
-```bash
-python -m web_ui.app
-```
-
-Run Cloud API:
-
-```bash
-python cloud_api/app.py
-```
-
-## Tests
-
-Common regression checks:
-
-```bash
-python -m unittest test_web_ui.py
-python -m unittest test_all.py
-python -m unittest test_cloud_api.py
-python -m unittest test_cloud_ocr_api.py
-python -m unittest test_cloud_sync_integration.py
-```
-
-## CI Notes
-
-GitHub Actions should focus on cross-platform Python logic.  
-Raspberry Pi specific hardware paths such as `GPIO`, camera hardware, `SPI`, and `libcamera` are better covered on the real device or a self-hosted runner.
-
-## CI/CD
-
-The repository now defines a complete CI/CD chain for the three main delivery targets:
-
-- `PR / Push CI`: Python checks, ops console build, miniapp validation, and release artifact packaging
-- `Deploy Public Backend`: remote deployment for `Cloud API + WebUI`
-- `Deploy Raspberry Pi Stack`: remote deployment for `Qt + WebUI + Cloud API`
-- `Miniapp Release Candidate`: miniapp validation plus zip packaging for release handoff
-
-Main repo entrypoints:
-
-- `scripts/rpi_lint_test.sh`
-- `scripts/ci_python_checks.sh`
-- `scripts/ci_ops_console.sh`
-- `scripts/ci_miniapp_checks.sh`
-- `scripts/package_backend_release.sh`
-- `scripts/package_rpi_release.sh`
-- `scripts/package_miniapp_release.sh`
-- `scripts/install_rpi_release.sh`
-- `scripts/deploy_backend_release.sh`
-- `scripts/deploy_rpi_release.sh`
-- `scripts/restart_backend_stack.sh`
-- `scripts/health_check_stack.sh`
-
-GitHub workflow files:
-
-- `.github/workflows/python-app.yml`
-- `.github/workflows/deploy-backend.yml`
-- `.github/workflows/deploy-rpi.yml`
-- `.github/workflows/miniapp-ci.yml`
-- `.github/workflows/miniapp-release.yml`
-- `.github/workflow-snippets/rpi-device-cd.yml`
-
-Raspberry Pi device-side release path:
-
-1. Run `bash scripts/rpi_lint_test.sh`
-2. Build the device artifact with `bash scripts/package_rpi_release.sh`
-3. Copy `dist/releases/inkpi-rpi-release-*.tar.gz` to the Raspberry Pi
-4. Run `INKPI_DEPLOY_MODE=server bash scripts/install_rpi_release.sh /path/to/inkpi-rpi-release-*.tar.gz`
-5. Let `scripts/health_check_stack.sh` confirm `cloud_api`, `web_ui`, OCR readiness, the ONNX scorer state, and the Qt process
-
-The device installer reuses the current `setup_*`, `start_*`, and `stop_*` scripts, keeps mutable state under `INKPI_DEPLOY_ROOT/shared`, switches `current` to a freshly unpacked release, and rolls back automatically if the post-start health check fails.
-
-The public backend deploy script now follows the same pattern: it stops the previous stack, keeps runtime state under `INKPI_DEPLOY_TARGET_DIR/shared`, switches `current` to the new release, and finishes with `scripts/health_check_stack.sh backend`.
-
-Default Raspberry Pi release layout:
-
-- `${HOME}/inkpi-device/releases/<release-id>`
-- `${HOME}/inkpi-device/current`
-- `${HOME}/inkpi-device/shared/data`
-- `${HOME}/inkpi-device/shared/.inkpi`
-- `${HOME}/inkpi-device/shared/logs`
-- `${HOME}/inkpi-device/shared/runtime_logs`
-- `${HOME}/inkpi-device/shared/runtime_pids`
-
-Default public backend release layout:
-
-- `/opt/inkpi/releases/<release-id>`
-- `/opt/inkpi/current`
-- `/opt/inkpi/shared/data`
-- `/opt/inkpi/shared/.inkpi`
-- `/opt/inkpi/shared/venv`
-- `/opt/inkpi/shared/runtime_logs`
-- `/opt/inkpi/shared/runtime_pids`
-
-Miniapp CI/CD entrypoints:
-
-- `npm --prefix miniapp run ci`
-- `npm --prefix miniapp run ci:release`
-- `.github/workflows/miniapp-ci.yml`
-
-The miniapp branch pipeline prepares `miniapp/dist/ci-package` on every relevant PR or push. The dedicated release workflow re-runs the pipeline in strict mode, optionally rewrites `config.js` with `MINIAPP_API_BASE_URL`, and uploads both the importable package directory and the release zip.
-
-Recommended deployment order:
-
-1. Open a PR and wait for `InkPi CI`
-2. Review the generated artifacts in `dist/releases`
-3. Trigger `Deploy Public Backend` for the cloud host
-4. Trigger `Deploy Raspberry Pi Stack` for the device
-5. Trigger `Miniapp Release Candidate` to get the WeChat import package
-
-Required GitHub secrets:
-
-- Backend: `INKPI_BACKEND_HOST`, `INKPI_BACKEND_USER`, `INKPI_BACKEND_PORT`, `INKPI_BACKEND_TARGET_DIR`, `INKPI_BACKEND_SSH_KEY`
-- Raspberry Pi: `INKPI_RPI_HOST`, `INKPI_RPI_USER`, `INKPI_RPI_PORT`, `INKPI_RPI_TARGET_DIR`, `INKPI_RPI_SSH_KEY`
-
-`Deploy Public Backend` now reruns `scripts/ci_python_checks.sh` before packaging, rebuilds `web_console` through `scripts/package_backend_release.sh`, and lets the remote deploy step execute `setup_backend_runtime.sh -> start_backend_stack.sh -> health_check_stack.sh backend`.
-
-For the full CI/CD process, artifact strategy, and workflow responsibilities, see:
-
-- `docs/ci-cd.md`
-
-## Docs
-
-- Flow chart source: `docs/inkpi-project-flow.drawio`
-- Flow chart preview: `docs/inkpi-project-flow.png`
-- CI/CD notes: `docs/ci-cd.md`
-- Reviewer notes: `docs/evaluation-basis-and-validation.md`
-- Training notes: `training/README.md`
+- `C:\Users\zongrui\Desktop\InkPi-paper.pdf`

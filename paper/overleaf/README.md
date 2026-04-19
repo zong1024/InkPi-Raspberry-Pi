@@ -1,24 +1,43 @@
-# InkPi Overleaf Paper
+# InkPi Overleaf 工程
 
-This folder is a self-contained Overleaf-ready paper project for the current InkPi system.
+这是 InkPi 项目的论文工程目录，默认用于 Overleaf 或本地 XeLaTeX 编译。
 
-## Files
+## 文件说明
 
-- `main.tex`: paper source
-- `figures/system-flow.png`: overall project flow chart
-- `figures/qt-home.png`: Qt home UI screenshot
-- `figures/qt-result.png`: Qt result UI screenshot
+- `main.tex`：论文主文件
+- `figures/system-flow.png`：系统总流程图
+- `figures/qt-home.png`：Qt 首页截图
+- `figures/qt-result.png`：Qt 结果页截图
 
-## Recommended Overleaf Setup
+## 编译方式
 
-1. Create a new Overleaf project.
-2. Upload the whole `paper/overleaf` folder or zip it first and upload the zip.
-3. The project already includes `latexmkrc`, so Overleaf should use `XeLaTeX` automatically.
-4. If Overleaf still keeps an old setting, switch the compiler to `XeLaTeX` manually and recompile `main.tex`.
+请使用 `XeLaTeX` 编译。
 
-## Notes
+本地编译示例：
 
-- The paper is written against the current project state as of `2026-04-19`.
-- The current paper wording assumes formal support for `楷书 + 行书` single-character evaluation only.
-- The public backend deployment described in the text corresponds to the current Debian 12 backend node.
-- If you need to replace the author, school, or course information, edit the title block in `main.tex`.
+```bash
+xelatex -interaction=nonstopmode -halt-on-error main.tex
+```
+
+## 当前论文口径
+
+当前论文已经按项目最新状态更新为：
+
+- 正式支持 `楷书 + 行书` 单字
+- OCR 与预处理共享
+- 用户手动选择书体
+- ONNX 双模型按 `script` 路由
+- 树莓派端负责正式交互
+- 运维后台负责状态监控
+- 小程序负责历史、统计、建议与验证信息查看
+- 训练在本机 V100 完成，部署仅分发 ONNX 产物
+
+## 配套产物
+
+仓库外同步产物：
+
+- `C:\Users\zongrui\Desktop\InkPi-paper.pdf`
+
+仓库内上传包：
+
+- `paper/inkpi-overleaf.zip`
