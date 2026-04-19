@@ -12,6 +12,22 @@ import cv2
 import numpy as np
 
 try:
+    from models.evaluation_framework import (
+        RUBRIC_VERSION,
+        build_rubric_items,
+        build_rubric_preview_total,
+        get_rubric_definition,
+    )
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from models.evaluation_framework import (
+        RUBRIC_VERSION,
+        build_rubric_items,
+        build_rubric_preview_total,
+        get_rubric_definition,
+    )
+
+try:
     from training.quality_model_layout import (
         DEFAULT_MANIFEST_ROOT,
         DEFAULT_PUBLIC_CHARACTER_ROOT,
@@ -41,6 +57,13 @@ class QualitySample:
     provenance: str
     source_group: str
     proxy_score: float
+    rubric_version: str
+    rubric_family: str
+    rubric_items: list[dict]
+    rubric_preview_total: float | None
+    manual_review_score: float | None
+    manual_review_level: str | None
+    manual_review_notes: str | None
 
 
 def load_gray(path: Path) -> np.ndarray | None:
@@ -109,6 +132,54 @@ def compute_proxy_score(image: np.ndarray) -> float:
     )
 
 
+def proxy_to_anchor(proxy_score: float) -> int:
+    if proxy_score >= 0.90:
+        return 100
+    if proxy_score >= 0.72:
+        return 80
+    if proxy_score >= 0.54:
+        return 60
+    if proxy_score >= 0.36:
+        return 40
+    return 20
+
+
+def bootstrap_rubric_payload(script: str, proxy_score: float) -> tuple[str, list[dict], float | None]:
+    definition = get_rubric_definition(script)
+    anchor = proxy_to_anchor(proxy_score)
+    rubric_scores = {item["key"]: anchor for item in definition["items"]}
+    rubric_items = build_rubric_items(rubric_scores, script=script)
+    return definition["rubric_family"], rubric_items, build_rubric_preview_total(rubric_items)
+
+
+def make_quality_sample(
+    *,
+    path: Path,
+    script: str,
+    label: str,
+    provenance: str,
+    source_group: str,
+    proxy_score: float,
+) -> QualitySample:
+    rubric_family, rubric_items, rubric_preview_total = bootstrap_rubric_payload(script, proxy_score)
+    return QualitySample(
+        path=str(path),
+        script=script,
+        character=parse_character_from_name(path),
+        label=label,
+        provenance=provenance,
+        source_group=source_group,
+        proxy_score=proxy_score,
+        rubric_version=RUBRIC_VERSION,
+        rubric_family=rubric_family,
+        rubric_items=rubric_items,
+        rubric_preview_total=rubric_preview_total,
+        manual_review_score=None,
+        manual_review_level=None,
+        manual_review_notes=None,
+    )
+
+
 def select_ranked(
     paths: list[Path],
     medium_limit: int,
@@ -134,10 +205,9 @@ def select_ranked(
     bad_candidates = scored[bad_start:]
 
     medium = [
-        QualitySample(
-            path=str(path),
+        make_quality_sample(
+            path=path,
             script=script,
-            character=parse_character_from_name(path),
             label="medium",
             provenance="public_character/good",
             source_group="bootstrap_clean_real",
@@ -146,10 +216,9 @@ def select_ranked(
         for path, score in medium_candidates[:medium_limit]
     ]
     bad = [
-        QualitySample(
-            path=str(path),
+        make_quality_sample(
+            path=path,
             script=script,
-            character=parse_character_from_name(path),
             label="bad",
             provenance="public_character/good",
             source_group="bootstrap_hard_real",
@@ -187,10 +256,9 @@ def build_manifest(
     bad_start = max(medium_end, int(len(scored) * 0.84))
 
     good_samples = [
-        QualitySample(
-            path=str(path),
+        make_quality_sample(
+            path=path,
             script=script,
-            character=parse_character_from_name(path),
             label="good",
             provenance=provenance,
             source_group="bootstrap_top_real",
@@ -200,10 +268,9 @@ def build_manifest(
     ]
 
     medium_samples = [
-        QualitySample(
-            path=str(path),
+        make_quality_sample(
+            path=path,
             script=script,
-            character=parse_character_from_name(path),
             label="medium",
             provenance=provenance,
             source_group="bootstrap_mid_real",
@@ -213,10 +280,9 @@ def build_manifest(
     ]
 
     bad_samples = [
-        QualitySample(
-            path=str(path),
+        make_quality_sample(
+            path=path,
             script=script,
-            character=parse_character_from_name(path),
             label="bad",
             provenance=provenance,
             source_group="bootstrap_hard_real",
@@ -233,6 +299,8 @@ def build_manifest(
 
     summary = {
         "script": script,
+        "rubric_version": RUBRIC_VERSION,
+        "rubric_family": get_rubric_definition(script)["rubric_family"],
         "public_character_dir": str(public_character_dir),
         "manifest": str(output_path),
         "counts": {

@@ -46,7 +46,7 @@
   urlcolor=blue!60!black
 }
 
-\title{InkPi：面向楷书与行书单字练习的树莓派书法辅助评测系统设计与实现}
+\title{InkPi：基于公开标准重构的楷书与行书单字书法辅助评测系统}
 \author{Zongrui}
 \date{2026年4月}
 
@@ -55,131 +55,157 @@
 \maketitle
 
 \begin{abstract}
-针对书法学习中“反馈周期长、评价口径不稳定、设备端与云端脱节”的问题，本文设计并实现了一套面向楷书与行书单字练习的书法辅助评测系统 InkPi。系统以树莓派为设备端核心，采用 PyQt6 构建 3.5 寸小屏正式界面，在保持统一图像预处理与 OCR 入口不变的前提下，引入显式书体字段 \texttt{script}，将评测范围收敛为楷书与行书两种正式支持书体，并在 OCR 之后按书体路由到对应 ONNX 主评分模型。系统输出统一主分 \texttt{total\_score}，同时生成结构、笔画、完整、稳定四维解释分，用于教学反馈与结果说明。为支持真实部署，本文进一步实现了 Cloud API、运维后台、小程序和本地/云端数据库协同链路，使系统能够完成本地评测、结果同步、状态监控、移动端查看和复评数据沉淀。相比仅强调模型准确率的单模块原型，InkPi 更强调边缘设备可部署性、支持边界清晰性、解释层产品化以及验证数据的持续积累。本文还结合公开研究与项目，对系统定位、方法边界和验证路线进行了重构，使其更适合课堂辅助、答辩展示和后续产品化扩展。
+针对书法练习中“反馈周期长、评价口径不透明、设备端与云端脱节”的问题，本文设计并实现了一套面向毛笔楷书与行书单字练习的书法辅助评测系统 InkPi。系统以树莓派为设备端核心，采用 PyQt6 构建 3.5 寸小屏正式界面，在保持统一图像预处理与 OCR 入口不变的前提下，通过显式书体字段 \texttt{script} 将评测范围收敛为楷书与行书两种正式支持书体，并在 OCR 后按书体路由到对应 ONNX 主评分模型。与早期仅依赖“四维解释层”的做法不同，本文进一步基于教育部书法教育文件、地方书法水平测试大纲、中国美术学院社会美术水平考级标准以及中国书法家协会展览评审语境，重构了两套来源明确的五维正式评审标准：楷书标准强调笔法点画、结体字法、布白章法、墨法笔力与规范完整，行书标准强调用笔线质、结体取势、连带节奏、墨气笔力与规范识别。当前系统保持 \texttt{total\_score} 作为正式主分，同时将新的 rubric 直接用于结果展示、移动端查看、统计分析与方法论接口，并将 \texttt{rubric\_preview\_total} 仅保留为内部验证量。围绕该评测链路，InkPi 进一步实现了 Cloud API、运维后台、小程序和本地/云端数据库协同，使系统能够完成本地评测、结果同步、状态监控、移动端复盘和人工复评数据沉淀。本文重点介绍该系统的来源化评审标准、双书体运行架构、过渡期主分策略以及当前验证路线。
 \end{abstract}
 
-\noindent\textbf{关键词：} 书法评测；树莓派；OCR；ONNX；可解释反馈；边缘云协同
+\noindent\textbf{关键词：} 书法评测；树莓派；OCR；ONNX；来源化评审标准；边缘云协同
 
 \section*{Abstract}
-InkPi is a Raspberry-Pi-centered calligraphy assistance system for single-character practice in regular script and running script. The system keeps image preprocessing and OCR shared across the whole runtime, while explicitly introducing a user-selected \texttt{script} field to route each sample to the corresponding ONNX scorer after OCR. The runtime produces a unified primary score together with four explanation dimensions, namely structure, stroke, integrity, and stability. Around this evaluation pipeline, the project further integrates a PyQt6 device-side interface for a 3.5-inch screen, a Flask-based Cloud API, a monitoring-oriented web operations console, and a miniapp for history browsing, statistics, and coaching-oriented result inspection. In contrast to score-only prototypes, InkPi emphasizes clear support boundaries, productized explanation outputs, cloud-synchronized evidence accumulation, and deployability on edge devices. This paper presents the system architecture, the dual-script evaluation workflow, related online projects and papers that informed the redesign, and the current validation strategy for deploying and evolving the system.
+InkPi is a Raspberry-Pi-centered calligraphy assistance system for single-character practice in regular script and running script. The system keeps image preprocessing and OCR shared across the whole runtime, while explicitly introducing a user-selected \texttt{script} field to route each sample to the corresponding ONNX scorer after OCR. In this iteration, the public-facing evaluation layer is rebuilt from an ad-hoc four-dimension explanation scheme into two source-backed five-dimension rubrics, one for regular script and one for running script. The new rubrics are grounded in publicly available education guidelines, local calligraphy test outlines, social art examination standards, and exhibition review discourse. InkPi keeps the current ONNX-based \texttt{total\_score} as the official primary score during the transition, while exposing the new rubric items in the device UI, cloud APIs, miniapp, and operations console. Around this evaluation pipeline, the project further integrates a PyQt6 device-side interface for a 3.5-inch screen, a Flask-based Cloud API, a monitoring-oriented web operations console, and a miniapp for history browsing, statistics, evidence inspection, and coaching-oriented feedback. This paper presents the source-backed rubric design, the dual-script runtime architecture, the transition strategy that keeps the legacy primary score unchanged for now, and the current validation path for future rubric-aware retraining.
 
-\noindent\textbf{Keywords:} calligraphy assessment; Raspberry Pi; OCR; ONNX; explainable feedback; edge-cloud system
+\noindent\textbf{Keywords:} calligraphy assessment; Raspberry Pi; OCR; ONNX; source-backed rubric; edge-cloud system
 
 \section{引言}
-书法学习长期依赖教师面对面示范和点评，这种教学方式在专业训练中不可替代，但在初学者练习、课堂展示和设备端即时反馈场景中存在两个突出问题：其一，反馈周期长，学生难以在单次练习后立即获得结构性建议；其二，评价口径常停留在“写得好/不好”的经验描述，缺乏可记录、可传输、可复盘的数据出口。随着 OCR、边缘推理和移动端同步能力的成熟，书法辅助评测系统开始具备工程实现基础，但很多公开工作仍集中于单一模型或单一评测实验，较少把设备交互、部署、监控和移动端反馈纳入统一系统叙述。
+书法学习天然依赖教师示范与点评，但在初学者练习、课堂展示和设备端即时反馈场景中，这种模式常面临两个现实问题。其一，反馈周期较长，学生难以在一次练习后迅速获得稳定、结构化的改进建议；其二，评价口径往往停留在经验描述，例如“写得稳不稳”“结构好不好”，难以形成可追踪、可统计、可复盘的数字化结果。随着 OCR、边缘推理和多端同步能力的成熟，书法辅助评测系统已经具备工程落地基础，但如果评价维度缺乏来源约束，系统很容易被质疑为“模型自己定义标准”，从而削弱项目的专业性和说服力。
 
-InkPi 的目标并不是构建一个“自动给书法考级结论”的系统，而是构建一条更稳健的产品链路：树莓派设备端负责正式交互，统一预处理和 OCR 保持输入稳定；ONNX 模型负责输出统一主分；四维解释层负责将结果转化为更易理解的教学反馈；云端 API 负责结果沉淀与移动端分发；运维后台负责设备、模型和流程监控；小程序负责历史记录、统计指标和练习建议查看。换句话说，本项目优先回答的是“如何把评测能力组织成一个可部署、可解释、可持续验证的系统”，而不是单纯追求算法指标最大化。
+InkPi 当前要解决的问题，不只是“能不能给分”，而是“能不能在边缘设备上稳定运行，并给出有依据、可解释、可追踪的结果”。此前系统已经形成了树莓派 Qt 正式端、Cloud API、运维后台和微信小程序协同的完整链路，但结果解释层主要采用了“结构 / 笔画 / 完整 / 稳定”四维框架。这个框架适合工程调试与早期教学反馈，却不足以应对“标准从何而来”的追问。为此，本轮重构把公开可查的教育、考级、协会、展赛来源引入系统，直接将其落实为两套独立的五维正式评审标准。
 
-在前期版本中，系统主要围绕楷书单字展开。随着评审意见逐步明确，我们将项目正式支持范围重构为“楷书 + 行书单字”，并显式去掉对其他书体的模糊承诺。这样做的原因有两点：一是楷书和行书在教学与练习场景中覆盖面更广；二是相比隶书、草书、篆书，多数结构与可识别性特征在这两类书体上更适合当前的工程路线。于是，InkPi 采用“用户手动选择书体，系统在 OCR 后按 \texttt{script} 路由评分模型”的策略，以保证支持边界清晰、实现成本可控、解释口径稳定。
+这次重构坚持三条边界。第一，产品范围仍限定在毛笔楷书与行书单字，不扩展到隶书、草书、篆书或多字作品。第二，OCR 和预处理链路保持不变，书体仍由用户手动选择，系统不引入自动书体识别。第三，现阶段新的正式标准先替换维度层，不替换当前主分：\texttt{total\_score} 仍由现有 ONNX 模型输出，新的 \texttt{rubric\_preview\_total} 只作为内部验证量，用于后续重训准备。这样做的目的，是在不打断当前可运行主链的前提下，把评价标准先建立起来。
 
-\section{相关工作与在线参考}
-本次文档和论文重写并非凭空组织，而是参考了公开论文、项目和官方文档中较成熟的写法与定位。表~\ref{tab:related-work} 总结了几类对 InkPi 有直接启发的公开工作。
+\section{来源依据与标准骨架}
+\subsection{来源目录}
+InkPi 当前的新标准只使用公开可查、且能落到单字书法练习场景的来源。表~\ref{tab:sources} 给出了当前锁定的来源目录。
 
 \begin{table}[H]
   \centering
-  \caption{对 InkPi 重写最有启发的公开工作}
-  \label{tab:related-work}
-  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{2.3cm} X}
+  \caption{InkPi 来源化标准目录}
+  \label{tab:sources}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.1cm} >{\raggedright\arraybackslash}p{4.7cm} >{\raggedright\arraybackslash}p{3.1cm} X}
     \toprule
-    参考工作 & 类型 & 对 InkPi 的启发 \\
+    来源码 & 来源名称 & 机构 & 在系统中的作用 \\
     \midrule
-    Hui 等 \cite{hui2007calligraphy} & 集成系统论文 & 将分解、评价、生成统一写成“完整智能系统”，提醒我们不要只写模型而忽略整体链路。 \\
-    Huda \cite{huda2020rpi} & 树莓派应用论文 & 证明 Raspberry Pi 可以承载书法学习辅助系统，并应在论文中交代硬件、部署与真实使用场景。 \\
-    Yan 等 \cite{yan2024siamese} & 评测型论文 & 把数据采集、标准样本、检测识别与评价流程写成完整实验链路，对 InkPi 的流程图与方法章节组织有直接帮助。 \\
-    Xu 等 \cite{xu2024penmanship} & 书写质量评测论文 & 强调人工评分对照、样本规模和移动端应用出口，提醒我们必须正视数据支撑与评价一致性问题。 \\
-    Zheng 等 \cite{zheng2025vlm} & 反馈生成论文 & 明确指出 score-only 反馈不足以支持学习改进，这与我们引入四维解释层与练习建议的方向一致。 \\
-    PaddleOCR \cite{paddleocr} / ONNX Runtime \cite{onnxruntime} & 官方工程文档 & 为共享 OCR 入口与“训练-导出-边缘推理”分层部署提供稳定技术基础。 \\
+    MOE-2013 & 《中小学书法教育指导纲要》 \cite{moe2013} & 教育部 & 确立规范书写、技能训练、评价多元的教育边界。 \\
+    MOE-2025 & 对十四届全国人大二次会议第4162号建议的答复 \cite{moe2025} & 教育部 & 给出 2022 课标口径下楷书到规范、通行行楷/行书的 progression。 \\
+    SC-SHFA-2018 & 四川省书法水平测试毛笔书法测试大纲 \cite{sc2018} & 四川省教育考试院 & 提供适合初学者场景的笔法、字法、章法、卷面权重骨架。 \\
+    CAA-EXAM-2018 & 全国美术考级软笔书法考试与培训标准 \cite{caa2018} & 中国美术学院社会美术水平考级中心 & 补强提按顿挫、线条力度、结构准确度、章法完善等标准表述。 \\
+    CWA-REVIEW-2024 & 全国第十三届书法篆刻展评审评议 \cite{cwa2024} & 中国书法家协会相关评审语境 & 提供笔法、结构、章法、墨法、笔力、规范识别等正式评审话语。 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-从这些工作中，InkPi 形成了三条清晰判断。第一，书法评测不应只写成一个单模型任务，而应被组织为设备端、评分层、解释层、云端和移动端协同的系统。第二，评价问题天然带有主观性，因此“人工评分对照、样本量、验证指标、边界声明”必须进入正文，而不能只在答辩时口头补充。第三，仅给分数不足以支持学习改进，系统还需要提供面向用户的解释与建议。
+这些来源的使用方式并不是“照搬考级规则给机器打分”，而是把它们转化为三类约束：一是定义系统的教育边界，避免把辅助评测系统包装成自动考级器；二是给出能映射到当前单字产品的维度与权重语言；三是为未来的人工复评、数据标注和重训提供统一标准。
 
-相较于这些公开工作，InkPi 的差异化点在于：它把支持范围主动收敛为楷书与行书单字，把树莓派小屏、Cloud API、运维后台和小程序纳入统一仓库与统一部署链路，并将“评价依据”和“验证快照”做成了正式接口能力，而不是只存在于论文描述中。
+\subsection{楷书正式标准}
+楷书标准 \texttt{regular\_rubric\_v1} 的五个正式维度如表~\ref{tab:regular-rubric} 所示。
 
-\section{系统目标与支持边界}
-当前版本的 InkPi 明确遵守以下边界：
+\begin{table}[H]
+  \centering
+  \caption{楷书正式标准 \texttt{regular\_rubric\_v1}}
+  \label{tab:regular-rubric}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.7cm} >{\raggedright\arraybackslash}p{2.0cm} >{\centering\arraybackslash}p{1.0cm} X}
+    \toprule
+    key & 展示名称 & 权重 & 主要依据 \\
+    \midrule
+    \texttt{bifa\_dianhua} & 笔法点画 & 30 & 四川“笔法”；国美“提按顿挫及线条力度”；中书协“笔法/笔力”。 \\
+    \texttt{jieti\_zifa} & 结体字法 & 30 & 四川“字法”；国美“结构准确度”；教育部“规范书写/间架结构”。 \\
+    \texttt{bubai\_zhangfa} & 布白章法 & 15 & 四川“章法”；中书协“章法/主次/不过度形式化”。 \\
+    \texttt{mofa\_bili} & 墨法笔力 & 15 & 中书协“墨法、笔力”；国美“点画有力”。 \\
+    \texttt{guifan\_wanzheng} & 规范完整 & 10 & 教育部“规范书写”；中书协“文字正误/写法不规范”；四川“卷面整洁”。 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
-\begin{itemize}
-  \item 正式支持对象仅为楷书与行书单字；
-  \item OCR 与预处理链路在两种书体之间共享；
-  \item 新评测请求必须显式给出 \texttt{script}；
-  \item \texttt{regular} 只路由到楷书模型，\texttt{running} 只路由到行书模型；
-  \item 四维分用于解释，不作为正式考级结论；
-  \item 隶书、草书、篆书以及多字作品不在当前正式范围内。
-\end{itemize}
+需要说明的是，协会和展赛语境中的“章法”通常对应整幅作品布局，而 InkPi 当前只做单字练习。因此系统把这项适配为字内布白、重心位置、四边留白和字内疏密关系，而不把整幅作品章法强行压缩到单字界面中。
 
-这种边界收缩并非能力退化，而是工程理性选择。CalliFormer 在讨论其结构先验时指出，规则性更强的楷书更适合依赖显式结构约束，而更流动的行书与草书会带来更大的建模难度 \cite{calliformer2025}。对于 InkPi 这样的边缘部署系统而言，只有在支持边界清晰时，解释逻辑、模型路由和验证口径才能同时保持稳定。
+\subsection{行书正式标准}
+行书标准 \texttt{running\_rubric\_v1} 的五个正式维度如表~\ref{tab:running-rubric} 所示。
 
-\section{系统架构}
-InkPi 当前系统由设备评测层、解释与存储层、云端协同层和运维监控层构成。整体流程如图~\ref{fig:system-flow} 所示。
+\begin{table}[H]
+  \centering
+  \caption{行书正式标准 \texttt{running\_rubric\_v1}}
+  \label{tab:running-rubric}
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.7cm} >{\raggedright\arraybackslash}p{2.0cm} >{\centering\arraybackslash}p{1.0cm} X}
+    \toprule
+    key & 展示名称 & 权重 & 主要依据 \\
+    \midrule
+    \texttt{yongbi\_xianzhi} & 用笔线质 & 25 & 国美“提按顿挫、线条力度”；中书协“笔墨控制力”。 \\
+    \texttt{jieti\_qushi} & 结体取势 & 20 & 教育部“规范、通行的行楷/行书”；中书协“结体与气息”。 \\
+    \texttt{liandai\_jiezou} & 连带节奏 & 25 & 行书书体特征；中书协关于行草“气韵贯通”的评审语言。 \\
+    \texttt{moqi\_bili} & 墨气笔力 & 20 & 中书协“墨法、笔力、气息”；国美“点画有力”。 \\
+    \texttt{guifan\_shibie} & 规范识别 & 10 & 教育部规范书写边界；中书协“文字正误/写法不规范”。 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+行书与楷书必须采用两套独立标准，而不能共享同一组维度名称和同一套解释文案。原因在于，楷书更强调结构、比例和起收笔稳定，行书则更强调连带、节奏和流动性下的可识别与可控性。InkPi 的重构核心之一，就是承认这种差异并将其做成运行时的一等逻辑。
+
+\section{系统架构与双书体运行时}
+InkPi 的整套架构如图~\ref{fig:system-flow} 所示。系统保留了统一的图像预处理和 OCR 入口，在 OCR 之后引入用户显式选择的 \texttt{script} 进行模型和评审标准路由。
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth]{figures/system-flow.png}
-  \caption{InkPi 当前项目主链路与多端协同结构}
+  \caption{InkPi 当前主链与来源化 rubric 架构}
   \label{fig:system-flow}
 \end{figure}
 
-从模块职责看，系统可以拆分为以下部分：
+从职责划分看，系统由以下几层组成：
 
 \begin{itemize}
-  \item \textbf{Qt 设备端}：面向 480x320 小屏的正式交互入口，负责拍摄、上传、书体选择、结果展示和历史浏览；
-  \item \textbf{预处理与 OCR}：统一执行图像质量校验、去网格、二值化、主体提取和单字识别；
-  \item \textbf{双书体 ONNX 主评分}：在 OCR 之后按 \texttt{script} 路由至楷书或行书评分模型；
-  \item \textbf{四维解释层}：基于质量特征、几何特征和主评分中间量生成解释分；
-  \item \textbf{本地 SQLite}：保存结果、图像路径、四维分与调试字段；
-  \item \textbf{Cloud API}：提供登录、结果上传、列表、详情、删除、方法论与验证相关接口；
-  \item \textbf{运维后台}：监控主机、服务、双模型 readiness、硬件状态和后台输出；
-  \item \textbf{小程序}：面向移动端查看历史、统计、建议、复评与验证快照。
+  \item \textbf{Qt 设备端：} 面向 480x320 小屏，负责正式拍照、上传、书体选择、结果展示和历史浏览。
+  \item \textbf{预处理与 OCR：} 统一执行预检、去网格、主体提取和单字识别，保持输入稳定。
+  \item \textbf{双书体 ONNX 主分层：} 在 OCR 后按 \texttt{script} 路由到楷书或行书主分模型，继续输出当前 \texttt{total\_score}。
+  \item \textbf{来源化 rubric engine：} 复用 OCR、几何特征、质量特征和校准中间量，生成五维正式评审项。
+  \item \textbf{结果与存储层：} 统一装配为 \texttt{EvaluationResult}，写入本地 SQLite，再由云同步上传。
+  \item \textbf{Cloud API 与小程序：} 负责历史、详情、方法论、验证总览、删除和人工复评。
+  \item \textbf{运维后台：} 负责监控双模型 readiness、硬件状态、主机状态、日志和最近结果。
 \end{itemize}
 
-与很多“设备端和 Web 端重复做同样的事”的系统不同，InkPi 在这一轮重构后明确区分了正式端与运维端的职责：Qt 只承担用户侧操作，Web 只承担监控与观察。这样既减轻了小屏交互负担，也使运维信息不再混入正式展示界面。
+与很多“设备端和 Web 端都做同一套评测交互”的项目不同，InkPi 当前明确分离了正式端与运维端：Qt 只面向使用者和展示，Web 只面向状态观察与流程监控。这一设计让 3.5 寸小屏不被调试信息挤压，也让运维信息不会混入正式展示界面。
 
-\section{双书体评测方法}
-\subsection{共享预处理与 OCR}
-图像预处理和 OCR 保持为项目共享入口。预处理阶段负责亮度与对比度校验、红色网格去除、二值化、主体提取和 OCR 裁剪。OCR 侧优先使用 PaddleOCR \cite{paddleocr}，在依赖不可用或设备资源不足时，通过 Cloud API 提供远程回退。InkPi 在这一层故意不做自动书体判定，因为书体判断错误会直接污染后续评分模型选择。
+\section{来源化 rubric 与当前主分的关系}
+\subsection{当前过渡策略}
+本轮重构最关键的工程决策是：新标准直接上屏，但不立即切换正式主分。当前系统采用“两层评分”：
 
-\subsection{显式书体选择与模型路由}
-InkPi 采用显式书体输入策略。用户在 Qt 端或上传入口中明确选择 `regular` 或 `running`，系统在 OCR 之后执行如下路由：
+\begin{enumerate}
+  \item 现有 ONNX 主分层继续输出 \texttt{total\_score}、\texttt{quality\_level} 和 \texttt{quality\_confidence}；
+  \item 新的 rubric engine 生成五维正式评审项、依据说明和内部预览总分 \texttt{rubric\_preview\_total}。
+\end{enumerate}
+
+这样设计有两个好处。第一，设备侧、小程序、Cloud API 和运维后台可以立即切到来源化标准，解决“标准无源”的问题。第二，系统不会因为标准层重构同时引入主分漂移，从而影响已跑通的双书体主链。
+
+\subsection{结果结构}
+为支持这种过渡策略，\texttt{EvaluationResult} 当前新增了以下正式字段：
+
+\begin{itemize}
+  \item \texttt{rubric\_version}
+  \item \texttt{rubric\_family}
+  \item \texttt{rubric\_items}
+  \item \texttt{rubric\_summary}
+  \item \texttt{rubric\_source\_refs}
+  \item \texttt{rubric\_preview\_total}
+\end{itemize}
+
+新记录写入 \texttt{rubric\_*}，旧记录则保留为 \texttt{legacy\_v0}。系统不会把旧的“四维结果”强行伪装成新的正式标准。这保证了历史兼容和标准切换的可追溯性。
+
+\subsection{评分锚点}
+当前 rubric engine 采用五档锚点机制：
 
 \begin{equation}
-\text{score\_model} =
-\begin{cases}
-f_{\text{regular}}, & \text{if } script = \texttt{regular} \\
-f_{\text{running}}, & \text{if } script = \texttt{running}
-\end{cases}
+s_i \in \{20, 40, 60, 80, 100\}
 \end{equation}
 
-其中，$f_{\text{regular}}$ 和 $f_{\text{running}}$ 分别对应楷书与行书的 ONNX 主评分模型。若请求未显式提供书体，或目标模型文件不存在，系统会直接拒绝评测并返回明确错误，而不是隐式退回到某个默认模型。这样做的意义在于：系统不假装“什么都支持”，而是在支持范围内保证行为确定。
+每个维度分数都绑定来源化描述，而不是仅使用“优 / 良 / 中 / 差”的抽象标签。系统内部按照权重计算：
 
-\subsection{主分与四维解释层}
-InkPi 保留统一主分 \texttt{total\_score} 作为唯一主口径，同时输出四维解释分：
+\begin{equation}
+\texttt{rubric\_preview\_total} = \sum_i \left( \frac{w_i \cdot s_i}{100} \right)
+\end{equation}
 
-\begin{itemize}
-  \item \textbf{结构（structure）}：字形重心、比例与空间分布是否稳定；
-  \item \textbf{笔画（stroke）}：笔画粗细、方向、转折与连带控制是否稳定；
-  \item \textbf{完整（integrity）}：主体是否完整、清晰、可识别；
-  \item \textbf{稳定（stability）}：当前结果是否集中、可信、可复现。
-\end{itemize}
+但在当前过渡阶段，这个内部总分不出现在 Qt、小程序和正式详情页中。对外仍然只有一个统一主分：\texttt{total\_score}。
 
-四维层复用主评分中的质量特征和校准中间量，但解释文本按书体分别生成。楷书更强调结构规范、重心和边界；行书则更强调流动性下的结构完整与识别稳定。因此，四维名称相同，但维度说明、最弱项建议和练习提示会随着 \texttt{script} 改变。
-
-\subsection{评价依据与验证快照}
-为了回应“评价标准依据不足”的问题，InkPi 在结果结构中引入了方法论载荷，包括：
-
-\begin{itemize}
-  \item 支持边界说明；
-  \item 书体对应的练习画像；
-  \item 四维依据卡；
-  \item 验证快照，如样本量、覆盖汉字数、设备来源数、复评覆盖率和目标进度。
-\end{itemize}
-
-这意味着“为什么这样评”和“当前验证做到哪一步”都已经进入产品接口，不再只是论文或答辩话术。
-
-\section{产品实现与部署}
-\subsection{Qt 小屏正式端}
-Qt 设备端面向树莓派 3.5 寸屏幕设计。经过真机联调，界面保留了三个核心原则：触控优先、信息密度受控、结果页重于参数页。图~\ref{fig:qt-ui} 展示了当前首页与结果页。
+\section{产品界面与多端协同}
+\subsection{Qt 正式端}
+图~\ref{fig:qt-ui} 给出了当前树莓派 Qt 正式界面的首页和结果页。新版 Qt 端面向 480x320 的 3.5 寸小屏做了收敛，只保留楷书与行书两个大书体入口，并直接显示新的五维正式评审项，而不是旧四维解释层。
 
 \begin{figure}[H]
   \centering
@@ -198,78 +224,106 @@ Qt 设备端面向树莓派 3.5 寸屏幕设计。经过真机联调，界面保
   \label{fig:qt-ui}
 \end{figure}
 
-在双书体重构后，Qt 端新增了简洁的书体选择控件，只保留“楷书 / 行书”两个明确选项，以避免在 480x320 空间中引入多余层级。
-
-\subsection{运维后台}
-Web 端已经从早期的“重复评测页”重构为运维后台。前端使用 React 构建，后端通过 Flask 暴露状态快照与日志接口。当前后台重点监控：
+Qt 端当前展示的重点是：
 
 \begin{itemize}
-  \item 主机状态：CPU、内存、磁盘、网络与温度；
-  \item 服务状态：Qt、WebUI、Cloud API；
-  \item 模型状态：本地 OCR、远程 OCR、楷书模型、行书模型、四维解释层；
-  \item 硬件状态：摄像头、GPIO、LED、I2C、SPI、音频；
-  \item 流程状态：最近评测结果、书体分布、日志输出。
+  \item 当前书体
+  \item 统一主分 \texttt{total\_score}
+  \item 五维正式评审项
+  \item 依据化的简短建议
 \end{itemize}
 
-这使得 Web 端真正承担起“设备运行中心”的角色，而不是继续与 Qt 重复交互功能。
-
-\subsection{云端与小程序}
-Cloud API 负责登录、结果上传、历史列表、详情查询、删除、方法论读取和验证总览。小程序则围绕云端数据完成三类工作：
+\subsection{Cloud API、小程序与运维后台}
+Cloud API 不再只返回结果分数，还返回：
 
 \begin{itemize}
-  \item 历史记录与详情查看；
-  \item 按书体查看分布、趋势、四维均值和高频练习字；
-  \item 查看依据卡、优先提升项与练习建议。
+  \item \texttt{rubric\_definitions}
+  \item \texttt{rubric\_source\_catalog}
+  \item \texttt{current\_script\_scope}
+  \item \texttt{validation\_snapshot}
 \end{itemize}
 
-相比只展示一张成绩卡，这一设计使小程序能够承担“学习闭环”中的记录、对比和跟练建议功能。
+这使得小程序详情页和统计页可以直接展示新标准的来源、样本量、按书体维度均值和专家复评概览。与此同时，运维后台则重点呈现双模型 readiness、最近结果所属的 \texttt{rubric\_family}、流程事件和实时日志。换言之，这次标准重构并不是单纯改一个评分表，而是让来源化标准进入了整个产品链路。
 
-\subsection{训练与部署分离}
-当前训练策略明确为：模型训练在本机 V100 工作站上完成，树莓派与公网后端只消费导出的 ONNX 文件。这种设计来自 ONNX Runtime 的部署优势 \cite{onnxruntime}，也符合边缘设备算力受限的现实约束。GitHub Actions 只负责校验双模型产物是否存在、接口结构是否一致，而不在默认 CI 中直接训练模型。
+\section{验证路线与训练准备}
+\subsection{当前验证}
+当前验证的重点不是证明“新的五维总分已经优于旧主分”，而是证明以下三点：
 
-\section{验证与讨论}
-\subsection{当前验证方式}
-InkPi 当前的验证并不把重点放在“单个模型指标的极限值”上，而是放在“完整链路是否可运行、边界是否清晰、结果是否可追踪”上。当前版本已完成以下类型验证：
+\begin{enumerate}
+  \item 楷书与行书确实采用了两套独立标准；
+  \item 新记录能完整写入 \texttt{rubric\_*}，旧记录能保留为 \texttt{legacy\_v0}；
+  \item Qt、小程序、Cloud API 和运维后台都已切到新的五维正式标准层。
+\end{enumerate}
+
+当前项目已经具备以下量化出口：
 
 \begin{itemize}
-  \item Python 单元测试：本地数据库、Cloud API、WebUI 和云同步链路；
-  \item 小程序脚本检查：历史页、详情页、统计页；
-  \item 论文工程编译：XeLaTeX 成功输出 PDF；
-  \item 树莓派实机联调：Qt 全屏、Cloud API、运维后台和 480x320 布局检查。
+  \item 总样本量
+  \item 覆盖汉字数
+  \item 按书体的结果分布
+  \item 设备来源
+  \item 专家复评覆盖率
+  \item AI 与人工一致率
+  \item AI 与人工平均分差
 \end{itemize}
 
-\subsection{量化验证的当前状态}
-评审意见表明，项目不能只说“以后会继续收集数据”，而必须把可量化验证纳入当前系统。因此，InkPi 已将以下指标写入正式统计链路：
+这些指标已经进入 Cloud API 汇总接口和小程序统计页，因此项目后续答辩或汇报不再需要手工拼接验证数据。
+
+\subsection{训练准备}
+训练链路本轮只做准备性改造，不立即切换正式主分。manifest 中已经新增：
 
 \begin{itemize}
-  \item 总样本数与按书体样本分布；
-  \item 覆盖汉字数；
-  \item 设备来源数；
-  \item 最近时段样本增长趋势；
-  \item 分数分布与四维均值；
-  \item 专家复评覆盖率、一致率与平均分差。
+  \item \texttt{rubric\_version}
+  \item \texttt{rubric\_family}
+  \item \texttt{rubric\_items}
+  \item \texttt{rubric\_preview\_total}
+  \item 人工评分对照字段
 \end{itemize}
 
-这些指标的意义不在于当前已经拥有大规模权威数据，而在于系统已经具备持续沉淀证据和对外展示验证状态的能力。
-
-\subsection{局限性}
-InkPi 当前仍有明显局限：
+后续只有在以下条件同时满足时，才考虑用新标准重训并切换主分：
 
 \begin{itemize}
-  \item 正式支持范围只覆盖楷书与行书单字；
-  \item 四维解释层仍属于工程化解释，不等同于标准化考级体系；
-  \item 真实专家复评规模仍需继续扩大；
-  \item 树莓派端的摄像头、GPIO 与外设能力仍依赖具体硬件环境。
+  \item 楷书模型与行书模型都完成按新标准打标
+  \item 人工对照验证通过
+  \item 新旧主分切换的产品风险可控
 \end{itemize}
-
-不过，这些局限已经通过支持边界、方法论说明与验证快照被显式暴露出来，而不是被隐去。
 
 \section{结论}
-本文围绕 InkPi 项目给出了一套完整的系统设计与实现方案。相较于单纯强调模型的书法评测原型，InkPi 更关注从边缘设备到云端再到移动端的完整工程闭环。系统在保持统一 OCR 与预处理入口不变的前提下，将正式支持范围重构为楷书与行书单字，并通过显式书体选择和双模型路由保证了行为边界清晰。与此同时，项目通过四维解释层、方法论载荷、运维后台和小程序统计链路，把“分数、依据、建议、验证状态”组合成一个更适合教学与展示的产品形态。
+本文围绕 InkPi 项目给出了一套基于公开标准的双书体书法辅助评测系统方案。系统在保持 OCR 与预处理链路不变的前提下，把原先偏工程化的“四维解释层”重构为两套来源明确的五维正式评审标准，并将其统一接入树莓派 Qt 正式端、Cloud API、小程序和运维后台。与简单追求“能不能给出一个分数”相比，本轮重构更强调三件事：第一，标准必须有来源；第二，支持边界必须清楚；第三，标准层与主分层可以分阶段迁移，而不必一次性推翻当前已跑通的主链。
 
-后续工作可以从三个方向继续展开：第一，继续扩大双书体样本和专家复评规模，提升评价可信度；第二，引入更规范的 HTTPS、域名与账户体系，提升公网部署成熟度；第三，针对树莓派场景进一步增强离线容错、硬件探测和课堂使用体验。总体来看，InkPi 已经不再只是一个“能打分”的演示系统，而是一套边界清晰、可解释、可部署、可继续积累证据的书法辅助评测平台。
+对 InkPi 而言，真正的价值不在于宣称“已经自动掌握书法评价”，而在于：它已经形成了一套可部署、可解释、可复核、可持续累积证据的辅助评测平台。后续工作将围绕新标准的人工对照、双书体重训、更多真实样本沉淀以及更完整的课堂应用展开。
 
 \begin{thebibliography}{99}
+
+\bibitem{moe2013}
+中华人民共和国教育部.
+\newblock 教育部关于印发《中小学书法教育指导纲要》的通知.
+\newblock 2013.
+\newblock Available: \url{https://hudong.moe.gov.cn/srcsite/A26/s8001/201301/t20130125_147389.html}.
+
+\bibitem{moe2025}
+中华人民共和国教育部.
+\newblock 对十四届全国人大二次会议第4162号建议的答复.
+\newblock 2025.
+\newblock Available: \url{https://hudong.moe.gov.cn/jyb_xxgk/xxgk_jyta/jyta_jiaocaiju/202501/t20250113_1175495.html}.
+
+\bibitem{sc2018}
+四川省教育考试院.
+\newblock 四川省书法水平测试毛笔书法测试大纲.
+\newblock 2018.
+\newblock Available: \url{https://www.sceeo.com/Html/201809/Newsdetail_817.html}.
+
+\bibitem{caa2018}
+中国美术学院社会美术水平考级中心.
+\newblock 全国美术考级软笔书法考试与培训标准.
+\newblock 2018.
+\newblock Available: \url{https://mskj.caa.edu.cn/bkzn/kjdg/201809/33247.html}.
+
+\bibitem{cwa2024}
+中国文艺网.
+\newblock 一步一个脚印——全国第十三届书法篆刻展览评审评议.
+\newblock 2024.
+\newblock Available: \url{https://www.cflac.org.cn/ys/sf/sfht/202405/t20240517_1316199.html}.
 
 \bibitem{hui2007calligraphy}
 Kaiyu Hui, Yue Gao, Yong Hu, and Songhua Xu.
@@ -295,18 +349,6 @@ Zebo Xu, Prerit S. Mittal, Mohd. Mohsin Ahmed, Chandranath Adak, and Zhenguang G
 \newblock \emph{Reading and Writing}, 2024.
 \newblock Available: \url{https://doi.org/10.1007/s11145-024-10531-w}.
 
-\bibitem{zheng2025vlm}
-Chen Zheng, Yuxuan Lai, Haoyang Lu, Wentao Ma, Jitao Yang, and Jian Wang.
-\newblock System Report for CCL25-Eval Task 11: Aesthetic Assessment of Chinese Handwritings Based on Vision Language Models.
-\newblock In \emph{Proceedings of the 24th China National Conference on Computational Linguistics}, 2025.
-\newblock Available: \url{https://aclanthology.org/2025.ccl-2.53/}.
-
-\bibitem{calliformer2025}
-CalliFormer authors.
-\newblock CalliFormer: a structure-aware transformer for Chinese calligraphy generation.
-\newblock \emph{Scientific Reports}, 2025.
-\newblock Available: \url{https://www.nature.com/articles/s41598-025-29262-1}.
-
 \bibitem{paddleocr}
 PaddlePaddle Authors.
 \newblock PaddleOCR.
@@ -316,16 +358,6 @@ PaddlePaddle Authors.
 Microsoft.
 \newblock ONNX Runtime.
 \newblock Available: \url{https://onnxruntime.ai/}. Accessed: 2026-04-19.
-
-\bibitem{opencv}
-Gary Bradski.
-\newblock The OpenCV Library.
-\newblock \emph{Dr. Dobb's Journal of Software Tools}, 2000.
-
-\bibitem{qtforpython}
-Qt Company.
-\newblock Qt for Python Documentation.
-\newblock Available: \url{https://doc.qt.io/qtforpython/}. Accessed: 2026-04-19.
 
 \end{thebibliography}
 

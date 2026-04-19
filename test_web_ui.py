@@ -11,8 +11,7 @@ from web_ui.app import app, operations_monitor_service, state
 
 
 def build_result(record_id: int = 1) -> EvaluationResult:
-    return EvaluationResult(
-        id=record_id,
+    return EvaluationResult.from_rubric_scores(
         total_score=86,
         feedback="整体完成度不错，可以继续稳定结构。",
         timestamp=datetime(2026, 4, 1, 10, 30, 0),
@@ -21,11 +20,15 @@ def build_result(record_id: int = 1) -> EvaluationResult:
         ocr_confidence=0.95,
         quality_level="good",
         quality_confidence=0.88,
-        dimension_scores={
-            "structure": 84,
-            "stroke": 79,
-            "integrity": 90,
-            "stability": 82,
+        image_path=None,
+        processed_image_path=None,
+        rubric_family="running_rubric_v1",
+        rubric_scores={
+            "yongbi_xianzhi": 80,
+            "jieti_qushi": 60,
+            "liandai_jiezou": 100,
+            "moqi_bili": 80,
+            "guifan_shibie": 60,
         },
         score_debug={
             "probabilities": {"good": 0.88},
@@ -69,7 +72,8 @@ class WebUiSmokeTest(unittest.TestCase):
             self.assertIn("history", payload)
             self.assertIn("stats", payload)
             self.assertEqual(payload["history"][0]["script"], "running")
-            self.assertEqual(payload["history"][0]["dimension_scores"]["integrity"], 90)
+            self.assertEqual(payload["history"][0]["rubric_family"], "running_rubric_v1")
+            self.assertEqual(payload["history"][0]["rubric_items"][2]["label"], "连带节奏")
             self.assertNotIn("score_debug", payload["history"][0])
             response.close()
 
@@ -82,7 +86,7 @@ class WebUiSmokeTest(unittest.TestCase):
             self.assertIn("items", payload)
             self.assertIsInstance(payload["items"], list)
             self.assertEqual(payload["items"][0]["script_label"], "行书")
-            self.assertEqual(payload["items"][0]["dimension_scores"]["structure"], 84)
+            self.assertEqual(payload["items"][0]["rubric_summary"]["best"]["label"], "连带节奏")
             self.assertNotIn("score_debug", payload["items"][0])
             response.close()
 
@@ -92,7 +96,7 @@ class WebUiSmokeTest(unittest.TestCase):
             response = self.client.get("/api/results/3")
             self.assertEqual(response.status_code, 200)
             payload = response.get_json()
-            self.assertEqual(payload["dimension_scores"]["stability"], 82)
+            self.assertEqual(payload["rubric_items"][4]["label"], "规范识别")
             self.assertIn("score_debug", payload)
             self.assertEqual(payload["score_debug"]["calibration"]["feature_quality"], 0.83)
             response.close()

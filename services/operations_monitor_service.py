@@ -234,7 +234,11 @@ class OperationsMonitorService:
             },
             "dimension_scorer": {
                 "ready": True,
-                "dimensions": ["structure", "stroke", "integrity", "stability"],
+                "rubric_mode": "source-backed-five-dimension",
+                "rubrics": {
+                    "regular": ["笔法点画", "结体字法", "布白章法", "墨法笔力", "规范完整"],
+                    "running": ["用笔线质", "结体取势", "连带节奏", "墨气笔力", "规范识别"],
+                },
             },
         }
 
@@ -337,7 +341,9 @@ class OperationsMonitorService:
                     "total_score": item.total_score,
                     "quality_level": item.quality_level,
                     "timestamp": item.timestamp.isoformat() if item.timestamp else None,
-                    "dimension_scores": item.get_dimension_scores(),
+                    "rubric_family": item.get_rubric_family(),
+                    "rubric_items": item.get_rubric_items(),
+                    "is_legacy_standard": item.is_legacy_standard(),
                 }
             )
         return recent_results, database_service.get_score_trend(limit=12)

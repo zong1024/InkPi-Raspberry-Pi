@@ -9,10 +9,10 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from models.evaluation_result import DIMENSION_LABELS, EvaluationResult
+from models.evaluation_result import EvaluationResult
 from services.led_service import led_service
 from services.speech_service import speech_service
-from views.ui_theme import app_font, display_font
+from views.ui_theme import app_font, clear_layout, display_font
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -23,15 +23,15 @@ SCRIPT_LABELS = {
 
 
 class MetricChip(QFrame):
-    """Compact metric chip for the four-dimension summary."""
+    """Compact metric chip for rubric-based summary."""
 
     def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setObjectName("metricChip")
-        self.setFixedHeight(28)
+        self.setFixedHeight(26)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(8, 3, 8, 3)
         layout.setSpacing(4)
 
         self.title_label = QLabel(title)
@@ -43,7 +43,7 @@ class MetricChip(QFrame):
 
         self.value_label = QLabel("--")
         self.value_label.setObjectName("bodyStrong")
-        self.value_label.setFont(display_font(10, QFont.Weight.Bold))
+        self.value_label.setFont(display_font(9, QFont.Weight.Bold))
         layout.addWidget(self.value_label)
 
     def set_score(self, score: int | None) -> None:
@@ -82,7 +82,7 @@ class ResultView(QWidget):
         brand.setFont(display_font(16, QFont.Weight.Bold))
         header_layout.addWidget(brand)
 
-        title = QLabel("LEARN FROM THIS SCORE")
+        title = QLabel("FORMAL RUBRIC RESULT")
         title.setObjectName("pageTitle")
         title.setFont(display_font(10, QFont.Weight.Bold))
         header_layout.addWidget(title)
@@ -109,7 +109,7 @@ class ResultView(QWidget):
 
         self.score_card = QFrame()
         self.score_card.setObjectName("scoreCard")
-        self.score_card.setFixedSize(132, 138)
+        self.score_card.setFixedSize(132, 146)
         score_layout = QVBoxLayout(self.score_card)
         score_layout.setContentsMargins(12, 10, 12, 10)
         score_layout.setSpacing(2)
@@ -129,7 +129,7 @@ class ResultView(QWidget):
         self.grade_label.setObjectName("scoreGrade")
         self.grade_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.grade_label.setFont(display_font(12, QFont.Weight.Bold))
-        self.grade_label.setFixedWidth(38)
+        self.grade_label.setFixedWidth(44)
         score_layout.addWidget(self.grade_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.feedback_short = QLabel("等待本轮评测")
@@ -143,7 +143,7 @@ class ResultView(QWidget):
 
         self.coach_card = QFrame()
         self.coach_card.setObjectName("feedbackCard")
-        self.coach_card.setFixedHeight(138)
+        self.coach_card.setFixedHeight(146)
         coach_layout = QVBoxLayout(self.coach_card)
         coach_layout.setContentsMargins(10, 8, 10, 8)
         coach_layout.setSpacing(4)
@@ -177,31 +177,27 @@ class ResultView(QWidget):
         self.coach_prompt.setFont(app_font(9, QFont.Weight.Bold))
         coach_layout.addWidget(self.coach_prompt)
 
-        self.focus_line = QLabel("优先提升：--")
+        self.focus_line = QLabel("优先提升：-")
         self.focus_line.setObjectName("hintText")
         self.focus_line.setFont(app_font(8, QFont.Weight.Bold))
         coach_layout.addWidget(self.focus_line)
 
-        self.keep_line = QLabel("继续保持：--")
+        self.keep_line = QLabel("继续保持：-")
         self.keep_line.setObjectName("hintText")
         self.keep_line.setFont(app_font(8, QFont.Weight.Bold))
         coach_layout.addWidget(self.keep_line)
 
-        metric_grid = QGridLayout()
-        metric_grid.setContentsMargins(0, 0, 0, 0)
-        metric_grid.setHorizontalSpacing(4)
-        metric_grid.setVerticalSpacing(4)
-        for index, key in enumerate(("structure", "stroke", "integrity", "stability")):
-            chip = MetricChip(DIMENSION_LABELS[key])
-            self.metric_chips[key] = chip
-            metric_grid.addWidget(chip, index // 2, index % 2)
-        coach_layout.addLayout(metric_grid)
+        self.metric_grid = QGridLayout()
+        self.metric_grid.setContentsMargins(0, 0, 0, 0)
+        self.metric_grid.setHorizontalSpacing(4)
+        self.metric_grid.setVerticalSpacing(4)
+        coach_layout.addLayout(self.metric_grid)
         top_row.addWidget(self.coach_card, stretch=1)
         root.addLayout(top_row)
 
         self.summary_card = QFrame()
         self.summary_card.setObjectName("resultSummaryCard")
-        self.summary_card.setFixedHeight(46)
+        self.summary_card.setFixedHeight(56)
         summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(10, 6, 10, 6)
         summary_layout.setSpacing(1)
@@ -211,7 +207,7 @@ class ResultView(QWidget):
         summary_title.setFont(app_font(7, QFont.Weight.Bold))
         summary_layout.addWidget(summary_title)
 
-        self.action_primary = QLabel("1. 先完成一次稳定拍摄。")
+        self.action_primary = QLabel("1. 先完成一轮稳定拍摄。")
         self.action_primary.setObjectName("actionLine")
         self.action_primary.setFont(app_font(8, QFont.Weight.Bold))
         summary_layout.addWidget(self.action_primary)
@@ -260,7 +256,7 @@ class ResultView(QWidget):
 
         footer.addStretch()
 
-        self.footer_right = QLabel("结果页已生成下一练建议")
+        self.footer_right = QLabel("结果页已生成正式评审建议")
         self.footer_right.setObjectName("miniLabel")
         self.footer_right.setFont(app_font(7, QFont.Weight.Bold))
         footer.addWidget(self.footer_right)
@@ -276,8 +272,8 @@ class ResultView(QWidget):
 
         result = self.result
         profile = result.get_practice_profile()
-        dimension_items = {item["key"]: item["score"] for item in result.get_dimension_items()}
-        summary = result.get_dimension_summary()
+        rubric_items = result.get_rubric_items_for_ui()
+        rubric_summary = result.get_rubric_summary()
         focus_dimension = profile.get("focus_dimension") if profile else None
         best_dimension = profile.get("best_dimension") if profile else None
         actions = (profile.get("next_actions") if profile else None) or []
@@ -287,8 +283,7 @@ class ResultView(QWidget):
         self.feedback_short.setText(self._short_tip(result, profile))
         self._apply_score_tone(result.get_color())
 
-        for key, chip in self.metric_chips.items():
-            chip.set_score(dimension_items.get(key))
+        self._render_metric_chips(rubric_items)
 
         script_label = self._script_label_for_result(result)
         char_text = result.character_name or "未识别"
@@ -302,31 +297,23 @@ class ResultView(QWidget):
             self.coach_prompt.setText(self._clip(profile.get("coach_prompt") or result.feedback, 28))
         else:
             self.stage_badge.setText("练习阶段")
-            self.coach_prompt.setText("本轮先看清强项和待提升项，再进入下一张。")
+            self.coach_prompt.setText("本轮先看懂强项和待提升项，再进入下一张。")
 
         if focus_dimension:
-            self.focus_line.setText(
-                f"优先提升：{focus_dimension['label']} {focus_dimension['score']} 分"
-            )
-        elif summary:
-            self.focus_line.setText(
-                f"优先提升：{summary['weakest']['label']} {summary['weakest']['score']} 分"
-            )
+            self.focus_line.setText(f"优先提升：{focus_dimension['label']} {focus_dimension['score']} 分")
+        elif rubric_summary:
+            self.focus_line.setText(f"优先提升：{rubric_summary['weakest']['label']} {rubric_summary['weakest']['score']} 分")
         else:
-            self.focus_line.setText("优先提升：等待更多维度数据")
+            self.focus_line.setText("优先提升：等待更多 rubric 数据")
 
         if best_dimension:
-            self.keep_line.setText(
-                f"继续保持：{best_dimension['label']} {best_dimension['score']} 分"
-            )
-        elif summary:
-            self.keep_line.setText(
-                f"继续保持：{summary['best']['label']} {summary['best']['score']} 分"
-            )
+            self.keep_line.setText(f"继续保持：{best_dimension['label']} {best_dimension['score']} 分")
+        elif rubric_summary:
+            self.keep_line.setText(f"继续保持：{rubric_summary['best']['label']} {rubric_summary['best']['score']} 分")
         else:
-            self.keep_line.setText("继续保持：本轮已有可用基础")
+            self.keep_line.setText("继续保持：本轮已形成可用基线")
 
-        self.action_primary.setText(f"1. {self._clip(actions[0], 18)}" if actions else "1. 先连续记录 3 次。")
+        self.action_primary.setText(f"1. {self._clip(actions[0], 18)}" if actions else "1. 先围绕最弱项再练一轮。")
         if len(actions) > 1:
             self.action_secondary.setText(f"2. {self._clip(actions[1], 22)}")
         elif result.feedback:
@@ -334,7 +321,29 @@ class ResultView(QWidget):
         else:
             self.action_secondary.setText("2. 看懂待提升项后，再进入下一张。")
 
+        if result.is_legacy_standard():
+            self.footer_right.setText("当前记录为旧版评测标准")
+        else:
+            self.footer_right.setText(f"{result.get_rubric_family()} · 正式维度已上屏")
+
         led_service.show_score(result.total_score)
+
+    def _render_metric_chips(self, rubric_items: list[dict[str, object]]) -> None:
+        clear_layout(self.metric_grid)
+        self.metric_chips = {}
+        if not rubric_items:
+            empty = QLabel("旧版记录不展示正式五维，请生成新版记录查看。")
+            empty.setObjectName("sectionSubtitle")
+            empty.setWordWrap(True)
+            empty.setFont(app_font(7))
+            self.metric_grid.addWidget(empty, 0, 0, 1, 2)
+            return
+
+        for index, item in enumerate(rubric_items):
+            chip = MetricChip(str(item["label"]))
+            chip.set_score(int(item["score"]))
+            self.metric_chips[str(item["key"])] = chip
+            self.metric_grid.addWidget(chip, index // 2, index % 2)
 
     def _apply_score_tone(self, color: str) -> None:
         self.total_score_label.setStyleSheet(f"color: {color};")
@@ -357,7 +366,7 @@ class ResultView(QWidget):
             return self._clip(result.feedback, 16)
         default_tip = {
             "good": "进入巩固细节阶段",
-            "medium": "继续收紧结构和笔画",
+            "medium": "继续收紧结构和笔法",
             "bad": "先把作品拍清楚、写完整",
         }
         return default_tip.get(result.quality_level, "评测已完成")
@@ -377,10 +386,6 @@ class ResultView(QWidget):
     def _script_label_for_result(self, result: EvaluationResult) -> str:
         if hasattr(result, "get_script_label"):
             return result.get_script_label()
-        for attr_name in ("qt_script_label", "script_label", "script_name"):
-            value = getattr(result, attr_name, None)
-            if isinstance(value, str) and value:
-                return value
         return SCRIPT_LABELS["regular"]
 
     def set_compact_mode(self, compact: bool) -> None:

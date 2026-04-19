@@ -19,13 +19,6 @@ const HEALTH_CLASSES = {
   bad: "bad",
 };
 
-const DIMENSION_LABELS = {
-  structure: "结构",
-  stroke: "笔画",
-  integrity: "完整",
-  stability: "稳定",
-};
-
 const SCRIPT_LABELS = {
   regular: "楷书",
   running: "行书",
@@ -349,9 +342,9 @@ function ResultFeed({ results }) {
             </span>
             <small>{item.timestamp || "--"}</small>
             <div className="dimension-strip">
-              {Object.entries(item.dimension_scores || {}).map(([key, value]) => (
-                <span key={key}>
-                  {DIMENSION_LABELS[key] || key} {value}
+              {(item.rubric_items || []).map((rubric) => (
+                <span key={rubric.key}>
+                  {rubric.label} {rubric.score}
                 </span>
               ))}
             </div>
@@ -517,8 +510,8 @@ function modelItems(snapshot) {
       health: snapshot.models.quality_scorer?.ready ? "good" : "warn",
     },
     {
-      title: "四维解释层",
-      message: "结构 / 笔画 / 完整 / 稳定",
+      title: "正式评审标准层",
+      message: "楷书 / 行书来源化五维 rubric",
       health: snapshot.models.dimension_scorer?.ready ? "good" : "warn",
     },
   ];

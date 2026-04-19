@@ -28,7 +28,21 @@ function formatPercent(value) {
   return `${Math.round(Number(value) * 10) / 10}%`;
 }
 
-function normalizeSummary(summary = {}) {
+function buildRubricCatalog(definitions = {}) {
+  const catalog = {};
+  Object.values(definitions || {}).forEach((definition) => {
+    (definition.items || []).forEach((item) => {
+      catalog[item.key] = {
+        key: item.key,
+        label: item.label || item.key,
+        weight: Number(item.weight || 0),
+      };
+    });
+  });
+  return catalog;
+}
+
+function normalizeSummary(summary = {}, rubricCatalog = {}) {
   const total = summary.total || 0;
   const distribution = summary.score_distribution || {};
   const progressDelta =
@@ -47,19 +61,20 @@ function normalizeSummary(summary = {}) {
     width: total ? Math.max(8, Math.round((item.count / total) * 100)) : 8,
   }));
 
-  const dimensions = [
-    { key: 'structure', label: '结构' },
-    { key: 'stroke', label: '笔画' },
-    { key: 'integrity', label: '完整' },
-    { key: 'stability', label: '稳定' },
-  ].map((item) => ({
-    ...item,
-    score: formatNumber(summary.dimension_averages && summary.dimension_averages[item.key]),
-    width: Math.max(
-      8,
-      Math.round(Number((summary.dimension_averages && summary.dimension_averages[item.key]) || 0))
-    ),
-  }));
+  const rubricAverages = summary.rubric_averages || {};
+  const rubricOrder = Object.keys(rubricCatalog);
+  const dimensionKeys = Array.from(
+    new Set([...rubricOrder.filter((key) => key in rubricAverages), ...Object.keys(rubricAverages)])
+  );
+  const dimensions = dimensionKeys.map((key) => {
+    const score = Number(rubricAverages[key] || 0);
+    return {
+      key,
+      label: (rubricCatalog[key] && rubricCatalog[key].label) || key,
+      score: formatNumber(rubricAverages[key]),
+      width: Math.max(8, Math.round(score)),
+    };
+  });
 
   const trendPoints = (summary.trend_points || []).map((item) => ({
     ...item,
@@ -109,22 +124,30 @@ function normalizeMethodology(payload = {}) {
   const framework = payload.framework_overview || {};
   const snapshot = payload.validation_snapshot || {};
   const plan = payload.validation_plan || {};
-  const references = (payload.authority_references || []).map((item) => ({
-    ...item,
+  const currentScope = payload.current_script_scope || {};
+  const supportedScripts = (payload.supported_script_labels || []).map((item) => item.label || item.key);
+  const unsupportedScripts = framework.unsupported_scripts || [];
+
+  const references = (payload.rubric_source_catalog || []).map((item) => ({
+    title: item.title,
     tag: item.organization || '项目依据',
+    role: item.usage || '用于界定评测边界与维度来源。',
   }));
 
   return {
     framework: {
-      projectPosition: '面向楷书 + 行书单字练习的辅助评测系统',
-      currentScope: '当前版本正式支持楷书、行书单字；其他书体暂不支持。',
+      projectPosition:
+        framework.project_position || '面向楷书 + 行书单字练习的辅助评测系统',
+      currentScope:
+        framework.current_scope || '当前版本正式支持楷书、行书单字；其他书体暂不支持。',
       boundaryNote:
-        '四维分用于解释，不替代教师终评；楷书和行书之外的书体当前不在正式支持范围内。',
+        framework.boundary_note || '新标准先替换维度层与方法论层，当前 total_score 暂不切换。',
       supportScopeText: FORMAL_SUPPORT_TEXT,
-      unsupportedNote: UNSUPPORTED_SCOPE_TEXT,
+      unsupportedNote: unsupportedScripts.length ? `暂不支持：${unsupportedScripts.join('、')}` : UNSUPPORTED_SCOPE_TEXT,
       targetUsers: framework.target_users || [],
-      currentScripts: ['楷书', '行书'],
+      currentScripts: supportedScripts.length ? supportedScripts : ['楷书', '行书'],
       roadmapScripts: [],
+      currentRubricLabel: currentScope.rubric_label || '来源化五维正式标准',
     },
     validation: {
       statusLabel: snapshot.status_label || '仍处于样本积累阶段',
@@ -142,11 +165,10 @@ function normalizeMethodology(payload = {}) {
       expertReviewTarget: snapshot.expert_review_target || plan.expert_review_target || 0,
       trialUserTarget: snapshot.trial_user_target || plan.trial_user_target || 0,
       nextMilestone: snapshot.next_milestone || plan.next_milestone || '',
-      currentStage: 'Stage 1 / 楷书 + 行书正式支持',
+      currentStage: plan.current_stage || 'Stage 2 / 来源化五维标准已接入',
       reviewPolicy: plan.manual_review_policy || [],
     },
     references,
-    dimensionBasis: payload.dimension_basis || [],
   };
 }
 
@@ -233,7 +255,8 @@ Page({
         api.getHistory({ ...params, sort: 'latest', limit: RECENT_PRACTICE_LIMIT }),
       ]);
 
-      const summary = normalizeSummary(summaryPayload.summary || {});
+      const rubricCatalog = buildRubricCatalog(methodologyPayload.rubric_definitions || {});
+      const summary = normalizeSummary(summaryPayload.summary || {}, rubricCatalog);
       const methodology = normalizeMethodology(methodologyPayload);
       const scriptValue = params.script || 'all';
       const growthItems = filterResultsByScript((historyPayload && historyPayload.items) || [], scriptValue);

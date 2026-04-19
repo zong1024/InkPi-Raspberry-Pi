@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from functools import wraps
-import io
 from pathlib import Path
 from typing import Any, Callable
 
@@ -12,15 +11,10 @@ from flask import Flask, jsonify, request
 
 try:
     from cloud_api.storage import CloudDatabase
-except ModuleNotFoundError:  # pragma: no cover - direct script execution fallback
+except ModuleNotFoundError:  # pragma: no cover
     from storage import CloudDatabase
 
-from models.evaluation_framework import (
-    build_methodology_payload,
-    build_practice_profile,
-    build_scope_boundary,
-    get_dimension_basis,
-)
+from models.evaluation_framework import build_methodology_payload, build_practice_profile, build_scope_boundary
 
 
 def create_app(test_config: dict[str, Any] | None = None) -> Flask:
@@ -149,24 +143,14 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
     @auth_required
     def results_summary():
         filters = summary_filters_from_request()
-        return jsonify(
-            {
-                "ok": True,
-                "summary": db.get_summary(**filters),
-            }
-        )
+        return jsonify({"ok": True, "summary": db.get_summary(**filters)})
 
     @app.get("/api/system/methodology")
     @auth_required
     def methodology():
         selected_script = str(request.args.get("script", "regular")).strip() or "regular"
         summary = db.get_summary()
-        return jsonify(
-            {
-                "ok": True,
-                **build_methodology_payload(summary, script=selected_script),
-            }
-        )
+        return jsonify({"ok": True, **build_methodology_payload(summary, script=selected_script)})
 
     @app.get("/api/validation/overview")
     @auth_required
@@ -185,7 +169,7 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
                     "agreement_rate": summary.get("agreement_rate"),
                     "average_manual_score": summary.get("average_manual_score"),
                     "average_score_gap": summary.get("average_score_gap"),
-                    "dimension_gap_averages": summary.get("dimension_gap_averages"),
+                    "rubric_gap_averages": summary.get("rubric_gap_averages"),
                 },
                 "validation_snapshot": methodology_payload["validation_snapshot"],
                 "validation_plan": methodology_payload["validation_plan"],
@@ -198,13 +182,13 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         result = db.get_result(result_id)
         if not result:
             return json_error("result_not_found", 404)
-        result["dimension_basis"] = get_dimension_basis(result.get("dimension_scores"), script=result.get("script"))
         result["practice_profile"] = build_practice_profile(
-            result.get("dimension_scores"),
+            result.get("rubric_items"),
             total_score=int(result.get("total_score") or 0),
             quality_level=str(result.get("quality_level") or "medium"),
             character_name=result.get("character_name"),
             script=result.get("script"),
+            rubric_version=result.get("rubric_version"),
         )
         result["scope_boundary"] = build_scope_boundary(result.get("script"))
         result["expert_review_summary"] = db.get_result_review_summary(result_id)
@@ -302,8 +286,6 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
             try:
                 from services.local_ocr_service import LocalOcrService
 
-                # Keep the cloud OCR endpoint local-only so it cannot recurse
-                # into the same /api/device/ocr endpoint via remote fallback.
                 ocr_service = LocalOcrService(allow_remote_fallback=False)
                 app.extensions["ocr_service"] = ocr_service
             except Exception as exc:  # noqa: BLE001

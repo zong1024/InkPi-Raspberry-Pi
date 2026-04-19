@@ -70,26 +70,27 @@ function formatConfidence(value) {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
-function buildDimensionSummary(dimensionScores = null) {
-  if (!dimensionScores) return '暂无四维解释';
-
-  const entries = Object.entries(dimensionScores)
-    .filter(([, score]) => score !== null && score !== undefined)
-    .map(([key, score]) => ({ key, score: Number(score) }));
-
-  if (!entries.length) {
-    return '暂无四维解释';
+function buildRubricSummary(result = {}) {
+  if (result.is_legacy_standard) {
+    return '旧版评测标准记录';
   }
 
-  const labels = {
-    structure: '结构',
-    stroke: '笔画',
-    integrity: '完整',
-    stability: '稳定',
-  };
-  const strongest = [...entries].sort((left, right) => right.score - left.score)[0];
-  const weakest = [...entries].sort((left, right) => left.score - right.score)[0];
-  return `强项 ${labels[strongest.key]} ${strongest.score} / 待提升 ${labels[weakest.key]} ${weakest.score}`;
+  const items = (result.rubric_items || [])
+    .filter((item) => item && item.key && item.score !== null && item.score !== undefined)
+    .map((item) => ({
+      key: item.key,
+      label: item.label || item.key,
+      score: Number(item.score),
+    }));
+
+  if (!items.length) {
+    return '暂无正式 rubric';
+  }
+
+  const summary = result.rubric_summary || {};
+  const best = summary.best || [...items].sort((left, right) => right.score - left.score)[0];
+  const weakest = summary.weakest || [...items].sort((left, right) => left.score - right.score)[0];
+  return `强项 ${best.label} ${best.score} / 待提升 ${weakest.label} ${weakest.score}`;
 }
 
 function normalizeSummary(summary = {}) {
@@ -149,7 +150,7 @@ function normalizeResult(item) {
     feedbackPreview: buildFeedbackPreview(item.feedback),
     ocrText: formatConfidence(item.ocr_confidence),
     qualityText: formatConfidence(item.quality_confidence),
-    dimensionSummary: buildDimensionSummary(item.dimension_scores),
+    dimensionSummary: buildRubricSummary(item),
   };
 }
 

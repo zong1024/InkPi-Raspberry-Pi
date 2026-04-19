@@ -13,10 +13,14 @@ from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models.evaluation_framework import get_script_label, normalize_script
+from models.evaluation_framework import (
+    LEGACY_RUBRIC_VERSION,
+    RUBRIC_SOURCE_CATALOG,
+    get_script_label,
+    normalize_script,
+)
 
 
-DIMENSION_KEYS = ("structure", "stroke", "integrity", "stability")
 PASSWORD_HASH_METHOD = "pbkdf2:sha256:600000"
 
 
@@ -25,8 +29,6 @@ def utcnow_iso() -> str:
 
 
 def build_password_hash(password: str) -> str:
-    """Use a lower-memory password hash that survives constrained hosts."""
-
     return generate_password_hash(password, method=PASSWORD_HASH_METHOD)
 
 
@@ -93,6 +95,12 @@ class CloudDatabase:
                     image_path TEXT,
                     processed_image_path TEXT,
                     dimension_scores_json TEXT,
+                    rubric_version TEXT,
+                    rubric_family TEXT,
+                    rubric_items_json TEXT,
+                    rubric_summary_json TEXT,
+                    rubric_source_refs_json TEXT,
+                    rubric_preview_total REAL,
                     score_debug_json TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -110,16 +118,14 @@ class CloudDatabase:
                     rubric_version TEXT,
                     review_score REAL,
                     review_level TEXT,
-                    structure_score REAL,
-                    stroke_score REAL,
-                    integrity_score REAL,
-                    stability_score REAL,
+                    rubric_items_json TEXT,
                     notes TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(result_id) REFERENCES results(id) ON DELETE CASCADE
                 )
                 """
             )
+
             cursor.execute("PRAGMA table_info(results)")
             existing_columns = {row[1] for row in cursor.fetchall()}
             for column_name, column_type in (
@@ -130,15 +136,42 @@ class CloudDatabase:
                 ("image_path", "TEXT"),
                 ("processed_image_path", "TEXT"),
                 ("dimension_scores_json", "TEXT"),
+                ("rubric_version", "TEXT"),
+                ("rubric_family", "TEXT"),
+                ("rubric_items_json", "TEXT"),
+                ("rubric_summary_json", "TEXT"),
+                ("rubric_source_refs_json", "TEXT"),
+                ("rubric_preview_total", "REAL"),
                 ("score_debug_json", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE results ADD COLUMN {column_name} {column_type}")
-            cursor.execute(
+
+            cursor.execute("PRAGMA table_info(expert_reviews)")
+            review_columns = {row[1] for row in cursor.fetchall()}
+            for column_name, column_type in (("rubric_items_json", "TEXT"),):
+                if column_name not in review_columns:
+                    cursor.execute(f"ALTER TABLE expert_reviews ADD COLUMN {column_name} {column_type}")
+
+            conn.execute(
                 """
                 UPDATE results
                 SET script = 'regular'
                 WHERE script IS NULL OR TRIM(script) = ''
+                """
+            )
+            conn.execute(
+                f"""
+                UPDATE results
+                SET rubric_version = '{LEGACY_RUBRIC_VERSION}'
+                WHERE (rubric_version IS NULL OR TRIM(rubric_version) = '')
+                  AND dimension_scores_json IS NOT NULL
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_results_filters
+                ON results(script, quality_level, timestamp DESC)
                 """
             )
             cursor.execute(
@@ -217,7 +250,6 @@ class CloudDatabase:
                 """,
                 (token,),
             ).fetchone()
-
         if not row:
             return None
         return {"id": row["id"], "username": row["username"], "display_name": row["display_name"]}
@@ -231,6 +263,18 @@ class CloudDatabase:
             payload.get("dimension_scores_json"),
             payload.get("dimension_scores"),
         )
+        rubric_items_json = self._coerce_json_text(
+            payload.get("rubric_items_json"),
+            payload.get("rubric_items"),
+        )
+        rubric_summary_json = self._coerce_json_text(
+            payload.get("rubric_summary_json"),
+            payload.get("rubric_summary"),
+        )
+        rubric_source_refs_json = self._coerce_json_text(
+            payload.get("rubric_source_refs_json"),
+            payload.get("rubric_source_refs"),
+        )
         score_debug_json = self._coerce_json_text(
             payload.get("score_debug_json"),
             payload.get("score_debug"),
@@ -241,6 +285,27 @@ class CloudDatabase:
                 "SELECT id FROM results WHERE device_name = ? AND local_record_id = ?",
                 (device_name, local_record_id),
             ).fetchone()
+
+            values = (
+                int(payload["total_score"]),
+                payload.get("feedback", ""),
+                timestamp,
+                script,
+                payload.get("character_name"),
+                payload.get("ocr_confidence"),
+                payload.get("quality_level"),
+                payload.get("quality_confidence"),
+                payload.get("image_path"),
+                payload.get("processed_image_path"),
+                dimension_scores_json,
+                str(payload.get("rubric_version", "")).strip() or (LEGACY_RUBRIC_VERSION if dimension_scores_json else None),
+                str(payload.get("rubric_family", "")).strip() or ("legacy_v0" if dimension_scores_json else None),
+                rubric_items_json,
+                rubric_summary_json,
+                rubric_source_refs_json,
+                payload.get("rubric_preview_total"),
+                score_debug_json,
+            )
 
             if existing:
                 conn.execute(
@@ -257,26 +322,17 @@ class CloudDatabase:
                         image_path = ?,
                         processed_image_path = ?,
                         dimension_scores_json = ?,
+                        rubric_version = ?,
+                        rubric_family = ?,
+                        rubric_items_json = ?,
+                        rubric_summary_json = ?,
+                        rubric_source_refs_json = ?,
+                        rubric_preview_total = ?,
                         score_debug_json = ?,
                         updated_at = ?
                     WHERE id = ?
                     """,
-                    (
-                        int(payload["total_score"]),
-                        payload.get("feedback", ""),
-                        timestamp,
-                        script,
-                        payload.get("character_name"),
-                        payload.get("ocr_confidence"),
-                        payload.get("quality_level"),
-                        payload.get("quality_confidence"),
-                        payload.get("image_path"),
-                        payload.get("processed_image_path"),
-                        dimension_scores_json,
-                        score_debug_json,
-                        changed_at,
-                        existing["id"],
-                    ),
+                    (*values, changed_at, int(existing["id"])),
                 )
                 result_id = int(existing["id"])
             else:
@@ -296,27 +352,22 @@ class CloudDatabase:
                         image_path,
                         processed_image_path,
                         dimension_scores_json,
+                        rubric_version,
+                        rubric_family,
+                        rubric_items_json,
+                        rubric_summary_json,
+                        rubric_source_refs_json,
+                        rubric_preview_total,
                         score_debug_json,
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
                         local_record_id,
-                        int(payload["total_score"]),
-                        payload.get("feedback", ""),
-                        timestamp,
-                        script,
-                        payload.get("character_name"),
-                        payload.get("ocr_confidence"),
-                        payload.get("quality_level"),
-                        payload.get("quality_confidence"),
-                        payload.get("image_path"),
-                        payload.get("processed_image_path"),
-                        dimension_scores_json,
-                        score_debug_json,
+                        *values,
                         changed_at,
                         changed_at,
                     ),
@@ -348,12 +399,8 @@ class CloudDatabase:
             date_range=date_range,
         )
         order_sql = self._build_sort_clause(sort)
-
         with self._managed_connection() as conn:
-            total = conn.execute(
-                f"SELECT COUNT(*) FROM results {where_sql}",
-                params,
-            ).fetchone()[0]
+            total = conn.execute(f"SELECT COUNT(*) FROM results {where_sql}", params).fetchone()[0]
             rows = conn.execute(
                 """
                 SELECT *
@@ -364,12 +411,11 @@ class CloudDatabase:
                 """.format(where_sql=where_sql, order_sql=order_sql),
                 (*params, limit, offset),
             ).fetchall()
-
         return {
             "total": int(total),
             "offset": offset,
             "limit": limit,
-            "items": [self._result_row_to_dict(row) for row in rows],
+            "items": [self._result_row_to_dict(row, include_debug=False) for row in rows],
         }
 
     def get_summary(
@@ -395,15 +441,7 @@ class CloudDatabase:
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
-                SELECT
-                    id,
-                    timestamp,
-                    total_score,
-                    quality_level,
-                    script,
-                    character_name,
-                    device_name,
-                    dimension_scores_json
+                SELECT *
                 FROM results
                 {where_sql}
                 ORDER BY timestamp DESC, id DESC
@@ -470,7 +508,7 @@ class CloudDatabase:
                 "score_distribution": {"90_plus": 0, "80_89": 0, "70_79": 0, "below_70": 0},
                 "qualified_rate": None,
                 "excellent_rate": None,
-                "dimension_averages": {},
+                "rubric_averages": {},
                 "top_characters": [],
                 "top_devices": [],
                 "script_counts": {},
@@ -484,7 +522,7 @@ class CloudDatabase:
                 "agreement_rate": None,
                 "average_manual_score": None,
                 "average_score_gap": None,
-                "dimension_gap_averages": {},
+                "rubric_gap_averages": {},
                 "insight": self._build_summary_insight(
                     total=0,
                     average_score=None,
@@ -504,8 +542,8 @@ class CloudDatabase:
         character_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
         device_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
         script_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "score_total": 0.0})
-        dimension_totals: dict[str, float] = defaultdict(float)
-        dimension_counts: dict[str, int] = defaultdict(int)
+        rubric_totals: dict[str, float] = defaultdict(float)
+        rubric_counts: dict[str, int] = defaultdict(int)
         trend_buckets = {
             point["date"]: {"count": 0, "score_total": 0.0}
             for point in empty_trend_points
@@ -514,7 +552,6 @@ class CloudDatabase:
         for row in rows:
             score = int(row["total_score"] or 0)
             scores.append(score)
-
             quality = row["quality_level"] or "medium"
             if quality in quality_counts:
                 quality_counts[quality] += 1
@@ -528,38 +565,40 @@ class CloudDatabase:
             else:
                 score_distribution["below_70"] += 1
 
-            character_name = row["character_name"] or "未识别"
-            character_stats[character_name]["count"] += 1
-            character_stats[character_name]["score_total"] += score
-
-            current_device_name = row["device_name"] or "InkPi-Raspberry-Pi"
-            device_stats[current_device_name]["count"] += 1
-            device_stats[current_device_name]["score_total"] += score
-
-            current_script = normalize_script(row["script"])
-            script_stats[current_script]["count"] += 1
-            script_stats[current_script]["score_total"] += score
-
             timestamp = self._parse_timestamp(row["timestamp"])
-            if timestamp is not None:
-                if timestamp >= recent_cutoff:
-                    recent_scores.append(score)
-                elif timestamp >= previous_cutoff:
-                    previous_scores.append(score)
+            if timestamp and timestamp >= recent_cutoff:
+                recent_scores.append(score)
+            elif timestamp and previous_cutoff <= timestamp < recent_cutoff:
+                previous_scores.append(score)
 
-                trend_key = timestamp.date().isoformat()
-                if trend_key in trend_buckets:
-                    trend_buckets[trend_key]["count"] += 1
-                    trend_buckets[trend_key]["score_total"] += score
+            character = row["character_name"] or "未识别"
+            device = row["device_name"] or "InkPi-Raspberry-Pi"
+            normalized_script = normalize_script(row["script"])
 
-            for key, value in (self._load_json_blob(row["dimension_scores_json"]) or {}).items():
-                if key not in DIMENSION_KEYS or value is None:
+            character_stats[character]["count"] += 1
+            character_stats[character]["score_total"] += score
+            device_stats[device]["count"] += 1
+            device_stats[device]["score_total"] += score
+            script_stats[normalized_script]["count"] += 1
+            script_stats[normalized_script]["score_total"] += score
+
+            rubric_items = self._load_json_list(row["rubric_items_json"]) or []
+            for item in rubric_items:
+                key = str(item.get("key") or "").strip()
+                score_value = item.get("score")
+                if not key or score_value is None:
                     continue
-                dimension_totals[key] += float(value)
-                dimension_counts[key] += 1
+                rubric_totals[key] += float(score_value)
+                rubric_counts[key] += 1
+
+            if timestamp:
+                date_key = timestamp.date().isoformat()
+                if date_key in trend_buckets:
+                    trend_buckets[date_key]["count"] += 1
+                    trend_buckets[date_key]["score_total"] += score
 
         total = len(rows)
-        average_score = round(sum(scores) / total, 1)
+        average_score = round(sum(scores) / total, 1) if total else None
         recent_average = round(sum(recent_scores) / len(recent_scores), 1) if recent_scores else None
         previous_average = round(sum(previous_scores) / len(previous_scores), 1) if previous_scores else None
         progress_delta = (
@@ -574,66 +613,43 @@ class CloudDatabase:
             elif progress_delta <= -2:
                 progress_trend = "down"
 
-        top_characters = [
-            {
-                "character_name": character_name,
-                "count": int(stats["count"]),
-                "average_score": round(stats["score_total"] / stats["count"], 1),
-            }
-            for character_name, stats in sorted(
-                character_stats.items(),
-                key=lambda item: (-int(item[1]["count"]), -(item[1]["score_total"] / item[1]["count"]), item[0]),
-            )[:8]
-        ]
-        top_devices = [
-            {
-                "device_name": current_device_name,
-                "count": int(stats["count"]),
-                "average_score": round(stats["score_total"] / stats["count"], 1),
-            }
-            for current_device_name, stats in sorted(
-                device_stats.items(),
-                key=lambda item: (-int(item[1]["count"]), -(item[1]["score_total"] / item[1]["count"]), item[0]),
-            )[:3]
-        ]
+        top_characters = self._build_leaderboard(character_stats)
+        top_devices = self._build_leaderboard(device_stats, label_key="device_name")
         script_counts = {
-            script: {
-                "script": script,
-                "script_label": get_script_label(script),
-                "count": int(stats["count"]),
-                "average_score": round(stats["score_total"] / stats["count"], 1),
+            key: {
+                "count": int(value["count"]),
+                "average_score": round(value["score_total"] / max(value["count"], 1), 1),
+                "label": get_script_label(key),
             }
-            for script, stats in script_stats.items()
-            if stats["count"]
+            for key, value in script_stats.items()
         }
-        dimension_averages = {
-            key: round(dimension_totals[key] / dimension_counts[key], 1)
-            for key in DIMENSION_KEYS
-            if dimension_counts[key]
+        rubric_averages = {
+            key: round(rubric_totals[key] / rubric_counts[key], 1)
+            for key in rubric_totals
+            if rubric_counts[key]
         }
+        review_summary = self._build_review_summary(rows, review_groups)
         trend_points = []
         for point in empty_trend_points:
             bucket = trend_buckets[point["date"]]
-            count = int(bucket["count"])
+            average_value = round(bucket["score_total"] / bucket["count"], 1) if bucket["count"] else None
             trend_points.append(
                 {
                     "date": point["date"],
                     "label": point["label"],
-                    "count": count,
-                    "average_score": round(bucket["score_total"] / count, 1) if count else None,
+                    "count": bucket["count"],
+                    "average_score": average_value,
                 }
             )
 
         top_character = top_characters[0]["character_name"] if top_characters else None
         top_device = top_devices[0]["device_name"] if top_devices else None
-        review_summary = self._build_review_summary(rows, review_groups)
-
         return {
             "total": total,
             "average_score": average_score,
-            "best_score": max(scores),
-            "worst_score": min(scores),
-            "latest_score": int(latest_row["total_score"]),
+            "best_score": max(scores) if scores else None,
+            "worst_score": min(scores) if scores else None,
+            "latest_score": latest_row["total_score"],
             "latest_character": latest_row["character_name"],
             "latest_timestamp": latest_row["timestamp"],
             "device_count": len({(row["device_name"] or "InkPi-Raspberry-Pi") for row in rows}),
@@ -648,7 +664,7 @@ class CloudDatabase:
             "score_distribution": score_distribution,
             "qualified_rate": round(((quality_counts["good"] + quality_counts["medium"]) / total) * 100, 1),
             "excellent_rate": round((quality_counts["good"] / total) * 100, 1),
-            "dimension_averages": dimension_averages,
+            "rubric_averages": rubric_averages,
             "top_characters": top_characters,
             "top_devices": top_devices,
             "script_counts": script_counts,
@@ -662,7 +678,7 @@ class CloudDatabase:
             "agreement_rate": review_summary["agreement_rate"],
             "average_manual_score": review_summary["average_manual_score"],
             "average_score_gap": review_summary["average_score_gap"],
-            "dimension_gap_averages": review_summary["dimension_gap_averages"],
+            "rubric_gap_averages": review_summary["rubric_gap_averages"],
             "insight": self._build_summary_insight(
                 total=total,
                 average_score=average_score,
@@ -688,12 +704,23 @@ class CloudDatabase:
             if result_row is None:
                 raise ValueError("result_not_found")
 
-            dimension_scores = payload.get("dimension_scores") or {}
             review_score = self._coerce_optional_float(payload.get("review_score"))
             review_level = str(payload.get("review_level", "")).strip() or self._level_from_score(review_score)
             reviewer_name = str(payload.get("reviewer_name", "")).strip()
             if not reviewer_name:
                 raise ValueError("reviewer_name_required")
+
+            rubric_items_payload = payload.get("rubric_items")
+            if rubric_items_payload is None and payload.get("dimension_scores"):
+                rubric_items_payload = [
+                    {
+                        "key": key,
+                        "label": key,
+                        "score": value,
+                    }
+                    for key, value in dict(payload.get("dimension_scores") or {}).items()
+                    if value is not None
+                ]
 
             created_at = utcnow_iso()
             cursor = conn.execute(
@@ -705,26 +732,20 @@ class CloudDatabase:
                     rubric_version,
                     review_score,
                     review_level,
-                    structure_score,
-                    stroke_score,
-                    integrity_score,
-                    stability_score,
+                    rubric_items_json,
                     notes,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result_id,
                     reviewer_name,
                     str(payload.get("reviewer_role", "")).strip() or None,
-                    str(payload.get("rubric_version", "")).strip() or "inkpi-rubric-v1",
+                    str(payload.get("rubric_version", "")).strip() or "manual_rubric_v1",
                     review_score,
                     review_level,
-                    self._coerce_optional_float(dimension_scores.get("structure")),
-                    self._coerce_optional_float(dimension_scores.get("stroke")),
-                    self._coerce_optional_float(dimension_scores.get("integrity")),
-                    self._coerce_optional_float(dimension_scores.get("stability")),
+                    self._coerce_json_text(None, rubric_items_payload),
                     str(payload.get("notes", "")).strip() or None,
                     created_at,
                 ),
@@ -805,13 +826,9 @@ class CloudDatabase:
         valid_ids = [int(result_id) for result_id in result_ids if str(result_id).strip()]
         if not valid_ids:
             return 0
-
         placeholders = ",".join("?" for _ in valid_ids)
         with self._managed_connection() as conn:
-            cursor = conn.execute(
-                f"DELETE FROM results WHERE id IN ({placeholders})",
-                valid_ids,
-            )
+            cursor = conn.execute(f"DELETE FROM results WHERE id IN ({placeholders})", valid_ids)
             conn.commit()
         return int(cursor.rowcount or 0)
 
@@ -829,7 +846,7 @@ class CloudDatabase:
                 "agreement_rate": None,
                 "average_manual_score": None,
                 "average_score_gap": None,
-                "dimension_gap_averages": {},
+                "rubric_gap_averages": {},
             }
 
         reviewed_result_count = 0
@@ -837,8 +854,8 @@ class CloudDatabase:
         agreement_count = 0
         manual_score_values: list[float] = []
         score_gap_values: list[float] = []
-        dimension_gap_totals: dict[str, float] = defaultdict(float)
-        dimension_gap_counts: dict[str, int] = defaultdict(int)
+        rubric_gap_totals: dict[str, float] = defaultdict(float)
+        rubric_gap_counts: dict[str, int] = defaultdict(int)
 
         for row in result_rows:
             row_reviews = review_groups.get(int(row["id"]), [])
@@ -864,16 +881,20 @@ class CloudDatabase:
                 if majority_level == (row["quality_level"] or "medium"):
                     agreement_count += 1
 
-            ai_dimensions = self._load_json_blob(row["dimension_scores_json"]) or {}
+            ai_items = {
+                item["key"]: float(item["score"])
+                for item in (self._load_json_list(row["rubric_items_json"]) or [])
+                if item.get("key") and item.get("score") is not None
+            }
             for item in row_reviews:
-                review_dimensions = item.get("dimension_scores") or {}
-                for key in DIMENSION_KEYS:
-                    review_value = review_dimensions.get(key)
-                    ai_value = ai_dimensions.get(key)
-                    if review_value is None or ai_value is None:
+                for review_item in item.get("rubric_items") or []:
+                    key = str(review_item.get("key") or "").strip()
+                    review_value = review_item.get("score")
+                    ai_value = ai_items.get(key)
+                    if not key or review_value is None or ai_value is None:
                         continue
-                    dimension_gap_totals[key] += abs(float(review_value) - float(ai_value))
-                    dimension_gap_counts[key] += 1
+                    rubric_gap_totals[key] += abs(float(review_value) - float(ai_value))
+                    rubric_gap_counts[key] += 1
 
         total_results = len(result_rows)
         return {
@@ -886,10 +907,10 @@ class CloudDatabase:
             if manual_score_values
             else None,
             "average_score_gap": round(sum(score_gap_values) / len(score_gap_values), 1) if score_gap_values else None,
-            "dimension_gap_averages": {
-                key: round(dimension_gap_totals[key] / dimension_gap_counts[key], 1)
-                for key in DIMENSION_KEYS
-                if dimension_gap_counts[key]
+            "rubric_gap_averages": {
+                key: round(rubric_gap_totals[key] / rubric_gap_counts[key], 1)
+                for key in rubric_gap_totals
+                if rubric_gap_counts[key]
             },
         }
 
@@ -961,11 +982,11 @@ class CloudDatabase:
         top_device: str | None,
     ) -> str:
         if total == 0:
-            return "还没有云端历史记录，完成一次评测后这里会自动生成总结。"
+            return "还没有云端评测记录，完成一次评测后这里会自动生成量化总结。"
 
         insight_parts = []
         if average_score is not None:
-            insight_parts.append(f"当前平均分 {average_score:.1f}")
+            insight_parts.append(f"当前平均主分 {average_score:.1f}")
         if recent_average is not None:
             insight_parts.append(f"近 7 天均分 {recent_average:.1f}")
         if progress_delta is not None:
@@ -982,11 +1003,11 @@ class CloudDatabase:
         if dominant_level == "good":
             insight_parts.append("整体状态偏稳定")
         elif dominant_level == "medium":
-            insight_parts.append("目前成绩集中在中段")
+            insight_parts.append("当前成绩集中在中段")
         elif dominant_level == "bad":
-            insight_parts.append("近期低分样本偏多，建议重点回看")
+            insight_parts.append("近期低分样本偏多，建议先回看基础项")
 
-        return "，".join(insight_parts) + "。"
+        return "；".join(insight_parts) + "。"
 
     def _build_empty_trend_points(self, now: datetime, days: int) -> list[dict[str, str]]:
         start_date = now.date() - timedelta(days=days - 1)
@@ -1027,12 +1048,21 @@ class CloudDatabase:
             "quality_confidence": row["quality_confidence"],
             "image_path": row["image_path"],
             "processed_image_path": row["processed_image_path"],
-            "dimension_scores": self._load_json_blob(row["dimension_scores_json"]),
+            "rubric_version": row["rubric_version"] or LEGACY_RUBRIC_VERSION,
+            "rubric_family": row["rubric_family"] or "legacy_v0",
+            "rubric_items": self._load_json_list(row["rubric_items_json"]),
+            "rubric_summary": self._load_json_dict(row["rubric_summary_json"]),
+            "rubric_source_refs": self._load_json_list(row["rubric_source_refs_json"]),
+            "rubric_preview_total": row["rubric_preview_total"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "is_legacy_standard": not bool(row["rubric_items_json"]),
         }
+        legacy_dimension_scores = self._load_json_dict(row["dimension_scores_json"])
+        if legacy_dimension_scores is not None:
+            payload["dimension_scores"] = legacy_dimension_scores
         if include_debug:
-            payload["score_debug"] = self._load_json_blob(row["score_debug_json"])
+            payload["score_debug"] = self._load_json_dict(row["score_debug_json"])
         return payload
 
     def _review_row_to_dict(self, row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -1046,15 +1076,19 @@ class CloudDatabase:
             "rubric_version": row["rubric_version"],
             "review_score": row["review_score"],
             "review_level": row["review_level"],
-            "dimension_scores": {
-                "structure": row["structure_score"],
-                "stroke": row["stroke_score"],
-                "integrity": row["integrity_score"],
-                "stability": row["stability_score"],
-            },
+            "rubric_items": self._load_json_list(row["rubric_items_json"]) or [],
             "notes": row["notes"],
             "created_at": row["created_at"],
         }
+
+    def _build_leaderboard(self, stats: dict[str, dict[str, float]], label_key: str = "character_name") -> list[dict[str, Any]]:
+        items = []
+        for key, value in stats.items():
+            count = int(value["count"])
+            average_score = round(value["score_total"] / max(count, 1), 1)
+            items.append({label_key: key, "count": count, "average_score": average_score})
+        items.sort(key=lambda item: (-item["count"], -item["average_score"], item[label_key]))
+        return items[:5]
 
     @staticmethod
     def _coerce_optional_float(value: Any) -> float | None:
@@ -1082,7 +1116,7 @@ class CloudDatabase:
             return None
         return json.dumps(raw_value, ensure_ascii=False)
 
-    def _load_json_blob(self, raw_text: str | None) -> dict[str, Any] | None:
+    def _load_json_dict(self, raw_text: str | None) -> dict[str, Any] | None:
         if not raw_text:
             return None
         try:
@@ -1090,3 +1124,14 @@ class CloudDatabase:
         except json.JSONDecodeError:
             return None
         return parsed if isinstance(parsed, dict) else None
+
+    def _load_json_list(self, raw_text: str | None) -> list[dict[str, Any]] | None:
+        if not raw_text:
+            return None
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, list):
+            return None
+        return [item for item in parsed if isinstance(item, dict)] or None

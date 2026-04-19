@@ -1,4 +1,4 @@
-"""SQLite persistence for the dual-script InkPi runtime."""
+"""SQLite persistence for the source-backed InkPi runtime."""
 
 from __future__ import annotations
 
@@ -14,12 +14,12 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import DB_CONFIG, DB_PATH
-from models.evaluation_framework import normalize_script
+from models.evaluation_framework import LEGACY_RUBRIC_VERSION, normalize_script
 from models.evaluation_result import EvaluationResult
 
 
 class DatabaseService:
-    """Persist and query dual-script evaluation records."""
+    """Persist and query source-backed evaluation records."""
 
     def __init__(self, db_path: Path | None = None):
         self.logger = logging.getLogger(__name__)
@@ -60,6 +60,12 @@ class DatabaseService:
                     quality_level TEXT,
                     quality_confidence REAL,
                     dimension_scores_json TEXT,
+                    rubric_version TEXT,
+                    rubric_family TEXT,
+                    rubric_items_json TEXT,
+                    rubric_summary_json TEXT,
+                    rubric_source_refs_json TEXT,
+                    rubric_preview_total REAL,
                     score_debug_json TEXT
                 )
                 """
@@ -70,19 +76,32 @@ class DatabaseService:
             for column_name, column_type in (
                 ("script", "TEXT NOT NULL DEFAULT 'regular'"),
                 ("dimension_scores_json", "TEXT"),
+                ("rubric_version", "TEXT"),
+                ("rubric_family", "TEXT"),
+                ("rubric_items_json", "TEXT"),
+                ("rubric_summary_json", "TEXT"),
+                ("rubric_source_refs_json", "TEXT"),
+                ("rubric_preview_total", "REAL"),
                 ("score_debug_json", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {column_name} {column_type}")
 
-            if "script" in {row[1] for row in conn.execute(f"PRAGMA table_info({self.table_name})").fetchall()}:
-                conn.execute(
-                    f"""
-                    UPDATE {self.table_name}
-                    SET script = 'regular'
-                    WHERE script IS NULL OR TRIM(script) = ''
-                    """
-                )
+            conn.execute(
+                f"""
+                UPDATE {self.table_name}
+                SET script = 'regular'
+                WHERE script IS NULL OR TRIM(script) = ''
+                """
+            )
+            conn.execute(
+                f"""
+                UPDATE {self.table_name}
+                SET rubric_version = '{LEGACY_RUBRIC_VERSION}'
+                WHERE (rubric_version IS NULL OR TRIM(rubric_version) = '')
+                  AND dimension_scores_json IS NOT NULL
+                """
+            )
 
             cursor.execute(
                 f"""
@@ -101,8 +120,6 @@ class DatabaseService:
         self.logger.info("Database initialized: %s", self.db_path)
 
     def save(self, result: EvaluationResult) -> int:
-        """Save a result locally and trigger cloud sync in the background."""
-
         with self._managed_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -120,12 +137,18 @@ class DatabaseService:
                     quality_level,
                     quality_confidence,
                     dimension_scores_json,
+                    rubric_version,
+                    rubric_family,
+                    rubric_items_json,
+                    rubric_summary_json,
+                    rubric_source_refs_json,
+                    rubric_preview_total,
                     score_debug_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    result.total_score,
+                    int(result.total_score),
                     result.feedback,
                     result.timestamp.isoformat(),
                     result.image_path,
@@ -135,16 +158,26 @@ class DatabaseService:
                     result.ocr_confidence,
                     result.quality_level,
                     result.quality_confidence,
-                    json.dumps(result.get_dimension_scores(), ensure_ascii=False)
-                    if result.get_dimension_scores() is not None
-                    else None,
-                    json.dumps(result.score_debug, ensure_ascii=False) if result.score_debug is not None else None,
+                    self._dump_json(result.get_dimension_scores()),
+                    result.get_rubric_version(),
+                    result.get_rubric_family(),
+                    self._dump_json(result.get_rubric_items()),
+                    self._dump_json(result.get_rubric_summary()),
+                    self._dump_json(result.get_rubric_source_refs()),
+                    result.get_rubric_preview_total(),
+                    self._dump_json(result.score_debug),
                 ),
             )
             record_id = int(cursor.lastrowid)
             conn.commit()
 
-        self.logger.info("Saved evaluation record: id=%s score=%s script=%s", record_id, result.total_score, result.get_script())
+        self.logger.info(
+            "Saved evaluation record: id=%s score=%s script=%s rubric=%s",
+            record_id,
+            result.total_score,
+            result.get_script(),
+            result.get_rubric_family(),
+        )
 
         try:
             from services.cloud_sync_service import cloud_sync_service
@@ -229,7 +262,6 @@ class DatabaseService:
             cursor.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (record_id,))
             deleted = cursor.rowcount > 0
             conn.commit()
-
         if deleted:
             self.logger.info("Deleted evaluation record: id=%s", record_id)
         return deleted
@@ -268,7 +300,7 @@ class DatabaseService:
         with self._managed_connection() as conn:
             rows = conn.execute(
                 f"""
-                SELECT timestamp, total_score, quality_level, character_name, script
+                SELECT timestamp, total_score, quality_level, character_name, script, rubric_family
                 FROM {self.table_name}
                 {where_clause}
                 ORDER BY timestamp ASC
@@ -284,6 +316,7 @@ class DatabaseService:
                 "quality_level": row["quality_level"],
                 "character_name": row["character_name"],
                 "script": normalize_script(row["script"]),
+                "rubric_family": row["rubric_family"] or "legacy_v0",
             }
             for row in rows
         ]
@@ -305,8 +338,14 @@ class DatabaseService:
             ocr_confidence=row["ocr_confidence"],
             quality_level=row["quality_level"] or "medium",
             quality_confidence=row["quality_confidence"],
-            dimension_scores=self._load_json_blob(row["dimension_scores_json"]),
-            score_debug=self._load_json_blob(row["score_debug_json"]),
+            dimension_scores=self._load_json_dict(row["dimension_scores_json"]),
+            rubric_version=row["rubric_version"],
+            rubric_family=row["rubric_family"],
+            rubric_items=self._load_json_list(row["rubric_items_json"]),
+            rubric_summary=self._load_json_dict(row["rubric_summary_json"]),
+            rubric_source_refs=self._load_json_list(row["rubric_source_refs_json"]),
+            rubric_preview_total=row["rubric_preview_total"],
+            score_debug=self._load_json_dict(row["score_debug_json"]),
         )
 
     def _cleanup_old_records(self) -> None:
@@ -332,7 +371,13 @@ class DatabaseService:
         self.logger.info("Trimmed %s old local records", delete_count)
 
     @staticmethod
-    def _load_json_blob(value: str | None) -> dict | None:
+    def _dump_json(value: Any) -> str | None:
+        if value is None:
+            return None
+        return json.dumps(value, ensure_ascii=False)
+
+    @staticmethod
+    def _load_json_dict(value: str | None) -> dict | None:
         if not value:
             return None
         try:
@@ -340,6 +385,18 @@ class DatabaseService:
         except json.JSONDecodeError:
             return None
         return parsed if isinstance(parsed, dict) else None
+
+    @staticmethod
+    def _load_json_list(value: str | None) -> list[dict] | None:
+        if not value:
+            return None
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, list):
+            return None
+        return [item for item in parsed if isinstance(item, dict)] or None
 
 
 database_service = DatabaseService()

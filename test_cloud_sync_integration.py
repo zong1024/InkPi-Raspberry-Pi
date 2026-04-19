@@ -51,19 +51,24 @@ def main() -> int:
             importlib.reload(cloud_sync_module)
 
             local_db_service = DatabaseService(local_db)
-            result = EvaluationResult(
+            result = EvaluationResult.from_rubric_scores(
                 total_score=91,
                 feedback="结构稳定，笔画干净。",
                 timestamp=datetime.now(),
+                script="regular",
                 character_name="永",
                 ocr_confidence=0.97,
                 quality_level="good",
                 quality_confidence=0.94,
-                dimension_scores={
-                    "structure": 92,
-                    "stroke": 88,
-                    "integrity": 90,
-                    "stability": 94,
+                image_path=None,
+                processed_image_path=None,
+                rubric_family="regular_rubric_v1",
+                rubric_scores={
+                    "bifa_dianhua": 100,
+                    "jieti_zifa": 80,
+                    "bubai_zhangfa": 60,
+                    "mofa_bili": 80,
+                    "guifan_wanzheng": 100,
                 },
                 score_debug={
                     "probabilities": {"good": 0.94},
@@ -90,7 +95,8 @@ def main() -> int:
                 items = history.get("items", [])
                 matched = next((item for item in items if item["local_record_id"] == local_id), None)
                 if matched:
-                    assert matched["dimension_scores"]["structure"] == 92
+                    assert matched["rubric_family"] == "regular_rubric_v1"
+                    assert matched["rubric_items"][0]["label"] == "笔法点画"
                     print(f"PASS cloud sync propagated local record {local_id}")
                     return 0
                 time.sleep(0.2)

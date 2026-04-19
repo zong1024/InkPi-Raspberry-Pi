@@ -4,7 +4,7 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" parent="1" value="&lt;b&gt;InkPi 双书体项目全流程（楷书 + 行书）&lt;/b&gt;&lt;br&gt;主链：入口 → 预处理 → OCR → 用户选择书体 → 对应主分模型 / 四维解释 → EvaluationResult → 本地落库 → 云端同步" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1C1816;strokeColor=#1C1816;fontColor=#FFFFFF;fontStyle=1;fontSize=22;align=center;" vertex="1">
+        <mxCell id="title" parent="1" value="&lt;b&gt;InkPi 来源化双书体项目全流程（楷书 + 行书）&lt;/b&gt;&lt;br&gt;主链：入口 → 预处理 → OCR → 用户选择书体 → 对应 ONNX 主分模型 → 来源化五维 rubric → EvaluationResult → 本地落库 → 云端同步" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1C1816;strokeColor=#1C1816;fontColor=#FFFFFF;fontStyle=1;fontSize=22;align=center;" vertex="1">
           <mxGeometry x="20" y="20" width="2160" height="70" as="geometry" />
         </mxCell>
         <mxCell id="sec_input" parent="1" value="1. 输入与入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6EDF8;strokeColor=#8AA0BE;fontStyle=1;fontSize=18;align=center;" vertex="1">
@@ -16,10 +16,10 @@
         <mxCell id="sec_cloud" parent="1" value="3. 存储 / 同步 / 云端" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8D9D7;strokeColor=#B55B54;fontStyle=1;fontSize=18;align=center;" vertex="1">
           <mxGeometry x="1710" y="110" width="450" height="42" as="geometry" />
         </mxCell>
-        <mxCell id="desktop" parent="1" value="&lt;b&gt;PyQt 正式界面&lt;/b&gt;&lt;br&gt;main.py&lt;br&gt;views/home_view.py&lt;br&gt;views/camera_view.py&lt;br&gt;views/result_view.py&lt;br&gt;主分 + 四维解释分，不显示 debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="desktop" parent="1" value="&lt;b&gt;PyQt 正式界面&lt;/b&gt;&lt;br&gt;main.py&lt;br&gt;views/home_view.py&lt;br&gt;views/camera_view.py&lt;br&gt;views/result_view.py&lt;br&gt;主分 + 五维正式评审项&lt;br&gt;不显示 rubric_preview_total / debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="50" y="190" width="220" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="webui" parent="1" value="&lt;b&gt;WebUI 调试端&lt;/b&gt;&lt;br&gt;web_ui/app.py&lt;br&gt;index.html + app.js&lt;br&gt;拍照 / 上传 / 历史 / 详情&lt;br&gt;详情页显示 score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="webui" parent="1" value="&lt;b&gt;Web 运维后台&lt;/b&gt;&lt;br&gt;web_ui/app.py + web_console&lt;br&gt;主机 / 服务 / 模型 / 日志监控&lt;br&gt;最近结果显示 rubric_family 与五维分布" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="50" y="350" width="220" height="140" as="geometry" />
         </mxCell>
         <mxCell id="input" parent="1" value="&lt;b&gt;图像输入&lt;/b&gt;&lt;br&gt;摄像头预览 / 拍照&lt;br&gt;本地图片上传&lt;br&gt;统一进入单字评测链路" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0C9;strokeColor=#D3AA4A;fontSize=14;fontColor=#241E1A;" vertex="1">
@@ -31,49 +31,49 @@
         <mxCell id="ocr" parent="1" value="&lt;b&gt;LocalOcrService&lt;/b&gt;&lt;br&gt;PaddleOCR 本地识别&lt;br&gt;输出 character + confidence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEFD9;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="710" y="170" width="250" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="quality" parent="1" value="&lt;b&gt;QualityScorerService&lt;/b&gt;&lt;br&gt;按 script 路由双 ONNX 主分模型&lt;br&gt;regular → quality_scorer_regular.onnx&lt;br&gt;running → quality_scorer_running.onnx&lt;br&gt;输出 total_score / quality_level / quality_confidence" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEFD9;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="quality" parent="1" value="&lt;b&gt;QualityScorerService&lt;/b&gt;&lt;br&gt;按 script 路由双 ONNX 主分模型&lt;br&gt;regular → quality_scorer_regular.onnx&lt;br&gt;running → quality_scorer_running.onnx&lt;br&gt;输出 total_score / quality_level / quality_confidence&lt;br&gt;保留 probabilities / quality_features / calibration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEFD9;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1040" y="150" width="330" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="dimension" parent="1" value="&lt;b&gt;DimensionScorerService&lt;/b&gt;&lt;br&gt;复用 quality_features + geometry_features + calibration&lt;br&gt;输出 structure / stroke / integrity / stability&lt;br&gt;并生成 strongest / weakest 解释" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF6EA;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="dimension" parent="1" value="&lt;b&gt;DimensionScorerService / RubricEngine&lt;/b&gt;&lt;br&gt;复用 OCR、quality_features、geometry_features、calibration&lt;br&gt;按 script 输出 regular_rubric_v1 / running_rubric_v1&lt;br&gt;生成 rubric_items / rubric_summary / rubric_source_refs&lt;br&gt;内部计算 rubric_preview_total" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EEF6EA;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1040" y="360" width="330" height="160" as="geometry" />
         </mxCell>
-        <mxCell id="evaluation" parent="1" value="&lt;b&gt;EvaluationService&lt;/b&gt;&lt;br&gt;编排 processed_image + ocr_image&lt;br&gt;校验用户显式传入 script&lt;br&gt;调用 OCR / script 主分 / script 解释层&lt;br&gt;生成统一 EvaluationResult" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="evaluation" parent="1" value="&lt;b&gt;EvaluationService&lt;/b&gt;&lt;br&gt;编排 processed_image + ocr_image&lt;br&gt;校验用户显式传入 script&lt;br&gt;调用 OCR / script 主分 / script rubric&lt;br&gt;生成统一 EvaluationResult" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="710" y="330" width="260" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="result" parent="1" value="&lt;b&gt;EvaluationResult&lt;/b&gt;&lt;br&gt;script / script_label&lt;br&gt;total_score / quality_level / feedback&lt;br&gt;character_name / quality_confidence&lt;br&gt;dimension_scores / score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="result" parent="1" value="&lt;b&gt;EvaluationResult&lt;/b&gt;&lt;br&gt;script / script_label&lt;br&gt;total_score / quality_level / feedback&lt;br&gt;rubric_version / rubric_family&lt;br&gt;rubric_items / rubric_summary / rubric_source_refs&lt;br&gt;旧记录保留 legacy_v0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="710" y="550" width="300" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="database" parent="1" value="&lt;b&gt;DatabaseService&lt;/b&gt;&lt;br&gt;本地 SQLite&lt;br&gt;新增 script&lt;br&gt;新增 dimension_scores_json&lt;br&gt;新增 score_debug_json&lt;br&gt;旧记录回填 regular" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8D4D3;strokeColor=#B85450;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="database" parent="1" value="&lt;b&gt;DatabaseService&lt;/b&gt;&lt;br&gt;本地 SQLite&lt;br&gt;新增 rubric_version / rubric_family&lt;br&gt;新增 rubric_items_json / rubric_summary_json /&lt;br&gt;rubric_source_refs_json / rubric_preview_total&lt;br&gt;旧记录保留 legacy_v0，script 缺省回填 regular" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8D4D3;strokeColor=#B85450;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1080" y="560" width="270" height="140" as="geometry" />
         </mxCell>
-        <mxCell id="sync" parent="1" value="&lt;b&gt;CloudSyncService&lt;/b&gt;&lt;br&gt;upload_result_async()&lt;br&gt;上传主分、四维分和 debug JSON&lt;br&gt;POST /api/device/results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8D4D3;strokeColor=#B85450;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="sync" parent="1" value="&lt;b&gt;CloudSyncService&lt;/b&gt;&lt;br&gt;upload_result_async()&lt;br&gt;上传主分、rubric_*、方法论引用与 score_debug&lt;br&gt;POST /api/device/results" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8D4D3;strokeColor=#B85450;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1420" y="570" width="250" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="qt_result" parent="1" value="&lt;b&gt;Qt 结果页&lt;/b&gt;&lt;br&gt;正式展示端&lt;br&gt;显示主分、等级、反馈、四维卡片&lt;br&gt;不显示 score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="qt_result" parent="1" value="&lt;b&gt;Qt 结果页&lt;/b&gt;&lt;br&gt;正式展示端&lt;br&gt;显示主分、等级、反馈、五维正式评审项&lt;br&gt;不显示 rubric_preview_total / score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="350" y="860" width="260" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="webui_debug" parent="1" value="&lt;b&gt;WebUI 详情页&lt;/b&gt;&lt;br&gt;调试展示端&lt;br&gt;历史列表显示四维摘要&lt;br&gt;详情页展开 probabilities / quality_features /&lt;br&gt;geometry_features / calibration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="webui_debug" parent="1" value="&lt;b&gt;运维结果观察&lt;/b&gt;&lt;br&gt;最近结果与详情观察&lt;br&gt;展开 rubric_items / rubric_family / source_refs&lt;br&gt;必要时查看 probabilities / quality_features /&lt;br&gt;geometry_features / calibration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9E8FB;strokeColor=#6C8EBF;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="680" y="850" width="360" height="160" as="geometry" />
         </mxCell>
-        <mxCell id="miniapp" parent="1" value="&lt;b&gt;MiniApp 结果详情&lt;/b&gt;&lt;br&gt;小程序只显示四维解释分和主反馈&lt;br&gt;历史列表保持轻量&lt;br&gt;不展示 score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEFD9;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="miniapp" parent="1" value="&lt;b&gt;MiniApp 结果详情&lt;/b&gt;&lt;br&gt;小程序显示五维正式评审项、依据卡与主反馈&lt;br&gt;历史列表保持轻量，统计页按书体汇总&lt;br&gt;不展示 rubric_preview_total / score_debug" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DDEFD9;strokeColor=#82B366;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1100" y="860" width="300" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="cloud_api" parent="1" value="&lt;b&gt;Cloud API&lt;/b&gt;&lt;br&gt;cloud_api/app.py&lt;br&gt;列表 / 详情 / 方法论接口全部返回 script&lt;br&gt;列表支持 script filter&lt;br&gt;方法论返回 supported_scripts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="cloud_api" parent="1" value="&lt;b&gt;Cloud API&lt;/b&gt;&lt;br&gt;cloud_api/app.py&lt;br&gt;列表 / 详情返回 rubric_* 与 script&lt;br&gt;方法论接口返回 rubric_definitions / rubric_source_catalog /&lt;br&gt;current_script_scope / supported_scripts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1780" y="250" width="320" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="cloud_db" parent="1" value="&lt;b&gt;CloudDatabase&lt;/b&gt;&lt;br&gt;cloud_api/storage.py&lt;br&gt;results 表新增&lt;br&gt; dimension_scores_json / score_debug_json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="cloud_db" parent="1" value="&lt;b&gt;CloudDatabase&lt;/b&gt;&lt;br&gt;cloud_api/storage.py&lt;br&gt;results 表新增&lt;br&gt;rubric_version / rubric_family / rubric_items_json /&lt;br&gt;rubric_summary_json / rubric_source_refs_json / rubric_preview_total" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7D7EE;strokeColor=#9673A6;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1780" y="450" width="320" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="training" parent="1" value="&lt;b&gt;训练链路（本机 V100）&lt;/b&gt;&lt;br&gt;build_quality_manifest.py --script regular|running&lt;br&gt;train_quality_scorer.py --script regular|running&lt;br&gt;分别导出楷书 / 行书 ONNX + metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0C9;strokeColor=#D3AA4A;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="training" parent="1" value="&lt;b&gt;训练链路（本机 V100）&lt;/b&gt;&lt;br&gt;build_quality_manifest.py --script regular|running&lt;br&gt;manifest 新增 rubric_version / rubric_family /&lt;br&gt;rubric_items / rubric_preview_total / manual_review_*&lt;br&gt;主分模型暂不切换，等待重标注重训" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0C9;strokeColor=#D3AA4A;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1780" y="780" width="320" height="130" as="geometry" />
         </mxCell>
         <mxCell id="model_artifact" parent="1" value="&lt;b&gt;模型与静态资产&lt;/b&gt;&lt;br&gt;models/quality_scorer_regular.onnx&lt;br&gt;models/quality_scorer_regular.metrics.json&lt;br&gt;models/quality_scorer_running.onnx&lt;br&gt;models/quality_scorer_running.metrics.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF0C9;strokeColor=#D3AA4A;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="1780" y="950" width="320" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="main_score_note" parent="1" value="&lt;b&gt;主分校准细节&lt;/b&gt;&lt;br&gt;quality_features:&lt;br&gt;fg_ratio / bbox_ratio / center_quality /&lt;br&gt;component_norm / edge_touch / texture_std&lt;br&gt;&lt;br&gt;calibration:&lt;br&gt;feature_quality / probability_margin /&lt;br&gt;quality_confidence_norm / score_range_fit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F3E6;strokeColor=#B9AC8F;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="main_score_note" parent="1" value="&lt;b&gt;主分过渡策略&lt;/b&gt;&lt;br&gt;现有 ONNX 继续输出 total_score&lt;br&gt;quality_features / calibration 继续保留&lt;br&gt;rubric_preview_total 仅用于内部验证&lt;br&gt;先立标准，后切主分" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F3E6;strokeColor=#B9AC8F;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="360" y="500" width="270" height="220" as="geometry" />
         </mxCell>
-        <mxCell id="dimension_note" parent="1" value="&lt;b&gt;四维解释分规则&lt;/b&gt;&lt;br&gt;结构 = center_quality + bbox_ratio_band + projection_balance + bbox_fill_band&lt;br&gt;笔画 = texture_std_band + orientation_concentration + ink_ratio_band + component_norm_band&lt;br&gt;完整 = ocr_confidence + dominant_share + (1-edge_touch) + subject_edge_safe&lt;br&gt;稳定 = quality_confidence + probability_margin + feature_quality + score_range_fit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F3E6;strokeColor=#B9AC8F;fontSize=14;fontColor=#241E1A;" vertex="1">
+        <mxCell id="dimension_note" parent="1" value="&lt;b&gt;来源化五维 rubric&lt;/b&gt;&lt;br&gt;楷书：笔法点画 / 结体字法 / 布白章法 / 墨法笔力 / 规范完整&lt;br&gt;行书：用笔线质 / 结体取势 / 连带节奏 / 墨气笔力 / 规范识别&lt;br&gt;来源：教育部 + 四川书法水平测试 + 中国美院考级 + 中书协评审评议&lt;br&gt;锚点：20 / 40 / 60 / 80 / 100" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F3E6;strokeColor=#B9AC8F;fontSize=14;fontColor=#241E1A;" vertex="1">
           <mxGeometry x="360" y="760" width="1180" height="150" as="geometry" />
         </mxCell>
         <mxCell id="e1" parent="1" source="desktop" target="preprocess" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;" edge="1">
@@ -100,7 +100,7 @@
         <mxCell id="e8" parent="1" source="quality" target="evaluation" value="主分 + 校准" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e9" parent="1" source="dimension" target="evaluation" value="四维解释分" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;" edge="1">
+        <mxCell id="e9" parent="1" source="dimension" target="evaluation" value="来源化五维 rubric" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e10" parent="1" source="evaluation" target="result" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;strokeWidth=2;endArrow=block;endFill=1;" edge="1">

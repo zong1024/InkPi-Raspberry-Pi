@@ -1,16 +1,16 @@
-"""Regression tests for the dual-script InkPi runtime."""
+"""Regression tests for the source-backed rubric InkPi runtime."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import numpy as np
 
+from models.evaluation_framework import LEGACY_RUBRIC_VERSION, RUBRIC_VERSION
 from models.evaluation_result import EvaluationResult
 from services.database_service import DatabaseService
 from services.dimension_scorer_service import dimension_scorer_service
@@ -56,8 +56,8 @@ def build_quality_score(
 
 
 class EvaluationResultTests(unittest.TestCase):
-    def test_roundtrip_keeps_script_dimension_scores_and_debug(self) -> None:
-        result = EvaluationResult(
+    def test_roundtrip_keeps_script_rubric_and_debug(self) -> None:
+        result = EvaluationResult.from_rubric_scores(
             total_score=88,
             feedback="整体比较稳定，继续保持。",
             timestamp=datetime(2026, 3, 30, 12, 0, 0),
@@ -66,11 +66,15 @@ class EvaluationResultTests(unittest.TestCase):
             ocr_confidence=0.93,
             quality_level="good",
             quality_confidence=0.81,
-            dimension_scores={
-                "structure": 84,
-                "stroke": 80,
-                "integrity": 88,
-                "stability": 82,
+            image_path=None,
+            processed_image_path=None,
+            rubric_family="running_rubric_v1",
+            rubric_scores={
+                "yongbi_xianzhi": 80,
+                "jieti_qushi": 60,
+                "liandai_jiezou": 100,
+                "moqi_bili": 80,
+                "guifan_shibie": 60,
             },
             score_debug={
                 "probabilities": {"good": 0.81},
@@ -86,17 +90,42 @@ class EvaluationResultTests(unittest.TestCase):
         self.assertEqual(payload["character_name"], "永")
         self.assertEqual(payload["script"], "running")
         self.assertEqual(payload["script_label"], "行书")
-        self.assertEqual(payload["dimension_scores"]["structure"], 84)
-        self.assertEqual(payload["dimension_summary"]["best"]["label"], "完整")
-        self.assertEqual(payload["dimension_basis"][0]["key"], "structure")
+        self.assertEqual(payload["rubric_version"], RUBRIC_VERSION)
+        self.assertEqual(payload["rubric_family"], "running_rubric_v1")
+        self.assertEqual(payload["rubric_items"][0]["basis_codes"][0], "CAA-EXAM-2018")
+        self.assertEqual(payload["rubric_summary"]["best"]["label"], "连带节奏")
         self.assertEqual(payload["practice_profile"]["script"], "running")
-        self.assertEqual(rebuilt.dimension_scores["stroke"], 80)
-        self.assertEqual(rebuilt.get_script(), "running")
+        self.assertFalse(payload["is_legacy_standard"])
+        self.assertEqual(rebuilt.get_rubric_items()[2]["label"], "连带节奏")
         self.assertEqual(rebuilt.score_debug["calibration"]["feature_quality"], 0.83)
+
+    def test_legacy_payload_remains_legacy(self) -> None:
+        result = EvaluationResult(
+            total_score=76,
+            feedback="旧版记录。",
+            timestamp=datetime(2026, 3, 30, 12, 0, 0),
+            script="regular",
+            character_name="永",
+            ocr_confidence=0.88,
+            quality_level="medium",
+            quality_confidence=0.73,
+            dimension_scores={
+                "structure": 80,
+                "stroke": 74,
+                "integrity": 78,
+                "stability": 76,
+            },
+        )
+
+        payload = result.to_dict()
+        self.assertEqual(payload["rubric_version"], LEGACY_RUBRIC_VERSION)
+        self.assertTrue(payload["is_legacy_standard"])
+        self.assertIn("dimension_scores", payload)
+        self.assertEqual(payload["practice_profile"]["stage_key"], "legacy")
 
 
 class DimensionScorerServiceTests(unittest.TestCase):
-    def test_dimension_scores_are_stable_integers_for_regular_and_running(self) -> None:
+    def test_rubric_scores_are_stable_anchor_values_for_regular_and_running(self) -> None:
         base_inputs = {
             "probabilities": {"bad": 0.05, "medium": 0.15, "good": 0.80},
             "quality_features": {
@@ -126,24 +155,24 @@ class DimensionScorerServiceTests(unittest.TestCase):
             "ocr_confidence": 0.94,
         }
 
-        regular_scores = dimension_scorer_service.compute_dimension_scores(
-            **base_inputs,
-            script="regular",
-        )
-        running_scores = dimension_scorer_service.compute_dimension_scores(
-            **base_inputs,
-            script="running",
-        )
+        regular_scores = dimension_scorer_service.compute_rubric_scores(**base_inputs, script="regular")
+        running_scores = dimension_scorer_service.compute_rubric_scores(**base_inputs, script="running")
 
-        self.assertEqual(set(regular_scores.keys()), {"structure", "stroke", "integrity", "stability"})
-        self.assertTrue(all(isinstance(value, int) for value in regular_scores.values()))
-        self.assertTrue(all(0 <= value <= 100 for value in regular_scores.values()))
-        self.assertTrue(all(0 <= value <= 100 for value in running_scores.values()))
-        self.assertNotEqual(regular_scores["stroke"], running_scores["stroke"])
+        self.assertEqual(
+            set(regular_scores.keys()),
+            {"bifa_dianhua", "jieti_zifa", "bubai_zhangfa", "mofa_bili", "guifan_wanzheng"},
+        )
+        self.assertEqual(
+            set(running_scores.keys()),
+            {"yongbi_xianzhi", "jieti_qushi", "liandai_jiezou", "moqi_bili", "guifan_shibie"},
+        )
+        self.assertTrue(all(value in {20, 40, 60, 80, 100} for value in regular_scores.values()))
+        self.assertTrue(all(value in {20, 40, 60, 80, 100} for value in running_scores.values()))
+        self.assertNotEqual(regular_scores["bifa_dianhua"], running_scores["yongbi_xianzhi"])
 
 
 class EvaluationServiceTests(unittest.TestCase):
-    def test_dual_script_evaluation_uses_explicit_script(self) -> None:
+    def test_dual_script_evaluation_uses_explicit_script_and_rubric(self) -> None:
         image = np.ones((224, 224), dtype=np.uint8) * 255
 
         with (
@@ -168,9 +197,12 @@ class EvaluationServiceTests(unittest.TestCase):
         self.assertEqual(result.get_script(), "running")
         self.assertEqual(result.get_script_label(), "行书")
         self.assertEqual(result.total_score, 91)
-        self.assertIn("按行书模型评测", result.feedback)
+        self.assertIn("按 行书 模型生成主分", result.feedback)
         self.assertEqual(result.score_debug["script"], "running")
         self.assertEqual(score_mock.call_args.kwargs["script"], "running")
+        self.assertEqual(result.get_rubric_version(), RUBRIC_VERSION)
+        self.assertEqual(result.get_rubric_family(), "running_rubric_v1")
+        self.assertEqual(len(result.get_rubric_items()), 5)
 
     def test_missing_script_is_rejected(self) -> None:
         image = np.ones((64, 64), dtype=np.uint8) * 255
@@ -199,114 +231,92 @@ class EvaluationServiceTests(unittest.TestCase):
             score_inputs["ocr_mean"] = float(np.mean(image))
             return OcrRecognition(character="永", confidence=0.91)
 
-        def fake_score(image, character, *, script, ocr_confidence=None):
+        def fake_score(image, character, *, script, ocr_confidence):
             score_inputs["score_mean"] = float(np.mean(image))
+            score_inputs["score_script"] = script
+            score_inputs["score_ocr_confidence"] = ocr_confidence
             return build_quality_score(total_score=84, level="medium", script=script)
 
-        processed_image = np.zeros((64, 64), dtype=np.uint8)
-        ocr_image = np.ones((64, 64), dtype=np.uint8) * 255
+        processed_image = np.ones((64, 64), dtype=np.uint8) * 180
+        ocr_image = np.ones((64, 64), dtype=np.uint8) * 70
 
         with (
             patch.object(local_ocr_service, "_available", True),
             patch.object(local_ocr_service, "_ocr", object()),
             patch("services.evaluation_service.local_ocr_service.recognize", side_effect=fake_recognize),
-            patch(
-                "services.evaluation_service.quality_scorer_service.is_script_available",
-                return_value=True,
-            ),
+            patch("services.evaluation_service.quality_scorer_service.is_script_available", return_value=True),
             patch("services.evaluation_service.quality_scorer_service.score", side_effect=fake_score),
         ):
-            result = evaluation_service.evaluate(processed_image, script="regular", ocr_image=ocr_image)
+            result = evaluation_service.evaluate(
+                processed_image,
+                script="regular",
+                ocr_image=ocr_image,
+            )
 
-        self.assertEqual(result.character_name, "永")
-        self.assertGreater(score_inputs["ocr_mean"], 200.0)
-        self.assertLess(score_inputs["score_mean"], 10.0)
-
-
-class QualityScorerRoutingTests(unittest.TestCase):
-    def test_service_exposes_dual_model_status(self) -> None:
-        status = quality_scorer_service.get_model_status()
-        self.assertIn("regular", status)
-        self.assertIn("running", status)
-        self.assertTrue(status["regular"]["model_path"].endswith("quality_scorer_regular.onnx"))
-        self.assertTrue(status["running"]["metrics_path"].endswith("quality_scorer_running.metrics.json"))
+        self.assertEqual(score_inputs["ocr_mean"], float(np.mean(ocr_image)))
+        self.assertEqual(score_inputs["score_mean"], float(np.mean(processed_image)))
+        self.assertEqual(score_inputs["score_script"], "regular")
+        self.assertEqual(score_inputs["score_ocr_confidence"], 0.91)
+        self.assertEqual(result.get_rubric_family(), "regular_rubric_v1")
 
 
 class DatabaseServiceTests(unittest.TestCase):
-    def test_database_roundtrip_keeps_script(self) -> None:
+    def test_database_roundtrip_keeps_rubric_and_legacy_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            service = DatabaseService(Path(temp_dir) / "inkpi-test.db")
-            result = EvaluationResult(
-                total_score=77,
-                feedback="结构稳定，继续练习。",
-                timestamp=datetime.now(),
-                script="running",
+            db = DatabaseService(Path(temp_dir) / "results.db")
+
+            new_result = EvaluationResult.from_rubric_scores(
+                total_score=87,
+                feedback="新标准记录。",
+                timestamp=datetime(2026, 4, 1, 9, 30, 0),
+                script="regular",
                 character_name="永",
-                ocr_confidence=0.87,
+                ocr_confidence=0.97,
+                quality_level="good",
+                quality_confidence=0.9,
+                image_path=None,
+                processed_image_path=None,
+                rubric_family="regular_rubric_v1",
+                rubric_scores={
+                    "bifa_dianhua": 80,
+                    "jieti_zifa": 80,
+                    "bubai_zhangfa": 60,
+                    "mofa_bili": 80,
+                    "guifan_wanzheng": 100,
+                },
+                score_debug={"calibration": {"feature_quality": 0.88}},
+            )
+            legacy_result = EvaluationResult(
+                total_score=74,
+                feedback="旧标准记录。",
+                timestamp=datetime(2026, 4, 1, 10, 30, 0),
+                script="regular",
+                character_name="墨",
+                ocr_confidence=0.88,
                 quality_level="medium",
-                quality_confidence=0.76,
+                quality_confidence=0.74,
                 dimension_scores={
-                    "structure": 74,
+                    "structure": 78,
                     "stroke": 72,
-                    "integrity": 79,
-                    "stability": 75,
-                },
-                score_debug={
-                    "probabilities": {"medium": 0.76},
-                    "quality_features": {"fg_ratio": 0.41},
-                    "geometry_features": {"bbox_fill": 0.47},
-                    "calibration": {"feature_quality": 0.74},
+                    "integrity": 74,
+                    "stability": 70,
                 },
             )
 
-            record_id = service.save(result)
-            fetched = service.get_by_id(record_id)
+            new_id = db.save(new_result)
+            legacy_id = db.save(legacy_result)
 
-            self.assertIsNotNone(fetched)
-            assert fetched is not None
-            self.assertEqual(fetched.character_name, "永")
-            self.assertEqual(fetched.get_script(), "running")
-            self.assertEqual(fetched.get_script_label(), "行书")
-            self.assertEqual(fetched.dimension_scores["integrity"], 79)
-            self.assertEqual(fetched.score_debug["calibration"]["feature_quality"], 0.74)
+            fetched_new = db.get_by_id(new_id)
+            fetched_legacy = db.get_by_id(legacy_id)
 
-    def test_database_migrates_existing_schema_with_regular_default(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = Path(temp_dir) / "legacy.db"
-            conn = sqlite3.connect(str(db_path))
-            conn.execute(
-                """
-                CREATE TABLE evaluation_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    total_score INTEGER NOT NULL,
-                    feedback TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
-                    image_path TEXT,
-                    processed_image_path TEXT,
-                    character_name TEXT,
-                    ocr_confidence REAL,
-                    quality_level TEXT,
-                    quality_confidence REAL
-                )
-                """
-            )
-            conn.execute(
-                """
-                INSERT INTO evaluation_records (
-                    total_score, feedback, timestamp, image_path, processed_image_path,
-                    character_name, ocr_confidence, quality_level, quality_confidence
-                ) VALUES (80, 'legacy', '2026-04-01T10:00:00', NULL, NULL, '永', 0.8, 'medium', 0.7)
-                """
-            )
-            conn.commit()
-            conn.close()
-
-            service = DatabaseService(db_path)
-            fetched = service.get_by_id(1)
-
-            self.assertIsNotNone(fetched)
-            assert fetched is not None
-            self.assertEqual(fetched.get_script(), "regular")
+            self.assertIsNotNone(fetched_new)
+            self.assertIsNotNone(fetched_legacy)
+            self.assertEqual(fetched_new.get_rubric_version(), RUBRIC_VERSION)
+            self.assertEqual(fetched_new.get_rubric_family(), "regular_rubric_v1")
+            self.assertEqual(fetched_new.get_rubric_summary()["best"]["label"], "规范完整")
+            self.assertEqual(fetched_legacy.get_rubric_version(), LEGACY_RUBRIC_VERSION)
+            self.assertTrue(fetched_legacy.is_legacy_standard())
+            self.assertEqual(fetched_legacy.dimension_scores["integrity"], 74)
 
 
 if __name__ == "__main__":

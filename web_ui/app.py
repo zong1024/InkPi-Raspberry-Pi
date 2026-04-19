@@ -337,9 +337,16 @@ def _serialize_result(result: EvaluationResult | None, include_debug: bool = Fal
         "quality_confidence": result.quality_confidence,
         "image_path": result.image_path,
         "processed_image_path": result.processed_image_path,
-        "dimension_scores": result.get_dimension_scores(),
-        "dimension_summary": result.get_dimension_summary(),
+        "rubric_version": result.get_rubric_version(),
+        "rubric_family": result.get_rubric_family(),
+        "rubric_items": result.get_rubric_items(),
+        "rubric_summary": result.get_rubric_summary(),
+        "rubric_source_refs": result.get_rubric_source_refs(),
+        "is_legacy_standard": result.is_legacy_standard(),
     }
+    legacy_dimension_scores = result.get_dimension_scores()
+    if legacy_dimension_scores is not None:
+        payload["dimension_scores"] = legacy_dimension_scores
     if include_debug:
         payload["score_debug"] = result.score_debug
     return payload

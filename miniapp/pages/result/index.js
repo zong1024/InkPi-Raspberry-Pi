@@ -4,13 +4,6 @@ const { RECENT_PRACTICE_LIMIT } = require('../../config');
 const { buildGrowthInsights, buildResultFollowUp } = require('../../utils/practice');
 const { FORMAL_SUPPORT_TEXT, getScriptMeta } = require('../../utils/script');
 
-const DIMENSION_LABELS = {
-  structure: '结构',
-  stroke: '笔画',
-  integrity: '完整',
-  stability: '稳定',
-};
-
 function getScorePalette(score) {
   if (score >= 85) {
     return {
@@ -43,35 +36,69 @@ function formatConfidence(value) {
   return `${Math.round(Number(value) * 100)}%`;
 }
 
-function buildDimensionCards(dimensionScores = null) {
-  if (!dimensionScores) {
-    return [];
-  }
-
-  return Object.entries(DIMENSION_LABELS)
-    .filter(([key]) => dimensionScores[key] !== undefined && dimensionScores[key] !== null)
-    .map(([key, label]) => ({
-      key,
-      label,
-      score: Number(dimensionScores[key]),
+function normalizeRubricCards(rawItems = []) {
+  return (rawItems || [])
+    .filter((item) => item && item.key)
+    .map((item) => ({
+      key: item.key,
+      label: item.label || item.key,
+      score: Math.round(Number(item.score || 0)),
+      focus: item.focus || '',
+      evidenceSummary: item.evidence_summary || '',
+      basisCodes: item.basis_codes || [],
+      basisLabels: item.basis_labels || [],
+      practiceTemplates: item.practice_templates || [],
     }));
 }
 
-function buildDimensionSummary(cards = []) {
-  if (!cards.length) {
-    return '老记录暂时没有四维解释分。';
+function buildRubricSummary(rawResult, cards = []) {
+  if (rawResult.is_legacy_standard) {
+    return '这条记录仍沿用旧版评测标准，建议重新生成新版正式 rubric 记录。';
   }
-  const strongest = [...cards].sort((left, right) => right.score - left.score)[0];
-  const weakest = [...cards].sort((left, right) => left.score - right.score)[0];
-  return `当前强项：${strongest.label} ${strongest.score} 分；优先提升：${weakest.label} ${weakest.score} 分。`;
+  if (!cards.length) {
+    return '当前记录还没有生成正式 rubric 结果。';
+  }
+
+  const summary = rawResult.rubric_summary || {};
+  const best = summary.best || [...cards].sort((left, right) => right.score - left.score)[0];
+  const weakest = summary.weakest || [...cards].sort((left, right) => left.score - right.score)[0];
+  return `当前强项：${best.label} ${best.score} 分；优先提升：${weakest.label} ${weakest.score} 分。`;
 }
 
-function normalizeBasisCards(cards = []) {
-  return cards.map((item) => ({
-    ...item,
-    scoreText: item.score === null || item.score === undefined ? '--' : `${Math.round(Number(item.score))}`,
-    featureText: Array.isArray(item.feature_mapping) ? item.feature_mapping.join(' / ') : '',
-  }));
+function buildEvidenceCards(rawResult, cards = []) {
+  if (rawResult.is_legacy_standard || !cards.length) {
+    return [];
+  }
+
+  const referenceMap = {};
+  (rawResult.rubric_source_refs || []).forEach((item) => {
+    if (item && item.code) {
+      referenceMap[item.code] = item;
+    }
+  });
+
+  return cards.map((item) => {
+    const sources = (item.basisCodes || [])
+      .map((code) => referenceMap[code])
+      .filter(Boolean);
+    const sourceTitles = sources.map((source) => source.title);
+    const observationPoints = sources.length
+      ? sources.map((source) => source.organization || source.code)
+      : item.basisCodes;
+    const practiceHint = item.practiceTemplates && item.practiceTemplates.length
+      ? item.practiceTemplates[0]
+      : '继续按当前标准项补一轮，生成下一条可对比记录。';
+
+    return {
+      key: item.key,
+      label: item.label,
+      scoreText: `${item.score}`,
+      core_question: item.focus || `${item.label} 对应的是当前正式评审标准中的重点观察项。`,
+      observation_points: observationPoints,
+      featureText: sourceTitles.join(' / ') || (item.basisLabels || []).join(' / '),
+      practice_tip: `${item.evidenceSummary || ''}${item.evidenceSummary ? '；' : ''}${practiceHint}`,
+    };
+  });
 }
 
 function buildMetrics(result) {
@@ -92,11 +119,11 @@ function buildMetrics(result) {
       note: `质量置信度 ${result.qualityText}`,
     },
     {
-      title: '当前定位',
-      value: result.practiceProfile ? result.practiceProfile.stage_label : '辅助评测',
-      note: result.practiceProfile
-        ? result.practiceProfile.scope_note
-        : '当前系统正式支持楷书、行书单字，其他书体暂不支持，也不替代教师终评。',
+      title: '评审标准',
+      value: result.isLegacyStandard ? '旧版标准' : result.rubricLabel,
+      note: result.isLegacyStandard
+        ? '这条记录生成于新版来源化标准接入前，仅保留为历史对照。'
+        : '当前只上屏正式五维标准，不展示试运行总分。',
     },
   ];
 }
@@ -174,7 +201,7 @@ Page({
       ]);
       const rawResult = data.result || {};
       const palette = getScorePalette(rawResult.total_score || 0);
-      const dimensionCards = buildDimensionCards(rawResult.dimension_scores);
+      const rubricCards = normalizeRubricCards(rawResult.rubric_items);
       const practiceProfile = rawResult.practice_profile || null;
       const growthInsights = buildGrowthInsights((historyPayload && historyPayload.items) || []);
       const reviewSummary = normalizeReviewSummary(rawResult.expert_review_summary, rawResult.expert_reviews);
@@ -189,15 +216,21 @@ Page({
         deviceLabel: rawResult.device_name || 'InkPi 设备',
         ocrText: formatConfidence(rawResult.ocr_confidence),
         qualityText: formatConfidence(rawResult.quality_confidence),
+        isLegacyStandard: !!rawResult.is_legacy_standard,
+        rubricLabel:
+          rawResult.current_rubric_label ||
+          rawResult.rubric_label ||
+          rawResult.rubric_family ||
+          '来源化正式标准',
         practiceProfile,
       };
 
       this.setData({
         result,
         metrics: buildMetrics(result),
-        dimensionCards,
-        dimensionSummary: buildDimensionSummary(dimensionCards),
-        basisCards: normalizeBasisCards(rawResult.dimension_basis || []),
+        dimensionCards: rubricCards,
+        dimensionSummary: buildRubricSummary(rawResult, rubricCards),
+        basisCards: buildEvidenceCards(rawResult, rubricCards),
         practiceProfile,
         reviewSummary,
         growthSummary: growthInsights.growthSummary,

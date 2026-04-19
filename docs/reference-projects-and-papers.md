@@ -1,103 +1,135 @@
-# 参考项目与论文
+# 参考项目、论文与官方标准
 
-这份索引用来记录这次文档和论文重写时重点参考的公开项目、论文和官方文档。它们不是 InkPi 的“直接来源”，而是帮助我们把项目写得更像正式工程和正式论文。
+这份索引用来记录当前项目文档、论文和答辩口径的外部依据。它分成两类：
 
-## 1. 系统型参考
+- **官方标准 / 协会 / 展赛语境**：用于支撑“为什么这样定义评审维度”
+- **公开项目 / 论文 / 工程文档**：用于支撑“为什么这样组织系统和产品链路”
 
-### 1.1 An Intelligent System for Chinese Calligraphy
+## 1. 官方标准与协会来源
+
+### 1.1 教育部《中小学书法教育指导纲要》
+
+- 链接：[教育部原文](https://hudong.moe.gov.cn/srcsite/A26/s8001/201301/t20130125_147389.html)
+- 参考点：
+  - 书法教育具有基础性、实践性、阶段性和规范性
+  - 项目应强调规范书写与技能训练边界
+- 对 InkPi 的启发：
+  - 不把系统写成自动考级器
+  - `规范完整`、`规范识别` 必须成为正式维度
+
+### 1.2 教育部 2025 答复（2022 课标口径）
+
+- 链接：[教育部答复](https://hudong.moe.gov.cn/jyb_xxgk/xxgk_jyta/jyta_jiaocaiju/202501/t20250113_1175495.html)
+- 参考点：
+  - 小学到初中的书法 progression 明确涉及楷书与规范、通行的行楷/行书
+- 对 InkPi 的启发：
+  - 正式支持范围收敛到楷书与行书更有依据
+
+### 1.3 四川省书法水平测试毛笔书法测试大纲
+
+- 链接：[四川省教育考试院](https://www.sceeo.com/Html/201809/Newsdetail_817.html)
+- 参考点：
+  - 初段强调笔法、基本结构
+  - 中高段强调笔法熟练、点画准确、结构合理、章法规范
+  - 标准有明确权重意识
+- 对 InkPi 的启发：
+  - 五维标准的权重骨架优先参考这类可量化考试大纲
+
+### 1.4 中国美术学院社会美术水平考级中心软笔书法考试与培训标准
+
+- 链接：[中国美院考级中心](https://mskj.caa.edu.cn/bkzn/kjdg/201809/33247.html)
+- 参考点：
+  - 提按顿挫
+  - 线条力度
+  - 结构准确度
+  - 章法完善
+  - 点画有力
+- 对 InkPi 的启发：
+  - 楷书与行书都需要把“线质/笔力”从抽象好看落到可描述的评审项上
+
+### 1.5 中国书法家协会全国第十三届书法篆刻展评审评议
+
+- 链接：[中国文艺网](https://www.cflac.org.cn/ys/sf/sfht/202405/t20240517_1316199.html)
+- 参考点：
+  - 笔法、结构、章法、墨法、笔力是正式评审话语
+  - 反对形式大于书法本体
+  - 强调文字规范、写法不规范等问题
+- 对 InkPi 的启发：
+  - 新标准需要把“墨法 / 笔力 / 规范识别”纳入，而不只谈结构和识别置信度
+
+## 2. 系统型参考
+
+### 2.1 An Intelligent System for Chinese Calligraphy
 
 - 来源：AAAI 2007
 - 链接：[AAAI PDF](https://cdn.aaai.org/AAAI/2007/AAAI07-250.pdf)
 - 参考点：
   - 把书法问题写成完整系统，而不只是单个算法模块
-  - 把“评价”放在系统功能的一部分来讲
 - 对 InkPi 的启发：
-  - 论文结构要先交代系统链路，再写评分方法
-  - 项目文档要同时交代设备端、云端和结果展示，不只写模型
+  - 论文结构要先交代系统链路，再讲评分方法
 
-### 1.2 A Study of Raspberry Pi Applications to Calligraphy
+### 2.2 A Study of Raspberry Pi Applications to Calligraphy
 
 - 来源：Okayama University, 2020
 - 链接：[论文 PDF](https://ousar.lib.okayama-u.ac.jp/files/public/6/60936/20201203155610533257/K0006259_fulltext.pdf)
 - 参考点：
   - Raspberry Pi 适合作为低成本边缘设备承载书法学习辅助系统
-  - 论文中把硬件、软件、使用场景和验证放在同一条工程叙事里
 - 对 InkPi 的启发：
-  - 强调树莓派设备端不是“演示板”，而是正式交互入口
-  - 设备部署、成本、硬件能力和可维护性应该进入论文正文
+  - 设备部署、使用场景和硬件约束应进入正文，而不是只放代码仓库
 
-## 2. 评测型参考
+## 3. 评测型参考
 
-### 2.1 Intelligent Evaluation of Chinese Hard-Pen Calligraphy Using a Siamese Transformer Network
+### 3.1 Intelligent Evaluation of Chinese Hard-Pen Calligraphy Using a Siamese Transformer Network
 
 - 来源：Applied Sciences, 2024
 - 链接：[MDPI 页面](https://www.mdpi.com/2076-3417/14/5/2051)
 - 参考点：
-  - 数据采集、预处理、检测识别、标准样本和评分模型可以写成清晰的整体流程
-  - 论文中明确交代了数据量、样本来源和实验指标
+  - 数据采集、标准样本、检测识别和评分流程可以写成完整链路
 - 对 InkPi 的启发：
-  - 我们也需要在文档和 paper 里明确“主链路图”和“样本验证口径”
-  - 项目应把书体支持范围说清楚，而不是笼统写“书法评测”
+  - 主链路、数据口径、验证过程要一起写
 
-### 2.2 Assessing penmanship of Chinese handwriting: a deep learning-based approach
+### 3.2 Assessing penmanship of Chinese handwriting: a deep learning-based approach
 
 - 来源：Reading and Writing, 2024
-- 链接：[PDF](https://opus.lib.uts.edu.au/bitstream/10453/181234/2/Assessing%20penmanship%20of%20Chinese%20Handwriting.pdf)
+- 链接：[DOI 页面](https://doi.org/10.1007/s11145-024-10531-w)
 - 参考点：
   - 使用人工评分作为监督信号
-  - 明确给出样本规模、评分者数量和误差指标
-  - 把评测系统延伸到移动端使用场景
+  - 强调样本规模、评分者数量和误差指标
 - 对 InkPi 的启发：
-  - 评委关心的数据支撑，需要落到“样本量、评分者、验证指标”上
-  - 小程序和云端不能只是展示结果，也应承载量化验证信息
+  - 评委关心的数据支撑，必须落到量化验证
 
-## 3. 反馈型参考
+## 4. 反馈型参考
 
-### 3.1 System Report for CCL25-Eval Task 11: Aesthetic Assessment of Chinese Handwritings Based on Vision Language Models
+### 4.1 System Report for CCL25-Eval Task 11
 
 - 来源：CCL 2025
 - 链接：[ACL Anthology](https://aclanthology.org/2025.ccl-2.53/)
 - 参考点：
-  - 明确指出仅给分数的反馈不足以支持学习改进
-  - 研究开始从“分数预测”走向“多层次反馈生成”
+  - 仅给分数不足以支持学习改进
 - 对 InkPi 的启发：
-  - 四维解释层、小程序建议卡和依据卡是必要的，不是可有可无的装饰
-  - 文档应该把“为什么这样评”和“下一步怎么练”写成正式部分
+  - 详情页、统计页、方法论页必须成为正式功能，而不是装饰
 
-## 4. 工程底座参考
+## 5. 工程底座参考
 
-### 4.1 PaddleOCR
+### 5.1 PaddleOCR
 
 - 链接：[PaddleOCR GitHub](https://github.com/PaddlePaddle/PaddleOCR)
-- 参考点：
-  - 提供稳定的中文 OCR 工程能力
-- 对 InkPi 的启发：
-  - OCR 在本项目中是共享入口，不承担书体识别责任
+- 作用：
+  - 提供共享 OCR 工程能力
 
-### 4.2 ONNX Runtime
+### 5.2 ONNX Runtime
 
 - 链接：[ONNX Runtime](https://onnxruntime.ai/)
-- 参考点：
-  - 支持把训练好的模型以轻量方式部署到树莓派和公网后端
-- 对 InkPi 的启发：
-  - 训练与推理解耦
-  - 本机 V100 训练，边缘设备只做 ONNX 推理
+- 作用：
+  - 支持训练与推理解耦
+  - 让本机 V100 训练、树莓派 / 公网后端推理成为稳定组合
 
-## 5. InkPi 与这些参考的差异
+## 6. InkPi 与这些来源的关系
 
 InkPi 并不是简单复刻现有公开工作。当前版本的明确差异在于：
 
+- **标准更有出处**：维度、权重、依据都能追溯到官方或协会语境
 - **边界更明确**：只正式支持楷书与行书单字
-- **工程链路更完整**：树莓派 Qt 正式端、Cloud API、运维后台、小程序在同一项目内协同
-- **解释层产品化**：四维解释分、依据卡、练习建议进入正式接口和移动端页面
-- **验证信息产品化**：样本量、覆盖字数、设备来源、人工复评一致率等指标进入统计链路
-- **训练与部署分离**：本机 V100 负责训练与 ONNX 导出，树莓派 / 公网后端只负责推理
-
-## 6. 这份索引怎么用
-
-如果后面你要继续写 PPT、答辩稿或论文补充，可以优先按下面方式使用：
-
-1. 用 1.1 和 1.2 支撑“为什么这是完整系统，而不是单模型 demo”。
-2. 用 2.1 和 2.2 支撑“为什么要强调数据规模、人工评分对照和验证指标”。
-3. 用 3.1 支撑“为什么不能只给分数，必须有解释与建议”。
-4. 用 4.1 和 4.2 支撑“为什么当前工程选择 OCR + ONNX 的部署组合”。
+- **工程链路更完整**：树莓派 Qt、Cloud API、运维后台、小程序在同一项目内协同
+- **结果结构更正式**：`rubric_*` 进入正式结果对象，而不是停留在说明文档里
+- **过渡策略更清楚**：先上线新标准，后切主分，不把结构改造和模型重训绑死在同一轮

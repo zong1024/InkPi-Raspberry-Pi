@@ -1,4 +1,4 @@
-"""Four-dimension explanatory scoring for single-character evaluations."""
+"""Source-backed rubric scoring built on top of existing geometry and quality features."""
 
 from __future__ import annotations
 
@@ -9,38 +9,50 @@ from typing import Any
 import cv2
 import numpy as np
 
-from models.evaluation_framework import normalize_script
+from models.evaluation_framework import build_rubric_items, get_rubric_definition, normalize_script
 from services.character_geometry_service import character_geometry_service
 from services.quality_scorer_service import QualityScorerService
 
 
 @dataclass
 class DimensionScore:
-    """Explanatory dimension scores plus geometry snapshot."""
+    """Rubric scores plus geometry snapshot."""
 
-    dimension_scores: dict[str, int]
+    rubric_family: str
+    rubric_scores: dict[str, int]
+    rubric_items: list[dict[str, Any]]
     geometry_features: dict[str, float]
+    rubric_preview_total: float | None
 
 
 class DimensionScorerService:
-    """Build user-facing structure/stroke/integrity/stability scores."""
+    """Build source-backed rubric scores for regular and running script."""
 
     SCRIPT_PROFILES = {
         "regular": {
-            "structure_bbox_ratio": (0.42, 0.22),
-            "structure_bbox_fill": (0.46, 0.24),
-            "stroke_texture_std": (0.145, 0.055),
-            "stroke_orientation": (0.14, 0.34),
-            "stroke_ink_ratio": (0.46, 0.24),
-            "stroke_component_norm": (0.58, 0.50),
+            "jieti_bbox_ratio": (0.42, 0.22),
+            "jieti_bbox_fill": (0.46, 0.24),
+            "bifa_texture_std": (0.145, 0.055),
+            "bifa_orientation": (0.14, 0.34),
+            "bifa_ink_ratio": (0.46, 0.24),
+            "bifa_component_norm": (0.58, 0.50),
+            "zhangfa_fill": (0.45, 0.22),
+            "zhangfa_projection": (0.68, 0.98),
+            "zhangfa_dominant": (0.62, 0.98),
+            "mofa_ink_ratio": (0.46, 0.26),
+            "mofa_texture": (0.145, 0.060),
         },
         "running": {
-            "structure_bbox_ratio": (0.36, 0.28),
-            "structure_bbox_fill": (0.41, 0.30),
-            "stroke_texture_std": (0.162, 0.075),
-            "stroke_orientation": (0.10, 0.42),
-            "stroke_ink_ratio": (0.42, 0.26),
-            "stroke_component_norm": (0.48, 0.50),
+            "qushi_bbox_ratio": (0.36, 0.28),
+            "qushi_projection": (0.62, 0.96),
+            "qushi_dominant": (0.56, 0.96),
+            "xianzhi_texture_std": (0.162, 0.075),
+            "xianzhi_orientation": (0.10, 0.42),
+            "xianzhi_ink_ratio": (0.42, 0.26),
+            "jiezou_component_norm": (0.48, 0.50),
+            "jiezou_orientation": (0.12, 0.46),
+            "moqi_ink_ratio": (0.42, 0.28),
+            "moqi_texture": (0.162, 0.075),
         },
     }
 
@@ -56,21 +68,26 @@ class DimensionScorerService:
         ocr_confidence: float | None = None,
         script: str | None = None,
     ) -> DimensionScore:
+        normalized_script = normalize_script(script)
         geometry_features = self.extract_geometry_features(image)
-        dimension_scores = self.compute_dimension_scores(
+        rubric_scores = self.compute_rubric_scores(
             probabilities=probabilities,
             quality_features=quality_features,
             geometry_features=geometry_features,
             calibration=calibration,
             ocr_confidence=ocr_confidence,
-            script=script,
+            script=normalized_script,
         )
+        rubric_items = build_rubric_items(rubric_scores, script=normalized_script)
         return DimensionScore(
-            dimension_scores=dimension_scores,
+            rubric_family=get_rubric_definition(normalized_script)["rubric_family"],
+            rubric_scores=rubric_scores,
+            rubric_items=rubric_items,
             geometry_features=geometry_features,
+            rubric_preview_total=self._build_preview_total(rubric_items),
         )
 
-    def compute_dimension_scores(
+    def compute_rubric_scores(
         self,
         probabilities: dict[str, float],
         quality_features: dict[str, float],
@@ -79,7 +96,9 @@ class DimensionScorerService:
         ocr_confidence: float | None = None,
         script: str | None = None,
     ) -> dict[str, int]:
-        profile = self.SCRIPT_PROFILES[normalize_script(script)]
+        normalized_script = normalize_script(script)
+        profile = self.SCRIPT_PROFILES[normalized_script]
+
         center_quality = float(quality_features.get("center_quality", 0.0))
         bbox_ratio = float(quality_features.get("bbox_ratio", 0.0))
         texture_std = float(quality_features.get("texture_std", 0.0))
@@ -92,6 +111,7 @@ class DimensionScorerService:
         bbox_fill = float(geometry_features.get("bbox_fill", 0.0))
         orientation_concentration = float(geometry_features.get("orientation_concentration", 0.0))
         subject_edge_safe = float(geometry_features.get("subject_edge_safe", 0.0))
+        component_count = float(geometry_features.get("component_count", 0.0))
 
         ocr_confidence_value = float(ocr_confidence or 0.0)
         ocr_confidence_norm = self._normalize_band(ocr_confidence_value, low=0.45, high=0.99)
@@ -114,66 +134,184 @@ class DimensionScorerService:
         feature_quality = float(calibration.get("feature_quality", 0.0) or 0.0)
         score_range_fit = float(calibration.get("score_range_fit", 0.0) or 0.0)
 
-        structure = (
-            0.35 * center_quality
-            + 0.25
-            * self._target_band_score(
-                bbox_ratio,
-                target=profile["structure_bbox_ratio"][0],
-                tolerance=profile["structure_bbox_ratio"][1],
-            )
-            + 0.20 * projection_balance
-            + 0.20
-            * self._target_band_score(
-                bbox_fill,
-                target=profile["structure_bbox_fill"][0],
-                tolerance=profile["structure_bbox_fill"][1],
-            )
-        )
-        stroke = (
-            0.30
-            * self._target_band_score(
-                texture_std,
-                target=profile["stroke_texture_std"][0],
-                tolerance=profile["stroke_texture_std"][1],
-            )
-            + 0.25
-            * self._normalize_band(
-                orientation_concentration,
-                low=profile["stroke_orientation"][0],
-                high=profile["stroke_orientation"][1],
-            )
-            + 0.25
-            * self._target_band_score(
-                fg_ratio,
-                target=profile["stroke_ink_ratio"][0],
-                tolerance=profile["stroke_ink_ratio"][1],
-            )
-            + 0.20
-            * self._target_band_score(
+        if normalized_script == "regular":
+            raw_scores = {
+                "bifa_dianhua": (
+                    0.32
+                    * self._target_band_score(
+                        texture_std,
+                        target=profile["bifa_texture_std"][0],
+                        tolerance=profile["bifa_texture_std"][1],
+                    )
+                    + 0.24
+                    * self._normalize_band(
+                        orientation_concentration,
+                        low=profile["bifa_orientation"][0],
+                        high=profile["bifa_orientation"][1],
+                    )
+                    + 0.24
+                    * self._target_band_score(
+                        fg_ratio,
+                        target=profile["bifa_ink_ratio"][0],
+                        tolerance=profile["bifa_ink_ratio"][1],
+                    )
+                    + 0.20
+                    * self._target_band_score(
+                        component_norm,
+                        target=profile["bifa_component_norm"][0],
+                        tolerance=profile["bifa_component_norm"][1],
+                    )
+                ),
+                "jieti_zifa": (
+                    0.34 * center_quality
+                    + 0.26
+                    * self._target_band_score(
+                        bbox_ratio,
+                        target=profile["jieti_bbox_ratio"][0],
+                        tolerance=profile["jieti_bbox_ratio"][1],
+                    )
+                    + 0.20 * projection_balance
+                    + 0.20
+                    * self._target_band_score(
+                        bbox_fill,
+                        target=profile["jieti_bbox_fill"][0],
+                        tolerance=profile["jieti_bbox_fill"][1],
+                    )
+                ),
+                "bubai_zhangfa": (
+                    0.35
+                    * self._normalize_band(
+                        projection_balance,
+                        low=profile["zhangfa_projection"][0],
+                        high=profile["zhangfa_projection"][1],
+                    )
+                    + 0.25
+                    * self._target_band_score(
+                        bbox_fill,
+                        target=profile["zhangfa_fill"][0],
+                        tolerance=profile["zhangfa_fill"][1],
+                    )
+                    + 0.20
+                    * self._normalize_band(
+                        dominant_share,
+                        low=profile["zhangfa_dominant"][0],
+                        high=profile["zhangfa_dominant"][1],
+                    )
+                    + 0.20 * subject_edge_safe
+                ),
+                "mofa_bili": (
+                    0.28
+                    * self._target_band_score(
+                        fg_ratio,
+                        target=profile["mofa_ink_ratio"][0],
+                        tolerance=profile["mofa_ink_ratio"][1],
+                    )
+                    + 0.24
+                    * self._target_band_score(
+                        texture_std,
+                        target=profile["mofa_texture"][0],
+                        tolerance=profile["mofa_texture"][1],
+                    )
+                    + 0.24 * feature_quality
+                    + 0.24 * quality_confidence_norm
+                ),
+                "guifan_wanzheng": (
+                    0.34 * ocr_confidence_norm
+                    + 0.22 * self._normalize_band(dominant_share, low=0.45, high=0.98)
+                    + 0.18 * (1.0 - edge_touch)
+                    + 0.16 * subject_edge_safe
+                    + 0.10 * score_range_fit
+                ),
+            }
+        else:
+            component_flow = self._target_band_score(
                 component_norm,
-                target=profile["stroke_component_norm"][0],
-                tolerance=profile["stroke_component_norm"][1],
+                target=profile["jiezou_component_norm"][0],
+                tolerance=profile["jiezou_component_norm"][1],
             )
-        )
-        integrity = (
-            0.35 * ocr_confidence_norm
-            + 0.25 * self._normalize_band(dominant_share, low=0.45, high=0.98)
-            + 0.20 * (1.0 - edge_touch)
-            + 0.20 * subject_edge_safe
-        )
-        stability = (
-            0.40 * quality_confidence_norm
-            + 0.25 * probability_margin_norm
-            + 0.20 * feature_quality
-            + 0.15 * score_range_fit
-        )
+            raw_scores = {
+                "yongbi_xianzhi": (
+                    0.32
+                    * self._target_band_score(
+                        texture_std,
+                        target=profile["xianzhi_texture_std"][0],
+                        tolerance=profile["xianzhi_texture_std"][1],
+                    )
+                    + 0.28
+                    * self._normalize_band(
+                        orientation_concentration,
+                        low=profile["xianzhi_orientation"][0],
+                        high=profile["xianzhi_orientation"][1],
+                    )
+                    + 0.20
+                    * self._target_band_score(
+                        fg_ratio,
+                        target=profile["xianzhi_ink_ratio"][0],
+                        tolerance=profile["xianzhi_ink_ratio"][1],
+                    )
+                    + 0.20 * quality_confidence_norm
+                ),
+                "jieti_qushi": (
+                    0.32 * center_quality
+                    + 0.24
+                    * self._target_band_score(
+                        bbox_ratio,
+                        target=profile["qushi_bbox_ratio"][0],
+                        tolerance=profile["qushi_bbox_ratio"][1],
+                    )
+                    + 0.24
+                    * self._normalize_band(
+                        projection_balance,
+                        low=profile["qushi_projection"][0],
+                        high=profile["qushi_projection"][1],
+                    )
+                    + 0.20
+                    * self._normalize_band(
+                        dominant_share,
+                        low=profile["qushi_dominant"][0],
+                        high=profile["qushi_dominant"][1],
+                    )
+                ),
+                "liandai_jiezou": (
+                    0.30 * component_flow
+                    + 0.28
+                    * self._normalize_band(
+                        orientation_concentration,
+                        low=profile["jiezou_orientation"][0],
+                        high=profile["jiezou_orientation"][1],
+                    )
+                    + 0.20 * self._normalize_band(dominant_share, low=0.45, high=0.98)
+                    + 0.12 * probability_margin_norm
+                    + 0.10 * self._normalize_band(component_count, low=1.0, high=4.0)
+                ),
+                "moqi_bili": (
+                    0.28
+                    * self._target_band_score(
+                        fg_ratio,
+                        target=profile["moqi_ink_ratio"][0],
+                        tolerance=profile["moqi_ink_ratio"][1],
+                    )
+                    + 0.24
+                    * self._target_band_score(
+                        texture_std,
+                        target=profile["moqi_texture"][0],
+                        tolerance=profile["moqi_texture"][1],
+                    )
+                    + 0.24 * feature_quality
+                    + 0.24 * quality_confidence_norm
+                ),
+                "guifan_shibie": (
+                    0.36 * ocr_confidence_norm
+                    + 0.20 * (1.0 - edge_touch)
+                    + 0.20 * subject_edge_safe
+                    + 0.14 * probability_margin_norm
+                    + 0.10 * score_range_fit
+                ),
+            }
 
         return {
-            "structure": self._to_score(structure),
-            "stroke": self._to_score(stroke),
-            "integrity": self._to_score(integrity),
-            "stability": self._to_score(stability),
+            key: self._anchor_score(value)
+            for key, value in raw_scores.items()
         }
 
     def extract_geometry_features(self, image: np.ndarray) -> dict[str, float]:
@@ -214,6 +352,16 @@ class DimensionScorerService:
         }
 
     @staticmethod
+    def _build_preview_total(rubric_items: list[dict[str, Any]]) -> float | None:
+        if not rubric_items:
+            return None
+        total_weight = sum(int(item.get("weight", 0)) for item in rubric_items)
+        if total_weight <= 0:
+            return None
+        weighted = sum(int(item["score"]) * int(item["weight"]) for item in rubric_items)
+        return round(weighted / total_weight, 1)
+
+    @staticmethod
     def _projection_balance(projection_x: np.ndarray, projection_y: np.ndarray) -> float:
         def balance(values: np.ndarray) -> float:
             values = np.asarray(values, dtype=np.float32).reshape(-1)
@@ -244,8 +392,17 @@ class DimensionScorerService:
         )
 
     @staticmethod
-    def _to_score(value: float) -> int:
-        return int(np.clip(round(float(value) * 100.0), 0, 100))
+    def _anchor_score(value: float) -> int:
+        score = float(np.clip(value, 0.0, 1.0))
+        if score < 0.20:
+            return 20
+        if score < 0.40:
+            return 40
+        if score < 0.60:
+            return 60
+        if score < 0.80:
+            return 80
+        return 100
 
     @staticmethod
     def _target_band_score(value: float, target: float, tolerance: float) -> float:

@@ -108,8 +108,29 @@ class CloudSyncService:
             "quality_confidence": result.quality_confidence,
             "image_path": result.image_path,
             "processed_image_path": result.processed_image_path,
+            "rubric_version": result.get_rubric_version(),
+            "rubric_family": result.get_rubric_family(),
+            "rubric_items": result.get_rubric_items(),
+            "rubric_summary": result.get_rubric_summary(),
+            "rubric_source_refs": result.get_rubric_source_refs(),
+            "rubric_preview_total": result.get_rubric_preview_total(),
             "dimension_scores": result.get_dimension_scores(),
             "score_debug": result.score_debug,
+            "rubric_items_json": (
+                json.dumps(result.get_rubric_items(), ensure_ascii=False)
+                if result.get_rubric_items() is not None
+                else None
+            ),
+            "rubric_summary_json": (
+                json.dumps(result.get_rubric_summary(), ensure_ascii=False)
+                if result.get_rubric_summary() is not None
+                else None
+            ),
+            "rubric_source_refs_json": (
+                json.dumps(result.get_rubric_source_refs(), ensure_ascii=False)
+                if result.get_rubric_source_refs() is not None
+                else None
+            ),
             "dimension_scores_json": (
                 json.dumps(result.get_dimension_scores(), ensure_ascii=False)
                 if result.get_dimension_scores() is not None

@@ -1,4 +1,4 @@
-"""Single-chain evaluation service: OCR -> script-routed ONNX -> explanatory dimensions."""
+"""Single-chain evaluation service: OCR -> script-routed ONNX -> source-backed rubric."""
 
 from __future__ import annotations
 
@@ -27,22 +27,22 @@ class EvaluationService:
         self.logger = logging.getLogger(__name__)
         self.feedback_templates = {
             "good": [
-                "书写稳定，结构端正，已经接近可以直接展示的状态。",
-                "整体完成度很高，线条和重心都比较稳。",
-                "当前作品表现优秀，适合作为阶段性展示样例。",
+                "当前主分稳定，说明这张作品已经具备较好的阶段性展示质量。",
+                "整体完成度较高，继续按新五维标准巩固弱项会更稳。",
+                "本轮结果适合作为后续训练时的对照样张。",
             ],
             "medium": [
-                "整体基础不错，但还有继续收紧结构和笔势的空间。",
-                "识别和评分都比较稳定，适合继续打磨细节。",
-                "当前字形已经成型，再加强完整度会更好。",
+                "当前基础已经成形，接下来更适合按正式标准逐项补强。",
+                "主分和识别都较稳定，继续围绕最弱 rubric 项训练会更有效。",
+                "这条记录适合拿来做下一轮定向修正的基线。",
             ],
             "bad": [
-                "当前作品波动较大，建议重新书写或重新拍摄后再试。",
-                "这次评测显示基础质量偏弱，建议先调整结构再测。",
-                "主体已经识别出来，但完成度还不够稳定。",
+                "当前作品波动较大，建议先把主体完整性和规范性稳住。",
+                "这轮主分偏低，更适合先按正式标准回正基础项。",
+                "建议重新书写或重新拍摄后再进行下一轮对照。",
             ],
         }
-        self.quality_labels = {"good": "甲", "medium": "乙", "bad": "丙"}
+        self.quality_labels = {"good": "甲", "medium": "乙", "bad": "待提升"}
 
     def evaluate(
         self,
@@ -142,12 +142,12 @@ class EvaluationService:
         )
 
         operations_monitor_service.record_pipeline(
-            "dimension_scoring",
+            "rubric_scoring",
             "running",
-            "Computing explanatory dimensions.",
+            "Computing source-backed rubric items.",
             {"script": normalized_script},
         )
-        dimension_result = dimension_scorer_service.score(
+        rubric_result = dimension_scorer_service.score(
             processed_image,
             probabilities=scored.probabilities,
             quality_features=scored.quality_features or {},
@@ -156,16 +156,17 @@ class EvaluationService:
             script=normalized_script,
         )
         operations_monitor_service.record_pipeline(
-            "dimension_scoring",
+            "rubric_scoring",
             "done",
-            "Four-dimension scoring completed.",
+            "Source-backed rubric scoring completed.",
             {
                 "script": normalized_script,
-                "dimension_scores": dimension_result.dimension_scores,
+                "rubric_family": rubric_result.rubric_family,
+                "rubric_scores": rubric_result.rubric_scores,
             },
         )
 
-        result = EvaluationResult(
+        result = EvaluationResult.from_rubric_scores(
             total_score=scored.total_score,
             feedback=self._build_feedback(
                 scored.quality_level,
@@ -181,22 +182,26 @@ class EvaluationService:
             ocr_confidence=recognition.confidence,
             quality_level=scored.quality_level,
             quality_confidence=scored.quality_confidence,
-            dimension_scores=dimension_result.dimension_scores,
+            rubric_family=rubric_result.rubric_family,
+            rubric_scores=rubric_result.rubric_scores,
             score_debug={
                 "probabilities": scored.probabilities,
                 "quality_features": scored.quality_features or {},
-                "geometry_features": dimension_result.geometry_features,
+                "geometry_features": rubric_result.geometry_features,
                 "calibration": scored.calibration or {},
+                "rubric_family": rubric_result.rubric_family,
+                "rubric_preview_total": rubric_result.rubric_preview_total,
                 "script": normalized_script,
                 "script_label": script_label,
             },
         )
         self.logger.info(
-            "Dual-script evaluation finished: char=%s script=%s score=%s level=%s ocr=%.3f",
+            "Dual-script evaluation finished: char=%s script=%s score=%s level=%s rubric=%s ocr=%.3f",
             result.character_name,
             normalized_script,
             result.total_score,
             result.quality_level,
+            result.get_rubric_family(),
             result.ocr_confidence or 0.0,
         )
         operations_monitor_service.record_pipeline(
@@ -209,6 +214,7 @@ class EvaluationService:
                 "character": result.character_name,
                 "total_score": result.total_score,
                 "quality_level": result.quality_level,
+                "rubric_family": result.get_rubric_family(),
             },
         )
         return result
@@ -225,7 +231,10 @@ class EvaluationService:
         label = self.quality_labels.get(quality_level, "乙")
         script_label = get_script_label(script)
         if character_name:
-            return f"识别字为“{character_name}”，当前按{script_label}模型评测，等级为“{label}”。{base_feedback}"
+            return (
+                f"识别字为“{character_name}”，当前按 {script_label} 模型生成主分，"
+                f"等级为“{label}”。{base_feedback}"
+            )
         return base_feedback
 
 
