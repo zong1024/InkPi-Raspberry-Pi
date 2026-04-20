@@ -1,0 +1,64 @@
+{
+  "script": "running",
+  "manifest": "data\\quality_manifests\\running\\quality_manifest.jsonl",
+  "output_dir": "models",
+  "input_size": 32,
+  "feature_dim": 1031,
+  "sample_count": 160,
+  "rubric_families": {
+    "running_rubric_v1": 160
+  },
+  "rubric_versions": {
+    "source_backed_rubric_v1": 160
+  },
+  "samples_with_rubric_items": 160,
+  "manual_review_labeled": 0,
+  "label_counts": {
+    "good": 60,
+    "medium": 50,
+    "bad": 50
+  },
+  "train_accuracy": 0.6564885496183206,
+  "val_accuracy": 0.6896551724137931,
+  "train_score_mean": 74.4513931274414,
+  "val_score_mean": 74.22112274169922,
+  "per_label_val_score_mean": {
+    "bad": 69.69253540039062,
+    "medium": 74.63365173339844,
+    "good": 77.58883666992188
+  },
+  "classification_report": {
+    "bad": {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1-score": 0.8571428571428571,
+      "support": 9.0
+    },
+    "medium": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 9.0
+    },
+    "good": {
+      "precision": 0.6470588235294118,
+      "recall": 1.0,
+      "f1-score": 0.7857142857142857,
+      "support": 11.0
+    },
+    "accuracy": 0.6896551724137931,
+    "macro avg": {
+      "precision": 0.4656862745098039,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.5476190476190476,
+      "support": 29.0
+    },
+    "weighted avg": {
+      "precision": 0.4781947261663286,
+      "recall": 0.6896551724137931,
+      "f1-score": 0.564039408866995,
+      "support": 29.0
+    }
+  },
+  "onnx_path": "models\\quality_scorer_running.onnx"
+}

@@ -176,6 +176,22 @@ Web 端已经从“重复评测页”重构为 **运维后台**。它负责：
 
 双书体训练在本机 V100 上完成，运行时只消费导出的 ONNX 文件，不在树莓派或公网后端训练。
 
+当前已经完成一轮可运行的 bootstrap 双模型训练，并真实导出了：
+
+- `models/quality_scorer_regular.onnx`
+- `models/quality_scorer_regular.metrics.json`
+- `models/quality_scorer_running.onnx`
+- `models/quality_scorer_running.metrics.json`
+
+这轮训练使用的是从树莓派样本目录回收的 160 张共享合成单字样本，目标是优先打通“双模型文件存在、运行时可加载、树莓派可完整评测”的工程闭环。
+
+当前需要明确：
+
+- 楷书模型已经可以作为设备端与后端的正式双模型入口之一参与运行
+- 行书模型当前仍属于 **共享合成样本 bootstrap 版本**
+- 它适合联调、部署、接口验证和树莓派整链测试
+- 它还不能替代后续基于真实行书样本、人工评分对照和专家复评的正式重训版本
+
 当前导出目标固定为：
 
 - `models/quality_scorer_regular.onnx`

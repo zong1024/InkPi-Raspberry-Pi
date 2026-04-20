@@ -26,6 +26,28 @@
 - **manifest 先带新标签**
 - **主分后切**
 
+## 2.1 当前 bootstrap 训练状态
+
+2026-04-20 已在本机完成一轮实际 bootstrap 训练，并导出：
+
+- `models/quality_scorer_regular.onnx`
+- `models/quality_scorer_regular.metrics.json`
+- `models/quality_scorer_running.onnx`
+- `models/quality_scorer_running.metrics.json`
+
+这轮训练使用的是从树莓派样本目录回收的 160 张共享合成单字样本：
+
+- `good=60`
+- `medium=50`
+- `bad=50`
+
+说明：
+
+- 当前 `regular / running` 两套模型文件已经真实存在，可直接用于运行时装载
+- 当前 `running` 仍是 **共享合成样本 bootstrap 版本**
+- 这轮训练的目标是先把双模型运行链、部署链和测试链打通
+- 后续仍需要引入真实行书样本、人工评分对照和专家复核，再做正式重训
+
 ## 3. 关键脚本
 
 - [`quality_model_layout.py`](./quality_model_layout.py)
