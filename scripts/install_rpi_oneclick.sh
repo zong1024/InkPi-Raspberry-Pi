@@ -13,6 +13,7 @@
 #   START_APP=1
 #   MODEL_SOURCE=/path/to/quality_scorer.onnx
 #   PADDLEPADDLE_PACKAGE=paddlepaddle
+#   INKPI_FORCE_REFRESH=1
 
 set -euo pipefail
 
@@ -25,6 +26,7 @@ START_APP="${START_APP:-0}"
 RUN_SELF_TEST="${RUN_SELF_TEST:-0}"
 INKPI_UI_MODE="${INKPI_UI_MODE:-qt}"
 INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME:-InkPi-Raspberry-Pi}"
+INKPI_FORCE_REFRESH="${INKPI_FORCE_REFRESH:-0}"
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -51,6 +53,41 @@ upsert_env() {
     mv "$tmp" "$file"
 }
 
+clone_repository() {
+    git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+}
+
+restore_runtime_data() {
+    local backup_dir="$1"
+
+    if [ -d "${backup_dir}/.inkpi" ] && [ ! -d "${INSTALL_DIR}/.inkpi" ]; then
+        cp -a "${backup_dir}/.inkpi" "${INSTALL_DIR}/.inkpi"
+        echo "Restored .inkpi runtime settings from ${backup_dir}."
+    fi
+
+    if [ -d "${backup_dir}/data" ] && [ ! -d "${INSTALL_DIR}/data" ]; then
+        cp -a "${backup_dir}/data" "${INSTALL_DIR}/data"
+        echo "Restored local data directory from ${backup_dir}."
+    fi
+}
+
+backup_and_reclone() {
+    local reason="$1"
+    local backup_dir="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S)"
+
+    echo "Warning: ${reason}"
+    echo "Backing up existing install to ${backup_dir}"
+    mv "${INSTALL_DIR}" "${backup_dir}"
+    clone_repository
+    restore_runtime_data "${backup_dir}"
+}
+
+has_required_deploy_files() {
+    [ -f "${INSTALL_DIR}/deploy_rpi.sh" ] \
+        && [ -d "${INSTALL_DIR}/scripts" ] \
+        && [ -f "${INSTALL_DIR}/scripts/install_kiosk.sh" ]
+}
+
 case "$CALLIGRAPHY_STYLE" in
     kaishu|xingshu) ;;
     kai|regular) CALLIGRAPHY_STYLE="kaishu" ;;
@@ -70,7 +107,9 @@ sudo apt-get install -y git ca-certificates curl
 
 log "Preparing repository at ${INSTALL_DIR}"
 if [ -d "${INSTALL_DIR}/.git" ]; then
-    if git -C "${INSTALL_DIR}" diff --quiet \
+    if [ "${INKPI_FORCE_REFRESH}" = "1" ]; then
+        backup_and_reclone "INKPI_FORCE_REFRESH=1 was set."
+    elif git -C "${INSTALL_DIR}" diff --quiet \
         && git -C "${INSTALL_DIR}" diff --cached --quiet \
         && [ -z "$(git -C "${INSTALL_DIR}" ls-files --others --exclude-standard)" ]; then
         git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
@@ -79,10 +118,14 @@ if [ -d "${INSTALL_DIR}/.git" ]; then
     else
         echo "Warning: ${INSTALL_DIR} has local changes. Skipping git update to avoid overwriting them."
     fi
+
+    if ! has_required_deploy_files; then
+        backup_and_reclone "${INSTALL_DIR} is missing current deployment scripts."
+    fi
 elif [ -e "${INSTALL_DIR}" ]; then
     die "${INSTALL_DIR} already exists but is not a git repository. Move it away or set INKPI_DIR."
 else
-    git clone --branch "${BRANCH}" "${REPO_URL}" "${INSTALL_DIR}"
+    clone_repository
 fi
 
 cd "${INSTALL_DIR}"
