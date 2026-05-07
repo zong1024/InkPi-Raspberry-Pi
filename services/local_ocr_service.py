@@ -53,42 +53,56 @@ class LocalOcrService:
         self._ocr = None
         self._available = False
         self._tesseract_available = False
+        self.init_error: str | None = None
         self._infer_lock = threading.RLock()
         self._init_ocr()
         if self.enable_tesseract_fallback:
             self._init_tesseract()
 
     def _init_ocr(self) -> None:
+        self.init_error = None
         try:
             if self.config.get("warmup", True):
+                os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
                 os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
             from paddleocr import PaddleOCR  # type: ignore
 
-            kwargs = {
-                "lang": self.language,
-                "device": self.device,
-                "use_doc_orientation_classify": False,
-                "use_doc_unwarping": False,
-                "use_textline_orientation": False,
-            }
-            self._ocr = PaddleOCR(**kwargs)
-            self._available = True
-        except ImportError:
-            self.logger.info("PaddleOCR not installed; local OCR service stays inactive.")
+            attempts = (
+                {
+                    "lang": self.language,
+                    "device": self.device,
+                    "use_doc_orientation_classify": False,
+                    "use_doc_unwarping": False,
+                    "use_textline_orientation": False,
+                },
+                {
+                    "lang": self.language,
+                    "use_doc_orientation_classify": False,
+                    "use_doc_unwarping": False,
+                    "use_textline_orientation": False,
+                },
+                {"lang": self.language, "use_angle_cls": False, "show_log": False},
+                {"lang": self.language},
+            )
+            errors: list[str] = []
+            for kwargs in attempts:
+                try:
+                    self._ocr = PaddleOCR(**kwargs)
+                    self._available = True
+                    self.init_error = None
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"{kwargs}: {type(exc).__name__}: {exc}")
+
+            raise RuntimeError("All PaddleOCR initialization attempts failed: " + " | ".join(errors))
+        except ImportError as exc:
+            self.init_error = f"{type(exc).__name__}: {exc}"
+            self.logger.info("PaddleOCR not installed; local OCR service stays inactive: %s", exc)
             self._ocr = None
             self._available = False
-        except TypeError:
-            try:
-                from paddleocr import PaddleOCR  # type: ignore
-
-                self._ocr = PaddleOCR(lang=self.language, use_angle_cls=False, show_log=False)
-                self._available = True
-            except Exception as exc:  # noqa: BLE001
-                self.logger.warning("Failed to initialize legacy PaddleOCR: %s", exc)
-                self._ocr = None
-                self._available = False
         except Exception as exc:  # noqa: BLE001
+            self.init_error = f"{type(exc).__name__}: {exc}"
             self.logger.warning("Failed to initialize local OCR: %s", exc)
             self._ocr = None
             self._available = False

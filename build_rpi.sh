@@ -85,6 +85,9 @@ python - <<'PY'
 from services.local_ocr_service import local_ocr_service
 
 print("Local OCR available:", local_ocr_service.available)
+print("PaddleOCR initialized:", local_ocr_service._available)
+print("PaddleOCR init error:", local_ocr_service.init_error or "")
+print("Tesseract fallback enabled:", local_ocr_service.enable_tesseract_fallback)
 
 if not local_ocr_service.available:
     raise SystemExit("Local OCR is unavailable on this device.")
