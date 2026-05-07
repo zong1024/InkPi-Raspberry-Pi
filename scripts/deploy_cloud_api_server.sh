@@ -19,6 +19,14 @@ else
     SUDO=""
 fi
 
+run_as_service_user() {
+    if [ "$(id -u)" -eq 0 ]; then
+        runuser -u "${SERVICE_USER}" -- "$@"
+    else
+        sudo -u "${SERVICE_USER}" "$@"
+    fi
+}
+
 USER_DEVICE_KEY="${INKPI_CLOUD_DEVICE_KEY:-}"
 USER_DEMO_USER="${INKPI_CLOUD_DEMO_USER:-}"
 USER_DEMO_PASSWORD="${INKPI_CLOUD_DEMO_PASSWORD:-}"
@@ -60,9 +68,9 @@ fi
 
 log "Preparing repository at ${APP_DIR}"
 if [ -d "${APP_DIR}/.git" ]; then
-    ${SUDO} git -C "${APP_DIR}" fetch origin "${BRANCH}"
-    ${SUDO} git -C "${APP_DIR}" checkout "${BRANCH}"
-    ${SUDO} git -C "${APP_DIR}" pull --ff-only origin "${BRANCH}"
+    ${SUDO} git -c safe.directory="${APP_DIR}" -C "${APP_DIR}" fetch origin "${BRANCH}"
+    ${SUDO} git -c safe.directory="${APP_DIR}" -C "${APP_DIR}" checkout "${BRANCH}"
+    ${SUDO} git -c safe.directory="${APP_DIR}" -C "${APP_DIR}" pull --ff-only origin "${BRANCH}"
 elif [ -e "${APP_DIR}" ]; then
     echo "Error: ${APP_DIR} exists but is not a git repository." >&2
     exit 1
@@ -73,9 +81,9 @@ fi
 ${SUDO} chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}"
 
 log "Installing Python packages"
-${SUDO} -u "${SERVICE_USER}" python3 -m venv "${APP_DIR}/venv"
-${SUDO} -u "${SERVICE_USER}" "${APP_DIR}/venv/bin/python" -m pip install --upgrade pip
-${SUDO} -u "${SERVICE_USER}" "${APP_DIR}/venv/bin/python" -m pip install \
+run_as_service_user python3 -m venv "${APP_DIR}/venv"
+run_as_service_user "${APP_DIR}/venv/bin/python" -m pip install --upgrade pip
+run_as_service_user "${APP_DIR}/venv/bin/python" -m pip install \
     "Flask>=3.0.0" \
     "Werkzeug>=3.0.0" \
     "gunicorn>=22.0.0"
