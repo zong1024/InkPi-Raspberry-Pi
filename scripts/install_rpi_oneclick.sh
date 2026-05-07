@@ -24,6 +24,7 @@ INSTALL_KIOSK="${INSTALL_KIOSK:-1}"
 START_APP="${START_APP:-0}"
 RUN_SELF_TEST="${RUN_SELF_TEST:-0}"
 INKPI_UI_MODE="${INKPI_UI_MODE:-qt}"
+INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME:-InkPi-Raspberry-Pi}"
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -69,9 +70,15 @@ sudo apt-get install -y git ca-certificates curl
 
 log "Preparing repository at ${INSTALL_DIR}"
 if [ -d "${INSTALL_DIR}/.git" ]; then
-    git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
-    git -C "${INSTALL_DIR}" checkout "${BRANCH}"
-    git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
+    if git -C "${INSTALL_DIR}" diff --quiet \
+        && git -C "${INSTALL_DIR}" diff --cached --quiet \
+        && [ -z "$(git -C "${INSTALL_DIR}" ls-files --others --exclude-standard)" ]; then
+        git -C "${INSTALL_DIR}" fetch origin "${BRANCH}"
+        git -C "${INSTALL_DIR}" checkout "${BRANCH}"
+        git -C "${INSTALL_DIR}" pull --ff-only origin "${BRANCH}"
+    else
+        echo "Warning: ${INSTALL_DIR} has local changes. Skipping git update to avoid overwriting them."
+    fi
 elif [ -e "${INSTALL_DIR}" ]; then
     die "${INSTALL_DIR} already exists but is not a git repository. Move it away or set INKPI_DIR."
 else
@@ -90,6 +97,7 @@ EOF
 
 upsert_env "INKPI_UI_MODE" "${INKPI_UI_MODE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CALLIGRAPHY_STYLE" "${CALLIGRAPHY_STYLE}" ".inkpi/cloud.env"
+upsert_env "INKPI_CLOUD_DEVICE_NAME" "${INKPI_CLOUD_DEVICE_NAME}" ".inkpi/cloud.env"
 if [ -n "${INKPI_CLOUD_BACKEND_URL:-}" ]; then
     upsert_env "INKPI_CLOUD_BACKEND_URL" "${INKPI_CLOUD_BACKEND_URL}" ".inkpi/cloud.env"
 fi
@@ -107,6 +115,7 @@ env \
     INSTALL_KIOSK="${INSTALL_KIOSK}" \
     START_APP="${START_APP}" \
     RUN_SELF_TEST="${RUN_SELF_TEST}" \
+    INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME}" \
     MODEL_SOURCE="${MODEL_SOURCE:-}" \
     PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}" \
     bash ./deploy_rpi.sh
