@@ -64,65 +64,82 @@ class CameraView(QWidget):
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
-        root.setSpacing(8)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(5)
 
         self.preview_label = QLabel("正在准备摄像头...")
         self.preview_label.setObjectName("previewLabel")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setMinimumHeight(176)
-        self.preview_label.setFont(app_font(11))
+        self.preview_label.setFixedHeight(132)
+        self.preview_label.setFont(app_font(10))
         self.preview_label.setWordWrap(True)
         root.addWidget(self.preview_label, stretch=1)
 
         hint_row = QHBoxLayout()
-        hint_row.setSpacing(8)
+        hint_row.setSpacing(6)
 
-        self.back_label = QLabel("< 返回")
-        self.back_label.setObjectName("miniLabel")
-        hint_row.addWidget(self.back_label)
+        self.guide_label = QLabel("请将单字放在取景框中央")
+        self.guide_label.setObjectName("miniLabel")
+        hint_row.addWidget(self.guide_label, stretch=1)
 
-        hint_row.addStretch()
+        self.model_state = QLabel(self._build_model_state_text())
+        self.model_state.setObjectName("statusPill")
+        hint_row.addWidget(self.model_state)
 
         self.camera_state = QLabel("等待连接")
         self.camera_state.setObjectName("statusPill")
         hint_row.addWidget(self.camera_state)
         root.addLayout(hint_row)
 
-        self.guide_label = QLabel("请将单字尽量放在框内")
-        self.guide_label.setObjectName("mutedLabel")
-        self.guide_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self.guide_label)
-
         actions = QGridLayout()
-        actions.setHorizontalSpacing(10)
-        actions.setVerticalSpacing(8)
+        actions.setHorizontalSpacing(6)
+        actions.setVerticalSpacing(0)
 
         self.btn_load = QPushButton("上传图片")
         self.btn_load.setObjectName("secondaryButton")
-        self.btn_load.setMinimumHeight(44)
+        self.btn_load.setFixedHeight(36)
         self.btn_load.clicked.connect(self._on_load_image)
         actions.addWidget(self.btn_load, 0, 0)
 
         self.btn_capture = QPushButton("拍照")
         self.btn_capture.setObjectName("circleButton")
-        self.btn_capture.setMinimumHeight(52)
+        self.btn_capture.setFixedHeight(36)
         self.btn_capture.clicked.connect(self._on_capture)
         actions.addWidget(self.btn_capture, 0, 1)
 
         self.btn_eval = QPushButton("开始评测")
         self.btn_eval.setObjectName("primaryButton")
-        self.btn_eval.setMinimumHeight(44)
+        self.btn_eval.setFixedHeight(36)
         self.btn_eval.clicked.connect(self._on_capture)
         actions.addWidget(self.btn_eval, 0, 2)
 
-        self.btn_cancel = QPushButton("返回首页")
+        self.btn_cancel = QPushButton("首页")
         self.btn_cancel.setObjectName("ghostButton")
-        self.btn_cancel.setMinimumHeight(40)
+        self.btn_cancel.setFixedHeight(36)
         self.btn_cancel.clicked.connect(self.cancelled.emit)
-        actions.addWidget(self.btn_cancel, 1, 0, 1, 3)
+        actions.addWidget(self.btn_cancel, 0, 3)
 
         root.addLayout(actions)
+
+    def _build_model_state_text(self) -> str:
+        ocr_ready = getattr(evaluation_service, "logger", None) is not None
+        try:
+            from services.local_ocr_service import local_ocr_service
+            from services.quality_scorer_service import quality_scorer_service
+
+            ocr_ready = bool(local_ocr_service.available)
+            onnx_ready = bool(quality_scorer_service.available)
+        except Exception:
+            ocr_ready = False
+            onnx_ready = False
+
+        if ocr_ready and onnx_ready:
+            return "模型在线"
+        if not ocr_ready and not onnx_ready:
+            return "模型离线"
+        if not ocr_ready:
+            return "OCR离线"
+        return "ONNX离线"
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
@@ -139,9 +156,10 @@ class CameraView(QWidget):
         self.camera_state.style().polish(self.camera_state)
 
     def _start_camera(self) -> None:
+        self.model_state.setText(self._build_model_state_text())
         self._set_camera_state("连接中", "working")
         if not camera_service.open():
-            self.preview_label.setText("摄像头暂时不可用\n你仍然可以上传图片完成评测。")
+            self.preview_label.setText("摄像头暂时不可用\n可上传图片评测")
             self.btn_capture.setEnabled(False)
             self.btn_eval.setEnabled(False)
             self._set_camera_state("离线", "error")
@@ -306,4 +324,4 @@ class CameraView(QWidget):
 
     def set_compact_mode(self, compact: bool) -> None:
         self.compact_mode = compact
-        self.preview_label.setMinimumHeight(162 if compact else 176)
+        self.preview_label.setFixedHeight(132)

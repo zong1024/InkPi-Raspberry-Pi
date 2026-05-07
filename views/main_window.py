@@ -12,12 +12,13 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
-from config import IS_RASPBERRY_PI, UI_CONFIG
+from config import UI_CONFIG
 from models.evaluation_result import EvaluationResult
 from views.camera_view import CameraView
 from views.history_view import HistoryView
 from views.home_view import HomeView
 from views.result_view import ResultView
+from views.settings_view import SettingsView
 from views.ui_theme import app_font
 
 
@@ -38,18 +39,14 @@ class MainWindow(QMainWindow):
     def _init_ui(self) -> None:
         self.setObjectName("mainWindow")
         self.setWindowTitle(UI_CONFIG["window_title"])
-        self.setMinimumSize(480, 320)
-
-        default_width = 480 if IS_RASPBERRY_PI else UI_CONFIG["window_width"]
-        default_height = 320 if IS_RASPBERRY_PI else UI_CONFIG["window_height"]
-        self.resize(default_width, default_height)
+        self.setFixedSize(480, 320)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         self.root_layout = QVBoxLayout(central_widget)
-        self.root_layout.setContentsMargins(10, 8, 10, 8)
-        self.root_layout.setSpacing(8)
+        self.root_layout.setContentsMargins(6, 5, 6, 5)
+        self.root_layout.setSpacing(5)
 
         self.top_bar = self._create_top_bar()
         self.root_layout.addWidget(self.top_bar)
@@ -68,11 +65,13 @@ class MainWindow(QMainWindow):
         self.camera_view = CameraView()
         self.result_view = ResultView()
         self.history_view = HistoryView()
+        self.settings_view = SettingsView()
 
         self.stack.addWidget(self.home_view)
         self.stack.addWidget(self.camera_view)
         self.stack.addWidget(self.result_view)
         self.stack.addWidget(self.history_view)
+        self.stack.addWidget(self.settings_view)
 
         self.bottom_nav = self._create_bottom_nav()
         self.root_layout.addWidget(self.bottom_nav)
@@ -81,7 +80,7 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("topBar")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(10)
 
         self.brand_title = QLabel("InkPi")
@@ -101,7 +100,7 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("bottomNav")
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setContentsMargins(8, 3, 8, 3)
         layout.setSpacing(2)
 
         self.btn_home = QPushButton("HOME")
@@ -125,6 +124,7 @@ class MainWindow(QMainWindow):
 
         self.home_view.start_evaluation.connect(self.show_camera)
         self.home_view.view_history.connect(self.show_history)
+        self.home_view.settings_requested.connect(self.show_settings)
         self.home_view.recent_selected.connect(self._open_result)
 
         self.camera_view.capture_completed.connect(self._open_result)
@@ -136,15 +136,16 @@ class MainWindow(QMainWindow):
 
         self.history_view.back_requested.connect(self.show_home)
         self.history_view.result_selected.connect(self._open_result)
+        self.settings_view.back_requested.connect(self.show_home)
 
     def _should_use_compact_mode(self) -> bool:
         return self.width() <= 540 or self.height() <= 360
 
     def _apply_compact_mode(self, compact: bool) -> None:
         self.compact_mode = compact
-        self.root_layout.setContentsMargins(6 if compact else 10, 6 if compact else 8, 6 if compact else 10, 6 if compact else 8)
-        self.root_layout.setSpacing(6 if compact else 8)
-        self.surface_layout.setContentsMargins(8 if compact else 10, 8 if compact else 8, 8 if compact else 10, 8 if compact else 8)
+        self.root_layout.setContentsMargins(6, 5, 6, 5)
+        self.root_layout.setSpacing(5)
+        self.surface_layout.setContentsMargins(6, 5, 6, 5)
 
         self.brand_title.setFont(app_font(18 if compact else 20, QFont.Weight.Bold))
         self.page_title.setFont(app_font(9 if compact else 10, QFont.Weight.Bold))
@@ -152,7 +153,7 @@ class MainWindow(QMainWindow):
         for button in (self.btn_home, self.btn_camera, self.btn_history):
             button.setMinimumHeight(36 if compact else 40)
 
-        for view in (self.home_view, self.camera_view, self.result_view, self.history_view):
+        for view in (self.home_view, self.camera_view, self.result_view, self.history_view, self.settings_view):
             if hasattr(view, "set_compact_mode"):
                 view.set_compact_mode(compact)
 
@@ -182,6 +183,10 @@ class MainWindow(QMainWindow):
     def show_history(self) -> None:
         self.history_view.refresh_data()
         self._set_page(3, "HISTORY", 2)
+
+    def show_settings(self) -> None:
+        self.settings_view.refresh()
+        self._set_page(4, "SETTINGS", None)
 
     def _open_result(self, result: EvaluationResult) -> None:
         self.current_result = result

@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
-from models.evaluation_result import DIMENSION_LABELS, EvaluationResult
+from models.evaluation_result import DIMENSION_LABELS, DIMENSION_ORDER, EvaluationResult
 from services.led_service import led_service
 from services.speech_service import speech_service
 from views.ui_theme import app_font
@@ -69,21 +69,23 @@ class ResultView(QWidget):
         self.result: EvaluationResult | None = None
         self.compact_mode = False
         self.dimension_bars: dict[str, DimensionBar] = {}
+        self.dimension_compact_labels: dict[str, QLabel] = {}
         self._init_ui()
 
     def _init_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(2, 2, 2, 2)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(5)
 
         top_row = QHBoxLayout()
-        top_row.setSpacing(10)
+        top_row.setSpacing(6)
 
         self.score_card = QFrame()
         self.score_card.setObjectName("scoreCard")
+        self.score_card.setFixedHeight(76)
         score_layout = QVBoxLayout(self.score_card)
-        score_layout.setContentsMargins(18, 16, 18, 16)
-        score_layout.setSpacing(8)
+        score_layout.setContentsMargins(10, 5, 10, 5)
+        score_layout.setSpacing(1)
 
         title = QLabel("TOTAL")
         title.setObjectName("miniLabel")
@@ -92,12 +94,13 @@ class ResultView(QWidget):
         self.total_score_label = QLabel("--")
         self.total_score_label.setObjectName("scoreNumber")
         self.total_score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.total_score_label.setFont(app_font(44, QFont.Weight.Bold))
+        self.total_score_label.setFont(app_font(28, QFont.Weight.Bold))
         score_layout.addWidget(self.total_score_label)
 
         self.grade_label = QLabel("--")
         self.grade_label.setObjectName("scoreGrade")
         self.grade_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.grade_label.setFont(app_font(10, QFont.Weight.Bold))
         score_layout.addWidget(self.grade_label)
 
         self.feedback_short = QLabel("等待评测")
@@ -109,81 +112,85 @@ class ResultView(QWidget):
 
         top_row.addWidget(self.score_card, stretch=4)
 
-        right_card = QFrame()
-        right_card.setObjectName("resultCard")
-        right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(14, 14, 14, 14)
-        right_layout.setSpacing(8)
+        self.right_card = QFrame()
+        self.right_card.setObjectName("resultCard")
+        self.right_card.setFixedHeight(76)
+        right_layout = QVBoxLayout(self.right_card)
+        right_layout.setContentsMargins(10, 7, 10, 7)
+        right_layout.setSpacing(3)
 
         self.result_title = QLabel("Evaluation Result")
         self.result_title.setObjectName("sectionTitle")
-        self.result_title.setFont(app_font(13, QFont.Weight.Bold))
+        self.result_title.setFont(app_font(12, QFont.Weight.Bold))
         right_layout.addWidget(self.result_title)
 
         self.meta_label = QLabel("识别字 / 时间 / 置信度")
         self.meta_label.setObjectName("mutedLabel")
         self.meta_label.setWordWrap(True)
-        self.meta_label.setFont(app_font(10))
+        self.meta_label.setFont(app_font(9))
         right_layout.addWidget(self.meta_label)
 
-        for key in ("structure", "stroke", "integrity", "stability"):
+        for key in DIMENSION_ORDER:
             bar = DimensionBar(DIMENSION_LABELS[key])
             self.dimension_bars[key] = bar
             right_layout.addWidget(bar)
 
-        top_row.addWidget(right_card, stretch=6)
+        top_row.addWidget(self.right_card, stretch=6)
         root.addLayout(top_row)
 
         self.summary_card = QFrame()
         self.summary_card.setObjectName("softCard")
+        self.summary_card.setFixedHeight(74)
         summary_layout = QVBoxLayout(self.summary_card)
-        summary_layout.setContentsMargins(14, 12, 14, 12)
-        summary_layout.setSpacing(6)
+        summary_layout.setContentsMargins(10, 6, 10, 6)
+        summary_layout.setSpacing(4)
 
         summary_title = QLabel("评价摘要")
         summary_title.setObjectName("sectionTitle")
+        summary_title.setFont(app_font(10, QFont.Weight.Bold))
         summary_layout.addWidget(summary_title)
+
+        compact_grid = QGridLayout()
+        compact_grid.setHorizontalSpacing(6)
+        compact_grid.setVerticalSpacing(4)
+        for index, key in enumerate(DIMENSION_ORDER):
+            label = QLabel(f"{DIMENSION_LABELS[key]} --")
+            label.setObjectName("pillLabel")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setFont(app_font(9, QFont.Weight.Bold))
+            self.dimension_compact_labels[key] = label
+            compact_grid.addWidget(label, index // 2, index % 2)
+        summary_layout.addLayout(compact_grid)
 
         self.dimension_summary = QLabel("新结果会显示最强项与待提升项。")
         self.dimension_summary.setObjectName("sectionSubtitle")
         self.dimension_summary.setWordWrap(True)
-        self.dimension_summary.setFont(app_font(10))
+        self.dimension_summary.setFont(app_font(9))
+        self.dimension_summary.setVisible(False)
         summary_layout.addWidget(self.dimension_summary)
 
         self.feedback_label = QLabel("")
         self.feedback_label.setObjectName("mutedLabel")
         self.feedback_label.setWordWrap(True)
-        self.feedback_label.setFont(app_font(10))
+        self.feedback_label.setFont(app_font(9))
         summary_layout.addWidget(self.feedback_label)
         root.addWidget(self.summary_card)
 
         actions = QGridLayout()
-        actions.setHorizontalSpacing(10)
-        actions.setVerticalSpacing(8)
+        actions.setHorizontalSpacing(6)
+        actions.setVerticalSpacing(0)
 
-        self.btn_history = QPushButton("查看历史")
-        self.btn_history.setObjectName("secondaryButton")
-        self.btn_history.setMinimumHeight(44)
-        self.btn_history.clicked.connect(self.history_requested.emit)
-        actions.addWidget(self.btn_history, 0, 0)
-
-        self.btn_home = QPushButton("返回首页")
-        self.btn_home.setObjectName("primaryButton")
-        self.btn_home.setMinimumHeight(44)
-        self.btn_home.clicked.connect(self.back_requested.emit)
-        actions.addWidget(self.btn_home, 0, 1)
-
-        self.btn_new = QPushButton("再次评测")
-        self.btn_new.setObjectName("secondaryButton")
-        self.btn_new.setMinimumHeight(40)
+        self.btn_new = QPushButton("再测")
+        self.btn_new.setObjectName("primaryButton")
+        self.btn_new.setFixedHeight(32)
         self.btn_new.clicked.connect(self.new_evaluation_requested.emit)
-        actions.addWidget(self.btn_new, 1, 0)
+        actions.addWidget(self.btn_new, 0, 0)
 
-        self.btn_speak = QPushButton("语音播报")
+        self.btn_speak = QPushButton("播报")
         self.btn_speak.setObjectName("ghostButton")
-        self.btn_speak.setMinimumHeight(40)
+        self.btn_speak.setFixedHeight(32)
         self.btn_speak.clicked.connect(self._on_speak)
-        actions.addWidget(self.btn_speak, 1, 1)
+        actions.addWidget(self.btn_speak, 0, 1)
 
         root.addLayout(actions)
 
@@ -200,7 +207,9 @@ class ResultView(QWidget):
         self.grade_label.setText(result.get_grade())
         self.result_title.setText(result.character_name or "未识别")
         self.meta_label.setText(
-            f"{result.timestamp.strftime('%Y-%m-%d %H:%M')}  |  OCR {round((result.ocr_confidence or 0.0) * 100)}%"
+            f"{result.get_calligraphy_style_label()}  |  "
+            f"{result.timestamp.strftime('%m-%d %H:%M')}  |  "
+            f"OCR {round((result.ocr_confidence or 0.0) * 100)}%"
         )
         self.feedback_short.setText(result.feedback[:18] + ("..." if len(result.feedback) > 18 else ""))
         self.feedback_label.setText(result.feedback)
@@ -208,6 +217,9 @@ class ResultView(QWidget):
         dimension_items = {item["key"]: item["score"] for item in result.get_dimension_items()}
         for key, bar in self.dimension_bars.items():
             bar.set_score(dimension_items.get(key))
+        for key, label in self.dimension_compact_labels.items():
+            score = dimension_items.get(key)
+            label.setText(f"{DIMENSION_LABELS[key]} {score if score is not None else '--'}")
 
         summary = result.get_dimension_summary()
         if summary:
@@ -226,4 +238,11 @@ class ResultView(QWidget):
 
     def set_compact_mode(self, compact: bool) -> None:
         self.compact_mode = compact
-        self.total_score_label.setFont(app_font(40 if compact else 44, QFont.Weight.Bold))
+        self.total_score_label.setFont(app_font(28 if compact else 40, QFont.Weight.Bold))
+        self.feedback_short.setVisible(not compact)
+        self.feedback_label.setVisible(not compact)
+        for bar in self.dimension_bars.values():
+            bar.setVisible(not compact)
+        for label in self.dimension_compact_labels.values():
+            label.setVisible(compact)
+        self.dimension_summary.setVisible(not compact)

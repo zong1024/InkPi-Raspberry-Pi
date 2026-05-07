@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import EVALUATION_CONFIG, QUALITY_SCORER_CONFIG
 from models.evaluation_result import EvaluationResult
+from services.calligraphy_style_service import calligraphy_style_service
 from services.dimension_scorer_service import dimension_scorer_service
 from services.local_ocr_service import local_ocr_service
 from services.preprocessing_service import PreprocessingError
@@ -55,10 +56,12 @@ class EvaluationService:
         original_image_path: str | None = None,
         processed_image_path: str | None = None,
         ocr_image: np.ndarray | None = None,
+        calligraphy_style: str | None = None,
     ) -> EvaluationResult:
         """Run the new OCR + ONNX scoring pipeline."""
 
         self.logger.info("Starting single-chain calligraphy evaluation...")
+        active_style = calligraphy_style_service.normalize(calligraphy_style or calligraphy_style_service.current_style)
 
         if not local_ocr_service.available:
             raise RuntimeError("Local OCR model is unavailable. Please install PaddleOCR on this device.")
@@ -75,11 +78,7 @@ class EvaluationService:
                 error_type="ocr_failed",
             )
 
-        scored = quality_scorer_service.score(
-            processed_image,
-            character=recognition.character,
-            ocr_confidence=recognition.confidence,
-        )
+        scored = self._score_quality(processed_image, recognition.character, recognition.confidence, active_style)
         dimension_result = dimension_scorer_service.score(
             processed_image,
             probabilities=scored.probabilities,
@@ -87,7 +86,7 @@ class EvaluationService:
             calibration=scored.calibration or {},
             ocr_confidence=recognition.confidence,
         )
-        feedback = self._build_feedback(scored.quality_level, scored.total_score, recognition.character)
+        feedback = self._build_feedback(scored.quality_level, scored.total_score, recognition.character, active_style)
 
         result = EvaluationResult(
             total_score=scored.total_score,
@@ -99,8 +98,11 @@ class EvaluationService:
             ocr_confidence=recognition.confidence,
             quality_level=scored.quality_level,
             quality_confidence=scored.quality_confidence,
+            calligraphy_style=active_style,
             dimension_scores=dimension_result.dimension_scores,
             score_debug={
+                "calligraphy_style": active_style,
+                "calligraphy_style_label": calligraphy_style_service.label_for(active_style),
                 "probabilities": scored.probabilities,
                 "quality_features": scored.quality_features or {},
                 "geometry_features": dimension_result.geometry_features,
@@ -116,7 +118,36 @@ class EvaluationService:
         )
         return result
 
-    def _build_feedback(self, quality_level: str, total_score: int, character_name: str | None) -> str:
+    def _score_quality(
+        self,
+        processed_image: np.ndarray,
+        character: str,
+        ocr_confidence: float,
+        calligraphy_style: str,
+    ):
+        try:
+            return quality_scorer_service.score(
+                processed_image,
+                character=character,
+                ocr_confidence=ocr_confidence,
+                calligraphy_style=calligraphy_style,
+            )
+        except TypeError as exc:
+            if "calligraphy_style" not in str(exc):
+                raise
+            return quality_scorer_service.score(
+                processed_image,
+                character=character,
+                ocr_confidence=ocr_confidence,
+            )
+
+    def _build_feedback(
+        self,
+        quality_level: str,
+        total_score: int,
+        character_name: str | None,
+        calligraphy_style: str = "kaishu",
+    ) -> str:
         feedback_pool = self.feedback_templates.get(quality_level) or self.feedback_templates["medium"]
         if isinstance(feedback_pool, list) and feedback_pool:
             base_feedback = feedback_pool[total_score % len(feedback_pool)]
@@ -124,8 +155,9 @@ class EvaluationService:
             base_feedback = self.scorer_feedback.get(quality_level) or self.scorer_feedback.get("medium", "")
 
         label = self.quality_labels.get(quality_level, "中")
+        style_label = calligraphy_style_service.label_for(calligraphy_style)
         if character_name:
-            return f"自动识别为“{character_name}”，当前评测等级为“{label}”。{base_feedback}"
+            return f"当前书体为“{style_label}”，自动识别为“{character_name}”，评测等级为“{label}”。{base_feedback}"
         return base_feedback
 
 

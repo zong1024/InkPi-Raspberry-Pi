@@ -36,7 +36,14 @@ def encode_character(value: str) -> float:
     return min(float(ord(value[0])) / 65535.0, 1.0)
 
 
-def build_features(path: Path, character: str, input_size: int) -> np.ndarray | None:
+def encode_calligraphy_style(value: str | None) -> float:
+    value = str(value or "").strip().lower()
+    if value in {"xingshu", "xing", "running", "行书", "行"}:
+        return 1.0
+    return 0.0
+
+
+def build_features(path: Path, character: str, input_size: int, calligraphy_style: str | None = None) -> np.ndarray | None:
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         return None
@@ -44,8 +51,9 @@ def build_features(path: Path, character: str, input_size: int) -> np.ndarray | 
     normalized = resized.astype(np.float32) / 255.0
     flat = normalized.reshape(-1)
     char_code = np.asarray([encode_character(character)], dtype=np.float32)
+    style_code = np.asarray([encode_calligraphy_style(calligraphy_style)], dtype=np.float32)
     extras = extract_quality_features(resized)
-    return np.concatenate([flat, char_code, extras], axis=0)
+    return np.concatenate([flat, char_code, extras, style_code], axis=0)
 
 
 def extract_quality_features(image: np.ndarray) -> np.ndarray:
@@ -105,7 +113,12 @@ def load_dataset(manifest_path: Path, input_size: int) -> tuple[np.ndarray, np.n
     kept = []
     for sample in samples:
         path = Path(sample["path"])
-        feature = build_features(path, sample.get("character", ""), input_size=input_size)
+        feature = build_features(
+            path,
+            sample.get("character", ""),
+            input_size=input_size,
+            calligraphy_style=sample.get("calligraphy_style") or sample.get("style"),
+        )
         if feature is None:
             continue
         label = sample.get("label")

@@ -4,6 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
+    # shellcheck disable=SC1091
+    source "${PROJECT_DIR}/.inkpi/cloud.env"
+fi
+
 if [ "${INKPI_UI_MODE:-webui}" = "webui" ]; then
     exec "${PROJECT_DIR}/scripts/inkpi-webui-kiosk-session.sh"
 fi

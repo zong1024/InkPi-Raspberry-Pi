@@ -93,7 +93,13 @@ class QualityScorerService:
     def available(self) -> bool:
         return self._session is not None
 
-    def score(self, image: np.ndarray, character: str, ocr_confidence: float | None = None) -> QualityScore:
+    def score(
+        self,
+        image: np.ndarray,
+        character: str,
+        ocr_confidence: float | None = None,
+        calligraphy_style: str = "kaishu",
+    ) -> QualityScore:
         """Run the ONNX scorer and return a stable total score and level."""
 
         if not self.available or self._session is None:
@@ -102,8 +108,9 @@ class QualityScorerService:
         roi = self._prepare_image(image)
         char_code = np.asarray([[self._encode_character(character)]], dtype=np.float32)
         ocr_conf = np.asarray([[float(ocr_confidence or 0.0)]], dtype=np.float32)
+        style_code = np.asarray([[self._encode_calligraphy_style(calligraphy_style)]], dtype=np.float32)
 
-        feed = self._build_feed(image, roi, char_code, ocr_conf)
+        feed = self._build_feed(image, roi, char_code, ocr_conf, style_code)
 
         outputs = self._session.run(None, feed)
         by_name = dict(zip(self._output_names, outputs))
@@ -140,6 +147,7 @@ class QualityScorerService:
             quality_level=quality_level,
             extras=extras,
             ocr_confidence=float(ocr_confidence or 0.0),
+            calligraphy_style=calligraphy_style,
         )
 
         if raw_score is None:
@@ -157,6 +165,8 @@ class QualityScorerService:
 
         calibration["final_score"] = float(total_score)
         calibration["score_range_fit"] = self._score_range_fit(total_score, quality_level)
+        calibration["calligraphy_style"] = calligraphy_style
+        calibration["style_code"] = float(style_code.reshape(-1)[0])
 
         return QualityScore(
             total_score=total_score,
@@ -175,6 +185,7 @@ class QualityScorerService:
         roi: np.ndarray,
         char_code: np.ndarray,
         ocr_conf: np.ndarray,
+        style_code: np.ndarray,
     ) -> dict[str, np.ndarray]:
         if len(self._input_names) == 1:
             name = self._input_names[0]
@@ -191,6 +202,9 @@ class QualityScorerService:
                 if feature_width is None or feature_width >= current_width + extras.shape[1]:
                     features.append(extras)
                     current_width += extras.shape[1]
+                if feature_width is None or feature_width >= current_width + style_code.shape[1]:
+                    features.append(style_code)
+                    current_width += style_code.shape[1]
                 if feature_width is None or feature_width >= current_width + ocr_conf.shape[1]:
                     features.append(ocr_conf)
                 return {name: np.concatenate(features, axis=1).astype(np.float32)}
@@ -204,6 +218,8 @@ class QualityScorerService:
                 feed[name] = char_code
             elif lowered in {"ocr_confidence", "ocr_conf", "confidence"}:
                 feed[name] = ocr_conf
+            elif lowered in {"style_code", "calligraphy_style", "script_style", "style_id"}:
+                feed[name] = style_code
         return feed
 
     def _prepare_image(self, image: np.ndarray) -> np.ndarray:
@@ -275,12 +291,14 @@ class QualityScorerService:
         quality_level: str,
         extras: np.ndarray,
         ocr_confidence: float,
+        calligraphy_style: str = "kaishu",
     ) -> int:
         details = self._build_calibration_snapshot(
             probabilities=probabilities,
             quality_level=quality_level,
             extras=extras,
             ocr_confidence=ocr_confidence,
+            calligraphy_style=calligraphy_style,
         )
         return int(details["calibrated_score"])
 
@@ -290,8 +308,11 @@ class QualityScorerService:
         quality_level: str,
         extras: np.ndarray,
         ocr_confidence: float,
+        calligraphy_style: str = "kaishu",
     ) -> dict[str, float]:
-        fg_ratio, _bbox_ratio, center_quality, component_norm, edge_touch, texture_std = [float(x) for x in extras[:6]]
+        fg_ratio, _bbox_ratio, center_quality, component_norm, edge_touch, texture_std = [
+            float(x) for x in np.asarray(extras, dtype=np.float32).reshape(-1)[:6]
+        ]
         prob_values = np.asarray(probabilities, dtype=np.float32).reshape(-1)
         if prob_values.size == 0:
             prob_values = np.asarray([0.2, 0.6, 0.2], dtype=np.float32)
@@ -303,10 +324,14 @@ class QualityScorerService:
             second = 0.0
         margin = max(0.0, best - second)
 
+        style_code = self._encode_calligraphy_style(calligraphy_style)
+        fg_target = 0.42 if style_code >= 0.5 else 0.46
+        fg_tolerance = 0.28 if style_code >= 0.5 else 0.24
+        component_target = 0.64 if style_code >= 0.5 else 0.58
         feature_quality = (
-            0.28 * self._target_band_score(fg_ratio, target=0.46, tolerance=0.24)
+            0.28 * self._target_band_score(fg_ratio, target=fg_target, tolerance=fg_tolerance)
             + 0.24 * self._normalize_band(center_quality, low=0.72, high=0.99)
-            + 0.16 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
+            + 0.16 * self._target_band_score(component_norm, target=component_target, tolerance=0.50)
             + 0.16 * self._target_band_score(edge_touch, target=0.48, tolerance=0.30)
             + 0.16 * self._target_band_score(texture_std, target=0.145, tolerance=0.055)
         )
@@ -331,6 +356,7 @@ class QualityScorerService:
             "quality_range_low": float(low),
             "quality_range_high": float(high),
             "calibrated_score": float(np.clip(round(score), 0, 100)),
+            "style_code": float(style_code),
         }
 
     def _score_range_fit(self, total_score: int, quality_level: str) -> float:
@@ -360,6 +386,10 @@ class QualityScorerService:
         if not character:
             return 0.0
         return min(float(ord(character[0])) / 65535.0, 1.0)
+
+    @staticmethod
+    def _encode_calligraphy_style(style: str) -> float:
+        return 1.0 if str(style).strip().lower() == "xingshu" else 0.0
 
     @staticmethod
     def _softmax(values: np.ndarray) -> np.ndarray:

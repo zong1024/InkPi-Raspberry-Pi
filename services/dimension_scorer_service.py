@@ -22,7 +22,12 @@ class DimensionScore:
 
 
 class DimensionScorerService:
-    """Build user-facing structure/stroke/integrity/stability scores."""
+    """Build user-facing stroke/structure/stability/integrity scores.
+
+    The dimension semantics follow ``四维.txt``: stroke measures line and
+    brushwork quality, structure measures character layout, stability measures
+    visual gravity and balance, and integrity measures normative completeness.
+    """
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
@@ -90,36 +95,45 @@ class DimensionScorerService:
         feature_quality = float(calibration.get("feature_quality", 0.0) or 0.0)
         score_range_fit = float(calibration.get("score_range_fit", 0.0) or 0.0)
 
-        structure = (
-            0.35 * center_quality
-            + 0.25 * self._target_band_score(bbox_ratio, target=0.42, tolerance=0.22)
-            + 0.20 * projection_balance
-            + 0.20 * self._target_band_score(bbox_fill, target=0.46, tolerance=0.24)
-        )
         stroke = (
             0.30 * self._target_band_score(texture_std, target=0.145, tolerance=0.055)
             + 0.25 * self._normalize_band(orientation_concentration, low=0.14, high=0.34)
             + 0.25 * self._target_band_score(fg_ratio, target=0.46, tolerance=0.24)
-            + 0.20 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
+            + 0.10 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
+            + 0.10 * feature_quality
         )
-        integrity = (
-            0.35 * ocr_confidence_norm
-            + 0.25 * self._normalize_band(dominant_share, low=0.45, high=0.98)
-            + 0.20 * (1.0 - edge_touch)
-            + 0.20 * subject_edge_safe
+        structure = (
+            0.30 * self._target_band_score(bbox_ratio, target=0.42, tolerance=0.22)
+            + 0.25 * self._target_band_score(bbox_fill, target=0.46, tolerance=0.24)
+            + 0.25 * projection_balance
+            + 0.20 * center_quality
         )
         stability = (
-            0.40 * quality_confidence_norm
-            + 0.25 * probability_margin_norm
-            + 0.20 * feature_quality
-            + 0.15 * score_range_fit
+            0.35 * center_quality
+            + 0.30 * projection_balance
+            + 0.15 * subject_edge_safe
+            + 0.10 * self._target_band_score(bbox_ratio, target=0.42, tolerance=0.26)
+            + 0.10 * score_range_fit
+        )
+        integrity = (
+            0.30 * ocr_confidence_norm
+            + 0.25 * self._normalize_band(dominant_share, low=0.45, high=0.98)
+            + 0.20 * subject_edge_safe
+            + 0.15 * (1.0 - edge_touch)
+            + 0.10 * self._target_band_score(component_norm, target=0.58, tolerance=0.50)
         )
 
+        confidence_gate = float(np.clip(0.92 + 0.08 * quality_confidence_norm, 0.92, 1.0))
+        stroke *= confidence_gate
+        structure *= confidence_gate
+        stability *= confidence_gate
+        integrity *= confidence_gate
+
         return {
-            "structure": self._to_score(structure),
-            "stroke": self._to_score(stroke),
-            "integrity": self._to_score(integrity),
-            "stability": self._to_score(stability),
+            "stroke": self._to_dimension_score(stroke, calibration),
+            "structure": self._to_dimension_score(structure, calibration),
+            "stability": self._to_dimension_score(stability, calibration),
+            "integrity": self._to_dimension_score(integrity, calibration),
         }
 
     def extract_geometry_features(self, image: np.ndarray) -> dict[str, float]:
@@ -192,6 +206,26 @@ class DimensionScorerService:
     @staticmethod
     def _to_score(value: float) -> int:
         return int(np.clip(round(float(value) * 100.0), 0, 100))
+
+    @classmethod
+    def _to_dimension_score(cls, value: float, calibration: dict[str, Any]) -> int:
+        raw_score = float(cls._to_score(value))
+        low = calibration.get("quality_range_low")
+        high = calibration.get("quality_range_high")
+        if low is None or high is None:
+            return int(raw_score)
+
+        try:
+            low_value = float(low)
+            high_value = float(high)
+        except (TypeError, ValueError):
+            return int(raw_score)
+
+        if high_value <= low_value:
+            return int(raw_score)
+
+        band_score = low_value + (high_value - low_value) * float(np.clip(value, 0.0, 1.0))
+        return int(np.clip(round(0.40 * raw_score + 0.60 * band_score), 0, 100))
 
     @staticmethod
     def _target_band_score(value: float, target: float, tolerance: float) -> float:

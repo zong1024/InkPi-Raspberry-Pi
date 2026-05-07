@@ -76,6 +76,7 @@ class CloudDatabase:
                     ocr_confidence REAL,
                     quality_level TEXT,
                     quality_confidence REAL,
+                    calligraphy_style TEXT,
                     image_path TEXT,
                     processed_image_path TEXT,
                     dimension_scores_json TEXT,
@@ -92,6 +93,7 @@ class CloudDatabase:
                 ("ocr_confidence", "REAL"),
                 ("quality_level", "TEXT"),
                 ("quality_confidence", "REAL"),
+                ("calligraphy_style", "TEXT"),
                 ("image_path", "TEXT"),
                 ("processed_image_path", "TEXT"),
                 ("dimension_scores_json", "TEXT"),
@@ -201,6 +203,7 @@ class CloudDatabase:
                         ocr_confidence = ?,
                         quality_level = ?,
                         quality_confidence = ?,
+                        calligraphy_style = ?,
                         image_path = ?,
                         processed_image_path = ?,
                         dimension_scores_json = ?,
@@ -216,6 +219,7 @@ class CloudDatabase:
                         payload.get("ocr_confidence"),
                         payload.get("quality_level"),
                         payload.get("quality_confidence"),
+                        payload.get("calligraphy_style") or "kaishu",
                         payload.get("image_path"),
                         payload.get("processed_image_path"),
                         dimension_scores_json,
@@ -238,6 +242,7 @@ class CloudDatabase:
                         ocr_confidence,
                         quality_level,
                         quality_confidence,
+                        calligraphy_style,
                         image_path,
                         processed_image_path,
                         dimension_scores_json,
@@ -245,7 +250,7 @@ class CloudDatabase:
                         created_at,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         device_name,
@@ -257,6 +262,7 @@ class CloudDatabase:
                         payload.get("ocr_confidence"),
                         payload.get("quality_level"),
                         payload.get("quality_confidence"),
+                        payload.get("calligraphy_style") or "kaishu",
                         payload.get("image_path"),
                         payload.get("processed_image_path"),
                         dimension_scores_json,
@@ -595,6 +601,8 @@ class CloudDatabase:
             "ocr_confidence": row["ocr_confidence"],
             "quality_level": row["quality_level"],
             "quality_confidence": row["quality_confidence"],
+            "calligraphy_style": row["calligraphy_style"] or "kaishu",
+            "calligraphy_style_label": "行书" if row["calligraphy_style"] == "xingshu" else "楷书",
             "image_path": row["image_path"],
             "processed_image_path": row["processed_image_path"],
             "dimension_scores": self._load_json_blob(row["dimension_scores_json"]),

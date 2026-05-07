@@ -6,6 +6,7 @@
 #   RUN_SELF_TEST=1 ./deploy_rpi.sh
 #   INSTALL_KIOSK=1 ./deploy_rpi.sh
 #   START_APP=1 ./deploy_rpi.sh
+#   PADDLEPADDLE_PACKAGE=paddlepaddle ./deploy_rpi.sh
 
 set -euo pipefail
 
@@ -18,9 +19,10 @@ safe_git_sync() {
     fi
 
     if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
-        echo "[2/7] Syncing repository from origin/master..."
+        local branch="${INKPI_BRANCH:-master}"
+        echo "[2/7] Syncing repository from origin/${branch}..."
         git fetch origin
-        git pull --ff-only origin master
+        git pull --ff-only origin "${branch}"
     else
         echo "[2/7] Working tree has local changes. Skipping git sync to avoid overwriting them."
     fi
@@ -55,7 +57,12 @@ sudo apt-get install -y \
     python3-opencv \
     python3-requests \
     python3-spidev \
+    python3-pil \
     libopencv-dev \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
+    libopenblas0 \
     espeak-ng \
     portaudio19-dev \
     libespeak1 \
@@ -71,7 +78,9 @@ install_optional_pkg libcamera-apps
 install_optional_pkg unclutter
 
 sudo raspi-config nonint do_spi 0 2>/dev/null || true
+sudo raspi-config nonint do_camera 0 2>/dev/null || true
 sudo usermod -a -G spi "$USER" 2>/dev/null || true
+sudo usermod -a -G video "$USER" 2>/dev/null || true
 
 echo "[4/7] Creating virtual environment..."
 python3 -m venv --system-site-packages venv
@@ -79,7 +88,20 @@ source venv/bin/activate
 
 echo "[5/7] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyttsx3 paddleocr
+python -m pip install pyttsx3
+
+PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}"
+if ! python -m pip install "${PADDLEPADDLE_PACKAGE}" paddleocr; then
+    echo "Error: failed to install PaddleOCR dependencies."
+    echo "Try overriding the wheel package, for example:"
+    echo "  PADDLEPADDLE_PACKAGE='paddlepaddle==3.2.2' ./deploy_rpi.sh"
+    exit 1
+fi
+
+if [ -f ".inkpi/cloud.env" ]; then
+    # shellcheck disable=SC1091
+    source ".inkpi/cloud.env"
+fi
 
 echo "[6/7] Preparing models and health check..."
 if [ -n "${MODEL_SOURCE:-}" ] && [ -f "${MODEL_SOURCE}" ]; then

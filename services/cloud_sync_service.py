@@ -103,6 +103,8 @@ class CloudSyncService:
             "ocr_confidence": result.ocr_confidence,
             "quality_level": result.quality_level,
             "quality_confidence": result.quality_confidence,
+            "calligraphy_style": result.calligraphy_style,
+            "calligraphy_style_label": result.get_calligraphy_style_label(),
             "image_path": result.image_path,
             "processed_image_path": result.processed_image_path,
             "dimension_scores": result.get_dimension_scores(),

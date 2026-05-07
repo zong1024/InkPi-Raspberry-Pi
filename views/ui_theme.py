@@ -156,7 +156,7 @@ def build_stylesheet() -> str:
     QFrame#mainSurface {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line_soft"]};
-        border-radius: 26px;
+        border-radius: 12px;
     }}
 
     QFrame#topBar,
@@ -178,7 +178,7 @@ def build_stylesheet() -> str:
     QFrame#softCard {{
         background-color: {THEME["surface"]};
         border: 1px solid {THEME["line"]};
-        border-radius: 22px;
+        border-radius: 12px;
     }}
 
     QFrame#heroCard {{
@@ -191,6 +191,7 @@ def build_stylesheet() -> str:
     QFrame#dimensionBarCard {{
         background-color: {THEME["surface_alt"]};
         border: 1px solid {THEME["line_soft"]};
+        border-radius: 10px;
     }}
 
     QLabel#brandTitle {{
@@ -295,8 +296,8 @@ def build_stylesheet() -> str:
 
     QPushButton {{
         border: none;
-        border-radius: 18px;
-        padding: 8px 14px;
+        border-radius: 10px;
+        padding: 5px 10px;
         font-size: 13px;
         font-weight: 700;
         background-color: {THEME["surface_alt"]};
@@ -335,7 +336,7 @@ def build_stylesheet() -> str:
     QPushButton#circleButton {{
         background-color: {THEME["accent"]};
         color: #ffffff;
-        border-radius: 28px;
+        border-radius: 17px;
         font-size: 18px;
         font-weight: 900;
     }}

@@ -20,6 +20,11 @@ QUALITY_COLORS = {
     "bad": "#B34B3E",
 }
 
+CALLIGRAPHY_STYLE_LABELS = {
+    "kaishu": "楷书",
+    "xingshu": "行书",
+}
+
 DIMENSION_LABELS = {
     "structure": "结构",
     "stroke": "笔画",
@@ -27,7 +32,7 @@ DIMENSION_LABELS = {
     "stability": "稳定",
 }
 
-DIMENSION_ORDER = ("structure", "stroke", "integrity", "stability")
+DIMENSION_ORDER = ("stroke", "structure", "stability", "integrity")
 
 
 def _normalize_json_dict(value: Any) -> Optional[dict[str, Any]]:
@@ -85,6 +90,7 @@ class EvaluationResult:
     ocr_confidence: Optional[float] = None
     quality_level: str = "medium"
     quality_confidence: Optional[float] = None
+    calligraphy_style: str = "kaishu"
     image_path: Optional[str] = None
     processed_image_path: Optional[str] = None
     dimension_scores: Optional[dict[str, int]] = None
@@ -106,6 +112,8 @@ class EvaluationResult:
             "quality_level": self.quality_level,
             "quality_label": self.get_grade(),
             "quality_confidence": self.quality_confidence,
+            "calligraphy_style": self.calligraphy_style,
+            "calligraphy_style_label": self.get_calligraphy_style_label(),
             "dimension_scores": dimension_scores,
             "dimension_summary": summarize_dimension_scores(dimension_scores),
             "score_debug": self.score_debug,
@@ -139,6 +147,7 @@ class EvaluationResult:
             ocr_confidence=data.get("ocr_confidence"),
             quality_level=quality_level,
             quality_confidence=data.get("quality_confidence"),
+            calligraphy_style=_normalize_calligraphy_style(data.get("calligraphy_style")),
             dimension_scores={
                 key: int(value)
                 for key, value in (dimension_scores or {}).items()
@@ -164,6 +173,13 @@ class EvaluationResult:
     def get_color(self) -> str:
         """UI color helper."""
         return QUALITY_COLORS.get(self.quality_level, QUALITY_COLORS["medium"])
+
+    def get_calligraphy_style_label(self) -> str:
+        """Human-readable calligraphy style label."""
+        return CALLIGRAPHY_STYLE_LABELS.get(
+            _normalize_calligraphy_style(self.calligraphy_style),
+            CALLIGRAPHY_STYLE_LABELS["kaishu"],
+        )
 
     def get_dimension_scores(self) -> Optional[dict[str, int]]:
         """Return normalized dimension scores in a stable order."""
@@ -200,3 +216,11 @@ def _level_from_score(score: int) -> str:
     if score >= 70:
         return "medium"
     return "bad"
+
+
+def _normalize_calligraphy_style(value: Any) -> str:
+    if value in CALLIGRAPHY_STYLE_LABELS:
+        return str(value)
+    if value == "行书":
+        return "xingshu"
+    return "kaishu"

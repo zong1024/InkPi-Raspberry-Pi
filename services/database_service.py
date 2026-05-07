@@ -57,6 +57,7 @@ class DatabaseService:
                     ocr_confidence REAL,
                     quality_level TEXT,
                     quality_confidence REAL,
+                    calligraphy_style TEXT,
                     dimension_scores_json TEXT,
                     score_debug_json TEXT
                 )
@@ -68,6 +69,7 @@ class DatabaseService:
             for column_name, column_type in (
                 ("dimension_scores_json", "TEXT"),
                 ("score_debug_json", "TEXT"),
+                ("calligraphy_style", "TEXT"),
             ):
                 if column_name not in existing_columns:
                     cursor.execute(f"ALTER TABLE {self.table_name} ADD COLUMN {column_name} {column_type}")
@@ -100,10 +102,11 @@ class DatabaseService:
                     ocr_confidence,
                     quality_level,
                     quality_confidence,
+                    calligraphy_style,
                     dimension_scores_json,
                     score_debug_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     result.total_score,
@@ -115,6 +118,7 @@ class DatabaseService:
                     result.ocr_confidence,
                     result.quality_level,
                     result.quality_confidence,
+                    result.calligraphy_style,
                     json.dumps(result.get_dimension_scores(), ensure_ascii=False)
                     if result.get_dimension_scores() is not None
                     else None,
@@ -249,6 +253,7 @@ class DatabaseService:
             ocr_confidence=row["ocr_confidence"],
             quality_level=row["quality_level"] or "medium",
             quality_confidence=row["quality_confidence"],
+            calligraphy_style=row["calligraphy_style"] or "kaishu",
             dimension_scores=self._load_json_blob(row["dimension_scores_json"]),
             score_debug=self._load_json_blob(row["score_debug_json"]),
         )

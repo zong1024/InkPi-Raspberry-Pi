@@ -54,9 +54,9 @@ APP_CONFIG = {
     
     # 窗口配置
     "window": {
-        "width": 800,
-        "height": 480,
-        "fullscreen": True,  # 树莓派默认全屏
+        "width": 480,
+        "height": 320,
+        "fullscreen": False,
         "title": "InkPi 书法评测系统",
     },
     
@@ -168,6 +168,18 @@ OCR_CONFIG = {
     "device": os.environ.get("INKPI_LOCAL_OCR_DEVICE", "cpu"),
     "min_confidence": float(os.environ.get("INKPI_LOCAL_OCR_MIN_CONFIDENCE", "0.32")),
     "warmup": os.environ.get("INKPI_LOCAL_OCR_WARMUP", "true").lower() == "true",
+}
+
+
+# =========================
+# 书体识别配置
+# =========================
+CALLIGRAPHY_STYLE_CONFIG = {
+    "default": os.environ.get("INKPI_CALLIGRAPHY_STYLE", "kaishu"),
+    "allowed": {
+        "kaishu": "楷书",
+        "xingshu": "行书",
+    },
 }
 
 
@@ -377,6 +389,7 @@ def get_config(key: str, default=None):
         "app": APP_CONFIG,
         "camera": CAMERA_CONFIG,
         "evaluation": EVALUATION_CONFIG,
+        "calligraphy_style": CALLIGRAPHY_STYLE_CONFIG,
         "model": MODEL_CONFIG,
         "hardware": HARDWARE_CONFIG,
         "cloud": CLOUD_CONFIG,
