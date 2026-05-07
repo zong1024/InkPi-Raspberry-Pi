@@ -25,6 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/zong1024/InkPi-Raspberry-Pi/master/
 - 创建 `venv`
 - 固定 `INKPI_UI_MODE=qt`
 - 默认识别模式设为 `kaishu`
+- 清理旧版 InkPi 开机自启动入口，避免老 WebUI / 老 Qt 和新版 Qt 抢显示、抢端口、抢摄像头
 - 安装 tty1 开机自启动
 - 校验 `PaddleOCR` 和 `models/quality_scorer.onnx`
 
@@ -165,5 +166,14 @@ libcamera-hello --list-cameras
 如果开机没有进入 InkPi，确认是在树莓派本机 `tty1` 登录，或直接重启：
 
 ```bash
+sudo reboot
+```
+
+如果树莓派上已经跑过老版本自启动，可以单独清理一次：
+
+```bash
+cd ~/InkPi-Raspberry-Pi
+bash scripts/cleanup_rpi_autostart.sh
+INSTALL_KIOSK=1 ./deploy_rpi.sh
 sudo reboot
 ```
