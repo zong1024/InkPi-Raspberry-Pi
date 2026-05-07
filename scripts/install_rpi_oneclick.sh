@@ -15,6 +15,7 @@
 #   PADDLEPADDLE_PACKAGE=paddlepaddle
 #   INKPI_FORCE_REFRESH=1
 #   INKPI_SKIP_HEALTHCHECK=1
+#   INKPI_DISPLAY_ROTATION=inverted|normal|left|right
 
 set -euo pipefail
 
@@ -28,6 +29,7 @@ RUN_SELF_TEST="${RUN_SELF_TEST:-0}"
 INKPI_UI_MODE="${INKPI_UI_MODE:-qt}"
 INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME:-InkPi-Raspberry-Pi}"
 INKPI_FORCE_REFRESH="${INKPI_FORCE_REFRESH:-0}"
+INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}"
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -142,6 +144,7 @@ EOF
 upsert_env "INKPI_UI_MODE" "${INKPI_UI_MODE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CALLIGRAPHY_STYLE" "${CALLIGRAPHY_STYLE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CLOUD_DEVICE_NAME" "${INKPI_CLOUD_DEVICE_NAME}" ".inkpi/cloud.env"
+upsert_env "INKPI_DISPLAY_ROTATION" "${INKPI_DISPLAY_ROTATION}" ".inkpi/cloud.env"
 if [ -n "${INKPI_CLOUD_BACKEND_URL:-}" ]; then
     upsert_env "INKPI_CLOUD_BACKEND_URL" "${INKPI_CLOUD_BACKEND_URL}" ".inkpi/cloud.env"
 fi
@@ -161,6 +164,7 @@ env \
     RUN_SELF_TEST="${RUN_SELF_TEST}" \
     INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME}" \
     INKPI_SKIP_HEALTHCHECK="${INKPI_SKIP_HEALTHCHECK:-0}" \
+    INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION}" \
     MODEL_SOURCE="${MODEL_SOURCE:-}" \
     PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}" \
     bash ./deploy_rpi.sh

@@ -68,6 +68,7 @@ sudo apt-get install -y \
     portaudio19-dev \
     libespeak1 \
     spi-tools \
+    xinput \
     xinit \
     x11-xserver-utils \
     openbox \
