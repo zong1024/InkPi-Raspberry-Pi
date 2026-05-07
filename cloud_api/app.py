@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, request
-import cv2
-import numpy as np
 
 try:
     from cloud_api.storage import CloudDatabase
@@ -204,6 +202,12 @@ def create_app(test_config: dict[str, Any] | None = None) -> Flask:
         raw = image_file.read()
         if not raw:
             return json_error("empty_image", 400)
+
+        try:
+            import cv2
+            import numpy as np
+        except Exception as exc:  # noqa: BLE001
+            return json_error(f"image_decoder_unavailable:{exc}", 503)
 
         image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
         if image is None:
