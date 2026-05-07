@@ -36,6 +36,8 @@ sudo apt-get install -y \
     python3-opencv \
     python3-requests \
     python3-spidev \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
     libopencv-dev \
     espeak-ng \
     portaudio19-dev \
@@ -57,7 +59,11 @@ source venv/bin/activate
 
 echo "[3/5] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyinstaller pyttsx3 paddleocr
+python -m pip install pyinstaller pyttsx3
+if ! python -m pip install paddleocr; then
+    echo "Warning: failed to install PaddleOCR dependencies."
+    echo "The Raspberry Pi ARM64 runtime will continue with the apt tesseract OCR fallback."
+fi
 python -m pip uninstall -y onnx onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
 
 echo "[4/5] Preparing model and sanity check..."
@@ -80,7 +86,7 @@ from services.local_ocr_service import local_ocr_service
 print("Local OCR available:", local_ocr_service.available)
 
 if not local_ocr_service.available:
-    raise SystemExit("PaddleOCR is unavailable on this device.")
+    raise SystemExit("Local OCR is unavailable on this device.")
 PY
 
 python - <<'PY'

@@ -131,6 +131,24 @@ class DimensionScorerServiceTests(unittest.TestCase):
         self.assertGreater(scores["structure"], scores["stroke"] - 5)
 
 
+class LocalOcrServiceTests(unittest.TestCase):
+    def test_tesseract_tsv_parser_keeps_single_chinese_character(self) -> None:
+        tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n"
+            "5\t1\t1\t1\t1\t1\t10\t20\t100\t120\t88\t\u6c38\n"
+            "5\t1\t1\t1\t1\t2\t0\t0\t10\t10\t95\t?\n"
+        )
+
+        parsed = local_ocr_service._parse_tesseract_tsv(tsv, (320, 320))
+
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed["character"], "\u6c38")
+        self.assertAlmostEqual(parsed["confidence"], 0.88)
+
+    def test_psm_parser_falls_back_to_safe_modes(self) -> None:
+        self.assertEqual(local_ocr_service._parse_psm_modes("bad"), [10, 13, 6])
+
+
 class EvaluationServiceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.patch = _PatchState(

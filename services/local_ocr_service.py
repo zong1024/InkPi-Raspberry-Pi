@@ -6,6 +6,9 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 import threading
 from typing import Optional, Sequence
 
@@ -38,10 +41,15 @@ class LocalOcrService:
         self.remote_backend_url = str(os.environ.get("INKPI_CLOUD_BACKEND_URL", "")).rstrip("/")
         self.remote_device_key = str(os.environ.get("INKPI_CLOUD_DEVICE_KEY", "")).strip()
         self.remote_timeout = float(os.environ.get("INKPI_REMOTE_OCR_TIMEOUT", "4.0"))
+        self.tesseract_cmd = str(os.environ.get("INKPI_TESSERACT_CMD", "tesseract"))
+        self.tesseract_language = str(os.environ.get("INKPI_TESSERACT_LANG", "chi_sim"))
+        self.tesseract_psm_modes = self._parse_psm_modes(os.environ.get("INKPI_TESSERACT_PSM", "10,13,6"))
         self._ocr = None
         self._available = False
+        self._tesseract_available = False
         self._infer_lock = threading.RLock()
         self._init_ocr()
+        self._init_tesseract()
 
     def _init_ocr(self) -> None:
         try:
@@ -78,9 +86,16 @@ class LocalOcrService:
             self._ocr = None
             self._available = False
 
+    def _init_tesseract(self) -> None:
+        if shutil.which(self.tesseract_cmd):
+            self._tesseract_available = True
+            return
+        self.logger.info("Tesseract OCR command not found; tesseract fallback stays inactive.")
+        self._tesseract_available = False
+
     @property
     def available(self) -> bool:
-        return (self._available and self._ocr is not None) or self.remote_available
+        return (self._available and self._ocr is not None) or self._tesseract_available or self.remote_available
 
     @property
     def remote_available(self) -> bool:
@@ -90,7 +105,14 @@ class LocalOcrService:
         """Recognize the best single character from a preprocessed ROI."""
 
         if self._available and self._ocr is not None:
-            return self._recognize_local(image)
+            recognition = self._recognize_local(image)
+            if recognition is not None:
+                return recognition
+
+        if self._tesseract_available:
+            recognition = self._recognize_tesseract(image)
+            if recognition is not None:
+                return recognition
 
         if self.remote_available:
             return self._recognize_remote(image)
@@ -160,6 +182,113 @@ class LocalOcrService:
         except Exception as exc:  # noqa: BLE001
             self.logger.warning("Remote OCR request failed: %s", exc)
             return None
+
+    def _recognize_tesseract(self, image: np.ndarray) -> Optional[OcrRecognition]:
+        """Run a lightweight OCR fallback available from Raspberry Pi apt packages."""
+
+        if not self._tesseract_available:
+            return None
+
+        prepared = self._prepare_image(image)
+        best: dict | None = None
+        for psm in self.tesseract_psm_modes:
+            candidate = self._run_tesseract(prepared, psm=psm)
+            if candidate and (best is None or candidate["confidence"] > best["confidence"]):
+                best = candidate
+
+        if not best:
+            return None
+
+        confidence = float(best["confidence"])
+        if confidence < self.min_confidence:
+            return None
+
+        return OcrRecognition(
+            character=str(best["character"]),
+            confidence=confidence,
+            source="tesseract",
+            bbox=best.get("bbox"),
+        )
+
+    def _run_tesseract(self, image: np.ndarray, psm: int) -> dict | None:
+        temp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                temp_path = temp_file.name
+            if not cv2.imwrite(temp_path, image):
+                return None
+
+            command = [
+                self.tesseract_cmd,
+                temp_path,
+                "stdout",
+                "-l",
+                self.tesseract_language,
+                "--psm",
+                str(psm),
+                "tsv",
+            ]
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=float(os.environ.get("INKPI_TESSERACT_TIMEOUT", "6.0")),
+            )
+            if completed.returncode != 0:
+                self.logger.warning("Tesseract OCR failed: %s", completed.stderr.strip()[:200])
+                return None
+            return self._parse_tesseract_tsv(completed.stdout, image.shape[:2])
+        except Exception as exc:  # noqa: BLE001
+            self.logger.warning("Tesseract OCR failed: %s", exc)
+            return None
+        finally:
+            if temp_path:
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def _parse_tesseract_tsv(self, tsv: str, shape: Sequence[int]) -> dict | None:
+        lines = [line for line in tsv.splitlines() if line.strip()]
+        if len(lines) < 2:
+            return None
+
+        height, width = int(shape[0]), int(shape[1])
+        header = lines[0].split("\t")
+        best: dict | None = None
+        for line in lines[1:]:
+            columns = line.split("\t")
+            if len(columns) != len(header):
+                continue
+            row = dict(zip(header, columns))
+            character = self._normalize_text(row.get("text", ""))
+            if not character:
+                continue
+            try:
+                confidence = float(row.get("conf", "0")) / 100.0
+                left = float(row.get("left", "0"))
+                top = float(row.get("top", "0"))
+                box_width = float(row.get("width", "0"))
+                box_height = float(row.get("height", "0"))
+            except ValueError:
+                continue
+            if confidence < 0:
+                continue
+            bbox = (
+                float(np.clip(left, 0, width)),
+                float(np.clip(top, 0, height)),
+                float(np.clip(left + box_width, 0, width)),
+                float(np.clip(top + box_height, 0, height)),
+            )
+            item = {
+                "character": character,
+                "confidence": float(np.clip(confidence, 0.0, 1.0)),
+                "bbox": bbox,
+            }
+            if best is None or item["confidence"] > best["confidence"]:
+                best = item
+        return best
 
     def _retry_after_failure(self, prepared: np.ndarray):
         try:
@@ -278,12 +407,25 @@ class LocalOcrService:
         if not text:
             return None
         if len(text) == 1:
-            return text
+            return text if self._looks_like_character(text) else None
 
         chinese_chars = [char for char in text if self._looks_like_character(char)]
         if len(chinese_chars) == 1:
             return chinese_chars[0]
         return None
+
+    @staticmethod
+    def _parse_psm_modes(value: str) -> list[int]:
+        modes: list[int] = []
+        for item in str(value or "").split(","):
+            item = item.strip()
+            if not item:
+                continue
+            try:
+                modes.append(int(item))
+            except ValueError:
+                continue
+        return modes or [10, 13, 6]
 
     @staticmethod
     def _looks_like_character(char: str) -> bool:

@@ -59,6 +59,8 @@ sudo apt-get install -y \
     python3-requests \
     python3-spidev \
     python3-pil \
+    tesseract-ocr \
+    tesseract-ocr-chi-sim \
     libopencv-dev \
     libgl1 \
     libglib2.0-0 \
@@ -94,10 +96,10 @@ python -m pip install pyttsx3
 
 PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}"
 if ! python -m pip install "${PADDLEPADDLE_PACKAGE}" paddleocr; then
-    echo "Error: failed to install PaddleOCR dependencies."
-    echo "Try overriding the wheel package, for example:"
+    echo "Warning: failed to install PaddleOCR dependencies."
+    echo "The Raspberry Pi ARM64 runtime will continue with the apt tesseract OCR fallback."
+    echo "If you have a compatible Paddle wheel, override the package, for example:"
     echo "  PADDLEPADDLE_PACKAGE='paddlepaddle==3.2.2' ./deploy_rpi.sh"
-    exit 1
 fi
 
 # Keep ONNX Runtime on Raspberry Pi sourced from apt's python3-onnxruntime.
@@ -130,7 +132,7 @@ from services.local_ocr_service import local_ocr_service
 print("Local OCR available:", local_ocr_service.available)
 
 if not local_ocr_service.available:
-    raise SystemExit("PaddleOCR is unavailable on this device.")
+    raise SystemExit("Local OCR is unavailable on this device.")
 PY
 
 python - <<'PY'
