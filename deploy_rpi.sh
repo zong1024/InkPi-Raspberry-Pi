@@ -94,7 +94,7 @@ source venv/bin/activate
 
 echo "[5/7] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyttsx3
+python -m pip install pyttsx3 joblib
 
 PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}"
 if ! python -m pip install "${PADDLEPADDLE_PACKAGE}" paddleocr; then

@@ -61,7 +61,7 @@ source venv/bin/activate
 
 echo "[3/5] Installing Python-only packages..."
 python -m pip install --upgrade pip
-python -m pip install pyinstaller pyttsx3
+python -m pip install pyinstaller pyttsx3 joblib
 if ! python -m pip install paddleocr; then
     echo "Error: failed to install PaddleOCR dependencies."
     exit 1
