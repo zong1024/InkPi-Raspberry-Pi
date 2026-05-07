@@ -74,6 +74,7 @@ sudo apt-get install -y \
     xinput \
     xinit \
     x11-xserver-utils \
+    xserver-xorg-input-evdev \
     openbox \
     xserver-xorg
 

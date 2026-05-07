@@ -44,6 +44,7 @@ sudo apt-get install -y \
     portaudio19-dev \
     libespeak1 \
     libespeak-dev \
+    xserver-xorg-input-evdev \
     spi-tools
 
 install_optional_pkg python3-picamera2

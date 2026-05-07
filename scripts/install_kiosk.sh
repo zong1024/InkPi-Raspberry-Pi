@@ -24,24 +24,43 @@ if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
     source "${PROJECT_DIR}/.inkpi/cloud.env"
 fi
 
-if [ -n "${INKPI_LCD_PROFILE:-}" ]; then
-    sudo env \
-        INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE:-}" \
-        INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
-        INKPI_BOOT_DIR="${INKPI_BOOT_DIR:-}" \
-        INKPI_BOOT_CONFIG="${INKPI_BOOT_CONFIG:-}" \
-        INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
-        INKPI_LCD_SHOW_DIR="${INKPI_LCD_SHOW_DIR:-}" \
-        INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-normal}" \
-        bash "${SCRIPT_DIR}/configure_waveshare4_lcd.sh"
-elif [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
-    sudo env \
-        INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
-        INKPI_DRM_CONNECTOR="${INKPI_DRM_CONNECTOR:-}" \
-        INKPI_DRM_MODE="${INKPI_DRM_MODE:-}" \
-        INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
-        bash "${SCRIPT_DIR}/configure_display_rotation.sh"
-fi
+case "${INKPI_LCD_PROFILE:-}" in
+    goodtft35a|lcd35|lcd35-show|tft35a)
+        sudo env \
+            INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE:-}" \
+            INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
+            INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-auto}" \
+            INKPI_BOOT_DIR="${INKPI_BOOT_DIR:-}" \
+            INKPI_BOOT_CONFIG="${INKPI_BOOT_CONFIG:-}" \
+            INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
+            INKPI_LCD_SHOW_DIR="${INKPI_LCD_SHOW_DIR:-}" \
+            bash "${SCRIPT_DIR}/configure_goodtft35_lcd.sh"
+        ;;
+    waveshare4a|4inch-rpi-lcd-a|spotpear4a)
+        sudo env \
+            INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE:-}" \
+            INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
+            INKPI_BOOT_DIR="${INKPI_BOOT_DIR:-}" \
+            INKPI_BOOT_CONFIG="${INKPI_BOOT_CONFIG:-}" \
+            INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
+            INKPI_LCD_SHOW_DIR="${INKPI_LCD_SHOW_DIR:-}" \
+            INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-normal}" \
+            bash "${SCRIPT_DIR}/configure_waveshare4_lcd.sh"
+        ;;
+    "")
+        if [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
+            sudo env \
+                INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
+                INKPI_DRM_CONNECTOR="${INKPI_DRM_CONNECTOR:-}" \
+                INKPI_DRM_MODE="${INKPI_DRM_MODE:-}" \
+                INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
+                bash "${SCRIPT_DIR}/configure_display_rotation.sh"
+        fi
+        ;;
+    *)
+        echo "Warning: unsupported INKPI_LCD_PROFILE=${INKPI_LCD_PROFILE}; skipping LCD-specific configuration."
+        ;;
+esac
 
 mkdir -p "${TARGET_HOME}"
 touch "${PROFILE_PATH}"
@@ -68,6 +87,7 @@ chmod +x "${PROJECT_DIR}/scripts/inkpi-webui-launch.sh" "${PROJECT_DIR}/scripts/
 chmod +x "${PROJECT_DIR}/scripts/cleanup_rpi_autostart.sh"
 chmod +x "${PROJECT_DIR}/scripts/configure_display_rotation.sh"
 chmod +x "${PROJECT_DIR}/scripts/configure_waveshare4_lcd.sh"
+chmod +x "${PROJECT_DIR}/scripts/configure_goodtft35_lcd.sh"
 
 echo "InkPi kiosk startup has been installed for ${TARGET_USER}."
 echo "On the next tty1 login or reboot, the app will launch fullscreen automatically."

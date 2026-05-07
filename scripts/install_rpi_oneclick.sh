@@ -16,7 +16,7 @@
 #   INKPI_FORCE_REFRESH=1
 #   INKPI_SKIP_HEALTHCHECK=1
 #   INKPI_DISPLAY_ROTATION=inverted|normal|left|right
-#   INKPI_LCD_PROFILE=waveshare4a
+#   INKPI_LCD_PROFILE=goodtft35a|waveshare4a
 
 set -euo pipefail
 
@@ -37,11 +37,17 @@ if [ -n "${INKPI_LCD_PROFILE}" ] && [ -z "${INKPI_TOUCH_ROTATION:-}" ]; then
 else
     INKPI_TOUCH_ROTATION="${INKPI_TOUCH_ROTATION:-auto}"
 fi
-if [ -n "${INKPI_LCD_PROFILE}" ] && [ -z "${INKPI_TOUCH_CALIBRATION:-}" ]; then
-    INKPI_TOUCH_CALIBRATION="normal"
-else
-    INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-auto}"
-fi
+case "${INKPI_LCD_PROFILE}" in
+    goodtft35a|lcd35|lcd35-show|tft35a)
+        INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-auto}"
+        ;;
+    waveshare4a|4inch-rpi-lcd-a|spotpear4a)
+        INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-normal}"
+        ;;
+    *)
+        INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-auto}"
+        ;;
+esac
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
