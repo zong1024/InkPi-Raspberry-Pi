@@ -7,6 +7,7 @@
 #   INSTALL_KIOSK=1 ./deploy_rpi.sh
 #   START_APP=1 ./deploy_rpi.sh
 #   PADDLEPADDLE_PACKAGE=paddlepaddle ./deploy_rpi.sh
+#   INKPI_SKIP_HEALTHCHECK=1 ./deploy_rpi.sh
 
 set -euo pipefail
 
@@ -98,6 +99,11 @@ if ! python -m pip install "${PADDLEPADDLE_PACKAGE}" paddleocr; then
     exit 1
 fi
 
+# Keep ONNX Runtime on Raspberry Pi sourced from apt's python3-onnxruntime.
+# PaddleOCR/PaddleX may pull pip wheels for onnx/onnxruntime that conflict with
+# the system runtime and spam "schema already registered" during OCR startup.
+python -m pip uninstall -y onnx onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
+
 if [ -f ".inkpi/cloud.env" ]; then
     # shellcheck disable=SC1091
     source ".inkpi/cloud.env"
@@ -114,20 +120,32 @@ if [ ! -f "models/quality_scorer.onnx" ]; then
     exit 1
 fi
 
+if [ "${INKPI_SKIP_HEALTHCHECK:-0}" = "1" ]; then
+    echo "Skipping model health check because INKPI_SKIP_HEALTHCHECK=1."
+else
 python - <<'PY'
-import main
 from services.local_ocr_service import local_ocr_service
-from services.quality_scorer_service import quality_scorer_service
 
-print("Health check passed: import main")
 print("Local OCR available:", local_ocr_service.available)
-print("Quality scorer available:", quality_scorer_service.available)
 
 if not local_ocr_service.available:
     raise SystemExit("PaddleOCR is unavailable on this device.")
+PY
+
+python - <<'PY'
+from services.quality_scorer_service import quality_scorer_service
+
+print("Quality scorer available:", quality_scorer_service.available)
+
 if not quality_scorer_service.available:
     raise SystemExit("Quality scorer ONNX is unavailable on this device.")
 PY
+
+python - <<'PY'
+import main
+print("Health check passed: import main")
+PY
+fi
 
 if [ "${RUN_SELF_TEST:-0}" = "1" ]; then
     MPLBACKEND=Agg python test_all.py

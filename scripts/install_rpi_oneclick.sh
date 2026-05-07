@@ -14,6 +14,7 @@
 #   MODEL_SOURCE=/path/to/quality_scorer.onnx
 #   PADDLEPADDLE_PACKAGE=paddlepaddle
 #   INKPI_FORCE_REFRESH=1
+#   INKPI_SKIP_HEALTHCHECK=1
 
 set -euo pipefail
 
@@ -159,6 +160,7 @@ env \
     START_APP="${START_APP}" \
     RUN_SELF_TEST="${RUN_SELF_TEST}" \
     INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME}" \
+    INKPI_SKIP_HEALTHCHECK="${INKPI_SKIP_HEALTHCHECK:-0}" \
     MODEL_SOURCE="${MODEL_SOURCE:-}" \
     PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}" \
     bash ./deploy_rpi.sh

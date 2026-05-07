@@ -10,7 +10,6 @@ import cv2
 import numpy as np
 
 from services.character_geometry_service import character_geometry_service
-from services.quality_scorer_service import QualityScorerService
 
 
 @dataclass
@@ -229,11 +228,16 @@ class DimensionScorerService:
 
     @staticmethod
     def _target_band_score(value: float, target: float, tolerance: float) -> float:
-        return QualityScorerService._target_band_score(value, target=target, tolerance=tolerance)
+        if tolerance <= 0:
+            return 0.0
+        distance = abs(float(value) - target)
+        return float(np.clip(1.0 - distance / tolerance, 0.0, 1.0))
 
     @staticmethod
     def _normalize_band(value: float, low: float, high: float) -> float:
-        return QualityScorerService._normalize_band(value, low=low, high=high)
+        if high <= low:
+            return 0.0
+        return float(np.clip((float(value) - low) / (high - low), 0.0, 1.0))
 
 
 dimension_scorer_service = DimensionScorerService()

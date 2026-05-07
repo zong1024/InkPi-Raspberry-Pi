@@ -58,6 +58,7 @@ source venv/bin/activate
 echo "[3/5] Installing Python-only packages..."
 python -m pip install --upgrade pip
 python -m pip install pyinstaller pyttsx3 paddleocr
+python -m pip uninstall -y onnx onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
 
 echo "[4/5] Preparing model and sanity check..."
 mkdir -p models
@@ -70,20 +71,32 @@ if [ ! -f "models/quality_scorer.onnx" ]; then
     exit 1
 fi
 
+if [ "${INKPI_SKIP_HEALTHCHECK:-0}" = "1" ]; then
+    echo "Skipping model health check because INKPI_SKIP_HEALTHCHECK=1."
+else
 python - <<'PY'
-import main
 from services.local_ocr_service import local_ocr_service
-from services.quality_scorer_service import quality_scorer_service
 
-print("Health check passed: import main")
 print("Local OCR available:", local_ocr_service.available)
-print("Quality scorer available:", quality_scorer_service.available)
 
 if not local_ocr_service.available:
     raise SystemExit("PaddleOCR is unavailable on this device.")
+PY
+
+python - <<'PY'
+from services.quality_scorer_service import quality_scorer_service
+
+print("Quality scorer available:", quality_scorer_service.available)
+
 if not quality_scorer_service.available:
     raise SystemExit("Quality scorer ONNX is unavailable on this device.")
 PY
+
+python - <<'PY'
+import main
+print("Health check passed: import main")
+PY
+fi
 
 echo "[5/5] Building application..."
 pyinstaller \
