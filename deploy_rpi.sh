@@ -47,6 +47,7 @@ safe_git_sync
 echo "[3/7] Installing system dependencies..."
 sudo apt-get update
 sudo apt-get install -y \
+    git \
     python3-dev \
     python3-pip \
     python3-venv \

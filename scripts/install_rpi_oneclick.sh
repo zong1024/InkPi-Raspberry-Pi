@@ -16,6 +16,7 @@
 #   INKPI_FORCE_REFRESH=1
 #   INKPI_SKIP_HEALTHCHECK=1
 #   INKPI_DISPLAY_ROTATION=inverted|normal|left|right
+#   INKPI_LCD_PROFILE=waveshare4a
 
 set -euo pipefail
 
@@ -30,6 +31,12 @@ INKPI_UI_MODE="${INKPI_UI_MODE:-qt}"
 INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME:-InkPi-Raspberry-Pi}"
 INKPI_FORCE_REFRESH="${INKPI_FORCE_REFRESH:-0}"
 INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}"
+INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE:-}"
+if [ -n "${INKPI_LCD_PROFILE}" ] && [ -z "${INKPI_TOUCH_ROTATION:-}" ]; then
+    INKPI_TOUCH_ROTATION="off"
+else
+    INKPI_TOUCH_ROTATION="${INKPI_TOUCH_ROTATION:-auto}"
+fi
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -149,6 +156,10 @@ upsert_env "INKPI_UI_MODE" "${INKPI_UI_MODE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CALLIGRAPHY_STYLE" "${CALLIGRAPHY_STYLE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CLOUD_DEVICE_NAME" "${INKPI_CLOUD_DEVICE_NAME}" ".inkpi/cloud.env"
 upsert_env "INKPI_DISPLAY_ROTATION" "${INKPI_DISPLAY_ROTATION}" ".inkpi/cloud.env"
+upsert_env "INKPI_TOUCH_ROTATION" "${INKPI_TOUCH_ROTATION}" ".inkpi/cloud.env"
+if [ -n "${INKPI_LCD_PROFILE}" ]; then
+    upsert_env "INKPI_LCD_PROFILE" "${INKPI_LCD_PROFILE}" ".inkpi/cloud.env"
+fi
 if [ -n "${INKPI_CLOUD_BACKEND_URL:-}" ]; then
     upsert_env "INKPI_CLOUD_BACKEND_URL" "${INKPI_CLOUD_BACKEND_URL}" ".inkpi/cloud.env"
 fi
@@ -169,6 +180,8 @@ env \
     INKPI_CLOUD_DEVICE_NAME="${INKPI_CLOUD_DEVICE_NAME}" \
     INKPI_SKIP_HEALTHCHECK="${INKPI_SKIP_HEALTHCHECK:-0}" \
     INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION}" \
+    INKPI_TOUCH_ROTATION="${INKPI_TOUCH_ROTATION}" \
+    INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE}" \
     MODEL_SOURCE="${MODEL_SOURCE:-}" \
     PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}" \
     bash ./deploy_rpi.sh

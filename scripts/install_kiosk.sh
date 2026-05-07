@@ -24,7 +24,16 @@ if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
     source "${PROJECT_DIR}/.inkpi/cloud.env"
 fi
 
-if [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
+if [ -n "${INKPI_LCD_PROFILE:-}" ]; then
+    sudo env \
+        INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE:-}" \
+        INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
+        INKPI_BOOT_DIR="${INKPI_BOOT_DIR:-}" \
+        INKPI_BOOT_CONFIG="${INKPI_BOOT_CONFIG:-}" \
+        INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
+        INKPI_LCD_SHOW_DIR="${INKPI_LCD_SHOW_DIR:-}" \
+        bash "${SCRIPT_DIR}/configure_waveshare4_lcd.sh"
+elif [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
     sudo env \
         INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
         INKPI_DRM_CONNECTOR="${INKPI_DRM_CONNECTOR:-}" \
@@ -57,6 +66,7 @@ chmod +x "${PROJECT_DIR}/scripts/inkpi-launch.sh" "${PROJECT_DIR}/scripts/inkpi-
 chmod +x "${PROJECT_DIR}/scripts/inkpi-webui-launch.sh" "${PROJECT_DIR}/scripts/inkpi-webui-kiosk-session.sh"
 chmod +x "${PROJECT_DIR}/scripts/cleanup_rpi_autostart.sh"
 chmod +x "${PROJECT_DIR}/scripts/configure_display_rotation.sh"
+chmod +x "${PROJECT_DIR}/scripts/configure_waveshare4_lcd.sh"
 
 echo "InkPi kiosk startup has been installed for ${TARGET_USER}."
 echo "On the next tty1 login or reboot, the app will launch fullscreen automatically."
