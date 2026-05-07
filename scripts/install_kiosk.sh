@@ -19,6 +19,20 @@ if [ "${INKPI_SKIP_AUTOSTART_CLEANUP:-0}" != "1" ]; then
     bash "${SCRIPT_DIR}/cleanup_rpi_autostart.sh"
 fi
 
+if [ -f "${PROJECT_DIR}/.inkpi/cloud.env" ]; then
+    # shellcheck disable=SC1091
+    source "${PROJECT_DIR}/.inkpi/cloud.env"
+fi
+
+if [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
+    sudo env \
+        INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION:-inverted}" \
+        INKPI_DRM_CONNECTOR="${INKPI_DRM_CONNECTOR:-}" \
+        INKPI_DRM_MODE="${INKPI_DRM_MODE:-}" \
+        INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
+        bash "${SCRIPT_DIR}/configure_display_rotation.sh"
+fi
+
 mkdir -p "${TARGET_HOME}"
 touch "${PROFILE_PATH}"
 
@@ -42,6 +56,7 @@ chown "${TARGET_USER}:${TARGET_USER}" "${PROFILE_PATH}"
 chmod +x "${PROJECT_DIR}/scripts/inkpi-launch.sh" "${PROJECT_DIR}/scripts/inkpi-kiosk-session.sh"
 chmod +x "${PROJECT_DIR}/scripts/inkpi-webui-launch.sh" "${PROJECT_DIR}/scripts/inkpi-webui-kiosk-session.sh"
 chmod +x "${PROJECT_DIR}/scripts/cleanup_rpi_autostart.sh"
+chmod +x "${PROJECT_DIR}/scripts/configure_display_rotation.sh"
 
 echo "InkPi kiosk startup has been installed for ${TARGET_USER}."
 echo "On the next tty1 login or reboot, the app will launch fullscreen automatically."
