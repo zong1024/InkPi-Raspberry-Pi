@@ -126,7 +126,11 @@ if [ -d "${INSTALL_DIR}/.git" ]; then
         backup_and_reclone "${INSTALL_DIR} is missing current deployment scripts."
     fi
 elif [ -e "${INSTALL_DIR}" ]; then
-    die "${INSTALL_DIR} already exists but is not a git repository. Move it away or set INKPI_DIR."
+    if [ "${INKPI_FORCE_REFRESH}" = "1" ]; then
+        backup_and_reclone "${INSTALL_DIR} already exists but is not a git repository."
+    else
+        die "${INSTALL_DIR} already exists but is not a git repository. Move it away, set INKPI_FORCE_REFRESH=1, or set INKPI_DIR."
+    fi
 else
     clone_repository
 fi
