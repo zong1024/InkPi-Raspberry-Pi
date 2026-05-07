@@ -41,6 +41,12 @@ class LocalOcrService:
         self.remote_backend_url = str(os.environ.get("INKPI_CLOUD_BACKEND_URL", "")).rstrip("/")
         self.remote_device_key = str(os.environ.get("INKPI_CLOUD_DEVICE_KEY", "")).strip()
         self.remote_timeout = float(os.environ.get("INKPI_REMOTE_OCR_TIMEOUT", "4.0"))
+        self.enable_tesseract_fallback = os.environ.get("INKPI_ENABLE_TESSERACT_FALLBACK", "0").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         self.tesseract_cmd = str(os.environ.get("INKPI_TESSERACT_CMD", "tesseract"))
         self.tesseract_language = str(os.environ.get("INKPI_TESSERACT_LANG", "chi_sim"))
         self.tesseract_psm_modes = self._parse_psm_modes(os.environ.get("INKPI_TESSERACT_PSM", "10,13,6"))
@@ -49,7 +55,8 @@ class LocalOcrService:
         self._tesseract_available = False
         self._infer_lock = threading.RLock()
         self._init_ocr()
-        self._init_tesseract()
+        if self.enable_tesseract_fallback:
+            self._init_tesseract()
 
     def _init_ocr(self) -> None:
         try:
@@ -95,7 +102,9 @@ class LocalOcrService:
 
     @property
     def available(self) -> bool:
-        return (self._available and self._ocr is not None) or self._tesseract_available or self.remote_available
+        return (self._available and self._ocr is not None) or (
+            self.enable_tesseract_fallback and self._tesseract_available
+        ) or self.remote_available
 
     @property
     def remote_available(self) -> bool:
@@ -109,7 +118,7 @@ class LocalOcrService:
             if recognition is not None:
                 return recognition
 
-        if self._tesseract_available:
+        if self.enable_tesseract_fallback and self._tesseract_available:
             recognition = self._recognize_tesseract(image)
             if recognition is not None:
                 return recognition

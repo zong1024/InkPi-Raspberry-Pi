@@ -63,10 +63,9 @@ echo "[3/5] Installing Python-only packages..."
 python -m pip install --upgrade pip
 python -m pip install pyinstaller pyttsx3
 if ! python -m pip install paddleocr; then
-    echo "Warning: failed to install PaddleOCR dependencies."
-    echo "The Raspberry Pi ARM64 runtime will continue with the apt tesseract OCR fallback."
+    echo "Error: failed to install PaddleOCR dependencies."
+    exit 1
 fi
-python -m pip uninstall -y onnx onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
 
 echo "[4/5] Preparing model and sanity check..."
 mkdir -p models

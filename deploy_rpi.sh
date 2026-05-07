@@ -98,16 +98,11 @@ python -m pip install pyttsx3
 
 PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}"
 if ! python -m pip install "${PADDLEPADDLE_PACKAGE}" paddleocr; then
-    echo "Warning: failed to install PaddleOCR dependencies."
-    echo "The Raspberry Pi ARM64 runtime will continue with the apt tesseract OCR fallback."
+    echo "Error: failed to install PaddleOCR dependencies."
     echo "If you have a compatible Paddle wheel, override the package, for example:"
     echo "  PADDLEPADDLE_PACKAGE='paddlepaddle==3.2.2' ./deploy_rpi.sh"
+    exit 1
 fi
-
-# Keep ONNX Runtime on Raspberry Pi sourced from apt's python3-onnxruntime.
-# PaddleOCR/PaddleX may pull pip wheels for onnx/onnxruntime that conflict with
-# the system runtime and spam "schema already registered" during OCR startup.
-python -m pip uninstall -y onnx onnxruntime onnxruntime-gpu >/dev/null 2>&1 || true
 
 if [ -f ".inkpi/cloud.env" ]; then
     # shellcheck disable=SC1091

@@ -8,12 +8,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-try:
-    import onnxruntime as ort
-    _ORT_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # noqa: BLE001
-    ort = None  # type: ignore[assignment]
-    _ORT_IMPORT_ERROR = exc
 
 from config import QUALITY_SCORER_CONFIG
 
@@ -60,12 +54,18 @@ class QualityScorerService:
         self._input_names: list[str] = []
         self._input_shapes: dict[str, list[int | str | None]] = {}
         self._output_names: list[str] = []
-        self._load_session()
+        self._load_error: Exception | None = None
 
     def _load_session(self) -> None:
-        if ort is None:
-            self.logger.warning("onnxruntime is unavailable on this device: %s", _ORT_IMPORT_ERROR)
+        if self._session is not None:
             return
+        try:
+            import onnxruntime as ort
+        except Exception as exc:  # noqa: BLE001
+            self._load_error = exc
+            self.logger.warning("onnxruntime is unavailable on this device: %s", exc)
+            return
+
         if not self.model_path.exists():
             self.logger.warning("Quality scorer model is missing: %s", self.model_path)
             return
@@ -82,7 +82,9 @@ class QualityScorerService:
             self._input_names = [item.name for item in self._session.get_inputs()]
             self._input_shapes = {item.name: list(item.shape) for item in self._session.get_inputs()}
             self._output_names = [item.name for item in self._session.get_outputs()]
+            self._load_error = None
         except Exception as exc:  # noqa: BLE001
+            self._load_error = exc
             self.logger.warning("Failed to load quality scorer ONNX: %s", exc)
             self._session = None
             self._input_names = []
@@ -91,6 +93,7 @@ class QualityScorerService:
 
     @property
     def available(self) -> bool:
+        self._load_session()
         return self._session is not None
 
     def score(
@@ -102,6 +105,7 @@ class QualityScorerService:
     ) -> QualityScore:
         """Run the ONNX scorer and return a stable total score and level."""
 
+        self._load_session()
         if not self.available or self._session is None:
             raise RuntimeError(f"Quality scorer ONNX model missing: {self.model_path}")
 
