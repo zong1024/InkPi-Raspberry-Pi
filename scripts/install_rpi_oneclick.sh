@@ -37,6 +37,11 @@ if [ -n "${INKPI_LCD_PROFILE}" ] && [ -z "${INKPI_TOUCH_ROTATION:-}" ]; then
 else
     INKPI_TOUCH_ROTATION="${INKPI_TOUCH_ROTATION:-auto}"
 fi
+if [ -n "${INKPI_LCD_PROFILE}" ] && [ -z "${INKPI_TOUCH_CALIBRATION:-}" ]; then
+    INKPI_TOUCH_CALIBRATION="normal"
+else
+    INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-auto}"
+fi
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -157,6 +162,7 @@ upsert_env "INKPI_CALLIGRAPHY_STYLE" "${CALLIGRAPHY_STYLE}" ".inkpi/cloud.env"
 upsert_env "INKPI_CLOUD_DEVICE_NAME" "${INKPI_CLOUD_DEVICE_NAME}" ".inkpi/cloud.env"
 upsert_env "INKPI_DISPLAY_ROTATION" "${INKPI_DISPLAY_ROTATION}" ".inkpi/cloud.env"
 upsert_env "INKPI_TOUCH_ROTATION" "${INKPI_TOUCH_ROTATION}" ".inkpi/cloud.env"
+upsert_env "INKPI_TOUCH_CALIBRATION" "${INKPI_TOUCH_CALIBRATION}" ".inkpi/cloud.env"
 if [ -n "${INKPI_LCD_PROFILE}" ]; then
     upsert_env "INKPI_LCD_PROFILE" "${INKPI_LCD_PROFILE}" ".inkpi/cloud.env"
 fi
@@ -181,6 +187,7 @@ env \
     INKPI_SKIP_HEALTHCHECK="${INKPI_SKIP_HEALTHCHECK:-0}" \
     INKPI_DISPLAY_ROTATION="${INKPI_DISPLAY_ROTATION}" \
     INKPI_TOUCH_ROTATION="${INKPI_TOUCH_ROTATION}" \
+    INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION}" \
     INKPI_LCD_PROFILE="${INKPI_LCD_PROFILE}" \
     MODEL_SOURCE="${MODEL_SOURCE:-}" \
     PADDLEPADDLE_PACKAGE="${PADDLEPADDLE_PACKAGE:-paddlepaddle}" \

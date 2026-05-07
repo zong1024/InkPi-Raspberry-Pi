@@ -32,6 +32,7 @@ if [ -n "${INKPI_LCD_PROFILE:-}" ]; then
         INKPI_BOOT_CONFIG="${INKPI_BOOT_CONFIG:-}" \
         INKPI_BOOT_CMDLINE="${INKPI_BOOT_CMDLINE:-}" \
         INKPI_LCD_SHOW_DIR="${INKPI_LCD_SHOW_DIR:-}" \
+        INKPI_TOUCH_CALIBRATION="${INKPI_TOUCH_CALIBRATION:-normal}" \
         bash "${SCRIPT_DIR}/configure_waveshare4_lcd.sh"
 elif [ "${INKPI_SKIP_BOOT_ROTATION:-0}" != "1" ]; then
     sudo env \

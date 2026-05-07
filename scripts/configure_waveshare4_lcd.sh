@@ -7,6 +7,7 @@ driver_dir="${INKPI_LCD_SHOW_DIR:-/opt/inkpi/LCD-show}"
 boot_dir="${INKPI_BOOT_DIR:-}"
 config_path="${INKPI_BOOT_CONFIG:-}"
 cmdline_path="${INKPI_BOOT_CMDLINE:-}"
+touch_calibration="${INKPI_TOUCH_CALIBRATION:-normal}"
 overlay_rotate=""
 display_rotate="0"
 calibration_suffix=""
@@ -49,6 +50,27 @@ case "${rotation}" in
         overlay_rotate="270"
         display_rotate="2"
         calibration_suffix="-180"
+        ;;
+esac
+
+case "${touch_calibration}" in
+    normal|0|"")
+        calibration_suffix=""
+        ;;
+    inverted|180)
+        calibration_suffix="-180"
+        ;;
+    left|90)
+        calibration_suffix="-270"
+        ;;
+    right|270)
+        calibration_suffix="-90"
+        ;;
+    auto)
+        ;;
+    *)
+        echo "Unsupported INKPI_TOUCH_CALIBRATION=${touch_calibration}; using normal."
+        calibration_suffix=""
         ;;
 esac
 
@@ -145,4 +167,4 @@ path.write_text(" ".join(tokens) + "\n", encoding="utf-8")
 PY
 fi
 
-echo "Configured Waveshare 4inch RPi LCD (A): rotation=${rotation}, config=${config_path}"
+echo "Configured Waveshare 4inch RPi LCD (A): rotation=${rotation}, touch_calibration=${touch_calibration}, config=${config_path}"
